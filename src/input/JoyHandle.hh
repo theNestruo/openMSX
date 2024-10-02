@@ -73,6 +73,7 @@ private:
 	bool pin8;
 	EmuTime lastTime = EmuTime::zero();
 	uint8_t cycle; // 0-1
+	uint8_t analogValue = 128;
 };
 
 } // namespace openmsx

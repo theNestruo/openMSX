@@ -23,23 +23,27 @@ class JoyHandleState final : public StateChange
 public:
 	JoyHandleState() = default; // for serialize
 	JoyHandleState(EmuTime::param time_, uint8_t id_,
-	               uint8_t press_, uint8_t release_)
+	               uint8_t press_, uint8_t release_,
+				   uint8_t analogValue_)
 		: StateChange(time_), id(id_)
-		, press(press_), release(release_) {}
+		, press(press_), release(release_)
+		, analogValue(analogValue_) {}
 
-	[[nodiscard]] auto getId()      const { return id; }
-	[[nodiscard]] auto getPress()   const { return press; }
-	[[nodiscard]] auto getRelease() const { return release; }
+	[[nodiscard]] auto getId()          const { return id; }
+	[[nodiscard]] auto getPress()       const { return press; }
+	[[nodiscard]] auto getRelease()     const { return release; }
+	[[nodiscard]] auto getAnalogValue() const { return analogValue; }
 
 	template<typename Archive> void serialize(Archive& ar, unsigned /*version*/) {
 		ar.template serializeBase<StateChange>(*this);
-		ar.serialize("id",      id,
-		             "press",   press,
-		             "release", release);
+		ar.serialize("id",          id,
+		             "press",       press,
+		             "release",     release,
+					 "analogValue", analogValue);
 	}
 
 private:
-	uint8_t id, press, release;
+	uint8_t id, press, release, analogValue;
 };
 REGISTER_POLYMORPHIC_CLASS(StateChange, JoyHandleState, "JoyHandleState");
 
@@ -161,14 +165,19 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 uint8_t JoyHandle::read(EmuTime::param time)
 {
 	checkTime(time);
-	switch (cycle) {
-	case 0:
-		return pin8 ? 0x3F : status;
-	case 1:
-		return pin8 ? 0x3F : status;
-	default:
-		UNREACHABLE;
+	if (analogValue < 48) {
+		return 1 << 2; // "LEFT"
 	}
+	if (analogValue >= 208) {
+		return 1 << 3; // "RIGHT"
+	}
+	if (analogValue < 96) {
+		return cycle == 1 ? 1 << 2 : 0x00; // "LEFT" / ""
+	}
+	if (analogValue >= 160) {
+		return cycle == 1 ? 1 << 3 : 0x00; // "RIGHT" / ""
+	}
+	return 0x00;
 }
 
 void JoyHandle::write(uint8_t value, EmuTime::param /*time*/)
@@ -193,10 +202,23 @@ void JoyHandle::signalMSXEvent(const Event& event,
 	uint8_t press = 0;
 	uint8_t release = 0;
 
-	auto getJoyDeadZone = [&](JoystickId joyId) {
-		const auto* setting = joystickManager.getJoyDeadZoneSetting(joyId);
-		return setting ? setting->getInt() : 0;
-	};
+	visit(overloaded{
+		[&](const JoystickAxisMotionEvent& e) {
+			if (e.getX()) {
+				constexpr int SCALE = 2;
+				if (int analogValue = e.getX() / SCALE) {
+					stateChangeDistributor.distributeNew<JoyHandleState>(
+						time, id, press, release, analogValue);
+				}
+			}
+		},
+		[](const EventBase&) { /*ignore*/ }
+	}, event);
+
+	// auto getJoyDeadZone = [&](JoystickId joyId) {
+	// 	const auto* setting = joystickManager.getJoyDeadZoneSetting(joyId);
+	// 	return setting ? setting->getInt() : 0;
+	// };
 	// for (int i : xrange(6)) {
 	// 	for (const auto& binding : bindings[i]) {
 	// 		if (auto onOff = match(binding, event, getJoyDeadZone)) {
@@ -204,21 +226,21 @@ void JoyHandle::signalMSXEvent(const Event& event,
 	// 		}
 	// 	}
 	// }
-
-	if (((status & ~press) | release) != status) {
-		stateChangeDistributor.distributeNew<JoyHandleState>(
-			time, id, press, release);
-	}
+	//
+	// if (((status & ~press) | release) != status) {
+	// 	stateChangeDistributor.distributeNew<JoyHandleState>(
+	// 		time, id, press, release);
+	// }
 }
 
 // StateChangeListener
 void JoyHandle::signalStateChange(const StateChange& event)
 {
-	const auto* kjs = dynamic_cast<const JoyHandleState*>(&event);
-	if (!kjs) return;
-	if (kjs->getId() != id) return;
+	const auto* jhs = dynamic_cast<const JoyHandleState*>(&event);
+	if (!jhs) return;
+	if (jhs->getId() != id) return;
 
-	status = (status & ~kjs->getPress()) | kjs->getRelease();
+	analogValue = narrow_cast<uint8_t>(std::clamp(analogValue + jhs->getAnalogValue(), 0, 255));
 }
 
 void JoyHandle::stopReplay(EmuTime::param time) noexcept
@@ -236,9 +258,10 @@ void JoyHandle::stopReplay(EmuTime::param time) noexcept
 template<typename Archive>
 void JoyHandle::serialize(Archive& ar, unsigned /*version*/)
 {
-	ar.serialize("status",   status,
-				 "lastTime", lastTime,
-				 "cycle",    cycle);
+	ar.serialize("status",      status,
+				 "lastTime",    lastTime,
+				 "cycle",       cycle,
+				 "analogValue", analogValue);
 	if constexpr (Archive::IS_LOADER) {
 		if (isPluggedIn()) {
 			plugHelper(*getConnector(), EmuTime::dummy());
