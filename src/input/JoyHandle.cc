@@ -146,7 +146,7 @@ void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
 	eventDistributor.registerEventListener(*this);
 	stateChangeDistributor.registerListener(*this);
 
-	lastTime = 0;
+	lastTime = EmuTime::zero();
 	cycle = 0;
 }
 
@@ -176,7 +176,7 @@ void JoyHandle::write(uint8_t value, EmuTime::param /*time*/)
 	pin8 = (value & 0x04) != 0;
 }
 
-void JoyMega::checkTime(EmuTime::param time)
+void JoyHandle::checkTime(EmuTime::param time)
 {
 	if ((time - lastTime) > EmuDuration::msec(500)) {
 		// longer than 500ms since last read -> change cycle
