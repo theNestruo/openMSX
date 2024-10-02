@@ -145,6 +145,9 @@ void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
 {
 	eventDistributor.registerEventListener(*this);
 	stateChangeDistributor.registerListener(*this);
+
+	lastTime = 0;
+	cycle = 0;
 }
 
 void JoyHandle::unplugHelper(EmuTime::param /*time*/)
@@ -157,12 +160,29 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 // MSXJoystickDevice
 uint8_t JoyHandle::read(EmuTime::param /*time*/)
 {
-	return pin8 ? 0x3F : status;
+	checkTime(time);
+	switch (cycle) {
+	case 0:
+		return pin8 ? 0x3F : status;
+	case 1:
+		return pin8 ? 0x3F : status;
+	default:
+		UNREACHABLE;
+	}
 }
 
 void JoyHandle::write(uint8_t value, EmuTime::param /*time*/)
 {
 	pin8 = (value & 0x04) != 0;
+}
+
+void JoyMega::checkTime(EmuTime::param time)
+{
+	if ((time - lastTime) > EmuDuration::msec(500)) {
+		// longer than 500ms since last read -> change cycle
+		lastTime = time;
+		cycle = 1 - cycle;
+	}
 }
 
 
@@ -216,7 +236,9 @@ void JoyHandle::stopReplay(EmuTime::param time) noexcept
 template<typename Archive>
 void JoyHandle::serialize(Archive& ar, unsigned /*version*/)
 {
-	ar.serialize("status", status);
+	ar.serialize("status",   status,
+				 "lastTime", lastTime,
+				 "cycle",    cycle);
 	if constexpr (Archive::IS_LOADER) {
 		if (isPluggedIn()) {
 			plugHelper(*getConnector(), EmuTime::dummy());

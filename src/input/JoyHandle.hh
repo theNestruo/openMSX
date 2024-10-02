@@ -54,21 +54,25 @@ private:
 	void signalStateChange(const StateChange& event) override;
 	void stopReplay(EmuTime::param time) noexcept override;
 
+	void checkTime(EmuTime::param time);
+
 private:
 	CommandController& commandController;
 	MSXEventDistributor& eventDistributor;
 	StateChangeDistributor& stateChangeDistributor;
 	JoystickManager& joystickManager;
-	StringSetting configSetting;
+	// StringSetting configSetting;
 
-	// up, down, left, right, a, b (in sync with order in JoystickDevice)
-	std::array<std::vector<BooleanInput>, 6> bindings; // calculated from 'configSetting'
+	// // up, down, left, right, a, b (in sync with order in JoystickDevice)
+	// std::array<std::vector<BooleanInput>, 6> bindings; // calculated from 'configSetting'
 
 	const std::string description;
 	const uint8_t id;
 	uint8_t status = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT |
 	                 JOY_BUTTONA | JOY_BUTTONB;
 	bool pin8;
+	EmuTime lastTime = EmuTime::zero();
+	uint8_t cycle; // 0-1
 };
 
 } // namespace openmsx
