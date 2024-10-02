@@ -158,7 +158,7 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 
 
 // MSXJoystickDevice
-uint8_t JoyHandle::read(EmuTime::param /*time*/)
+uint8_t JoyHandle::read(EmuTime::param time)
 {
 	checkTime(time);
 	switch (cycle) {
