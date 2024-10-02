@@ -197,13 +197,13 @@ void JoyHandle::signalMSXEvent(const Event& event,
 		const auto* setting = joystickManager.getJoyDeadZoneSetting(joyId);
 		return setting ? setting->getInt() : 0;
 	};
-	for (int i : xrange(6)) {
-		for (const auto& binding : bindings[i]) {
-			if (auto onOff = match(binding, event, getJoyDeadZone)) {
-				(*onOff ? press : release) |= 1 << i;
-			}
-		}
-	}
+	// for (int i : xrange(6)) {
+	// 	for (const auto& binding : bindings[i]) {
+	// 		if (auto onOff = match(binding, event, getJoyDeadZone)) {
+	// 			(*onOff ? press : release) |= 1 << i;
+	// 		}
+	// 	}
+	// }
 
 	if (((status & ~press) | release) != status) {
 		stateChangeDistributor.distributeNew<JoyHandleState>(
