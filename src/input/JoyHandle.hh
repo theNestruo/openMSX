@@ -5,7 +5,6 @@
 
 #include "BooleanInput.hh"
 #include "MSXEventListener.hh"
-#include "StateChangeListener.hh"
 #include "StringSetting.hh"
 
 #include <array>
@@ -19,7 +18,6 @@ class MSXEventDistributor;
 class StateChangeDistributor;
 
 class JoyHandle final : public JoystickDevice, private MSXEventListener
-                      , private StateChangeListener
 {
 public:
 	JoyHandle(CommandController& commandController,
@@ -50,9 +48,6 @@ private:
 	// MSXEventListener
 	void signalMSXEvent(const Event& event,
 	                    EmuTime::param time) noexcept override;
-	// StateChangeListener
-	void signalStateChange(const StateChange& event) override;
-	void stopReplay(EmuTime::param time) noexcept override;
 
 	void checkTime(EmuTime::param time);
 
@@ -68,12 +63,11 @@ private:
 
 	const std::string description;
 	const uint8_t id;
+	EmuTime lastTime = EmuTime::zero();
+	uint8_t cycle = 0; // 0-1
+	uint8_t analogValue = 128;
 	uint8_t status = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT |
 	                 JOY_BUTTONA | JOY_BUTTONB;
-	bool pin8;
-	EmuTime lastTime = EmuTime::zero();
-	uint8_t cycle; // 0-1
-	uint8_t analogValue = 128;
 };
 
 } // namespace openmsx

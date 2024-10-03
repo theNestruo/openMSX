@@ -18,6 +18,11 @@
 
 namespace openmsx {
 
+/*
+ * As I have no local environment properly set,
+ * let's forget about State and serialization for now...
+ * (less code, less problems)
+ *
 class JoyHandleState final : public StateChange
 {
 public:
@@ -34,7 +39,7 @@ public:
 	[[nodiscard]] auto getRelease()     const { return release; }
 	[[nodiscard]] auto getAnalogValue() const { return analogValue; }
 
-	template<typename Archive> void serialize(Archive& ar, unsigned /*version*/) {
+	template<typename Archive> void serialize(Archive& ar, unsigned /*version* /) {
 		ar.template serializeBase<StateChange>(*this);
 		ar.serialize("id",          id,
 		             "press",       press,
@@ -46,6 +51,7 @@ private:
 	uint8_t id, press, release, analogValue;
 };
 REGISTER_POLYMORPHIC_CLASS(StateChange, JoyHandleState, "JoyHandleState");
+*/
 
 // TclObject JoyHandle::getDefaultConfig(JoystickId joyId, const JoystickManager& joystickManager)
 // {
@@ -152,6 +158,7 @@ void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
 
 	lastTime = EmuTime::zero();
 	cycle = 0;
+	analogValue = 128;
 }
 
 void JoyHandle::unplugHelper(EmuTime::param /*time*/)
@@ -172,17 +179,22 @@ uint8_t JoyHandle::read(EmuTime::param time)
 		return 1 << 3; // "RIGHT"
 	}
 	if (analogValue < 96) {
-		return cycle == 1 ? 1 << 2 : 0x00; // "LEFT" / ""
+		return cycle == 1 ? 1 << 2 : 0x00; // "LEFT" or ""
 	}
 	if (analogValue >= 160) {
-		return cycle == 1 ? 1 << 3 : 0x00; // "RIGHT" / ""
+		return cycle == 1 ? 1 << 3 : 0x00; // "RIGHT" or ""
 	}
 	return 0x00;
 }
 
-void JoyHandle::write(uint8_t value, EmuTime::param /*time*/)
+void JoyHandle::write(uint8_t /*value*/, EmuTime::param /*time*/)
 {
+	/*
+	 * Let's ignore this for now...
+	 * (less code, less problems)
+	 *
 	pin8 = (value & 0x04) != 0;
+	 */
 }
 
 void JoyHandle::checkTime(EmuTime::param time)
@@ -204,13 +216,17 @@ void JoyHandle::signalMSXEvent(const Event& event,
 
 	visit(overloaded{
 		[&](const JoystickAxisMotionEvent& e) {
+			/*
+			 * Let's ignore this for now...
+			 * (less code, less problems)
+			 *
 			if (e.getAxis() == ((uint8_t) 0) ) {
+			 */
 				constexpr int SCALE = 2;
-				if (int analogValue = e.getValue() / SCALE) {
-					stateChangeDistributor.distributeNew<JoyHandleState>(
-						time, id, press, release, analogValue);
-				}
+				analogValue = e.getValue() / SCALE);
+			/*
 			}
+			 */
 		},
 		[](const EventBase&) { /*ignore*/ }
 	}, event);
@@ -233,6 +249,10 @@ void JoyHandle::signalMSXEvent(const Event& event,
 	// }
 }
 
+/*
+ * Let's ignore this for now...
+ * (less code, less problems)
+ *
 // StateChangeListener
 void JoyHandle::signalStateChange(const StateChange& event)
 {
@@ -253,10 +273,15 @@ void JoyHandle::stopReplay(EmuTime::param time) noexcept
 			time, id, uint8_t(0), release);
 	}
 }
+ */
 
 
+/*
+ * Let's ignore serialization for now...
+ * (less code, less problems)
+ *
 template<typename Archive>
-void JoyHandle::serialize(Archive& ar, unsigned /*version*/)
+void JoyHandle::serialize(Archive& ar, unsigned /*version* /)
 {
 	ar.serialize("status",      status,
 				 "lastTime",    lastTime,
@@ -270,6 +295,7 @@ void JoyHandle::serialize(Archive& ar, unsigned /*version*/)
 	// no need to serialize 'pin8'
 }
 INSTANTIATE_SERIALIZE_METHODS(JoyHandle);
+ */
 REGISTER_POLYMORPHIC_INITIALIZER(Pluggable, JoyHandle, "JoyHandle");
 
 } // namespace openmsx
