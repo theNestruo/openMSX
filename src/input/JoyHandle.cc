@@ -204,9 +204,9 @@ void JoyHandle::signalMSXEvent(const Event& event,
 
 	visit(overloaded{
 		[&](const JoystickAxisMotionEvent& e) {
-			if (e.getX()) {
+			if (e.getAxis() == ((uint8_t) 0) ) {
 				constexpr int SCALE = 2;
-				if (int analogValue = e.getX() / SCALE) {
+				if (int analogValue = e.getValue() / SCALE) {
 					stateChangeDistributor.distributeNew<JoyHandleState>(
 						time, id, press, release, analogValue);
 				}
