@@ -38,11 +38,11 @@ jobs:
 # #            cpu: aarch64
 # #            os: linux
 # #            flavour: opt
-#           - image: ubuntu-24.04
-#             name: Windows
-#             cpu: x86_64
-#             os: mingw-w64
-#             flavour: opt
+          - image: ubuntu-24.04
+            name: Windows
+            cpu: x86_64
+            os: mingw-w64
+            flavour: opt
 #           - image: macos-14
 #             xcode_version: 15.4
 #             name: MacOS
@@ -60,11 +60,11 @@ jobs:
 # #            cpu: arm
 # #            os: android
 # #            flavour: opt
-          - image: windows-latest
-            name: Windows-VC
-            cpu: x64
-            os: windows-vc
-            flavour: opt
+#           - image: windows-latest
+#             name: Windows-VC
+#             cpu: x64
+#             os: windows-vc
+#             flavour: opt
     steps:
     - name: Get current code from Git repo
       uses: actions/checkout@v4
