@@ -5,6 +5,7 @@
 
 #include "BooleanInput.hh"
 #include "MSXEventListener.hh"
+#include "StateChangeListener.hh"
 #include "StringSetting.hh"
 
 #include <array>
@@ -18,6 +19,7 @@ class MSXEventDistributor;
 class StateChangeDistributor;
 
 class JoyHandle final : public JoystickDevice, private MSXEventListener
+                        , private StateChangeListener
 {
 public:
 	JoyHandle(CommandController& commandController,
@@ -27,13 +29,13 @@ public:
 	          uint8_t id);
 	~JoyHandle() override;
 
-	// [[nodiscard]] static TclObject getDefaultConfig(JoystickId joyId, const JoystickManager& joystickManager);
+	[[nodiscard]] static TclObject getDefaultConfig(JoystickId joyId, const JoystickManager& joystickManager);
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	// void checkJoystickConfig(const TclObject& newValue);
+	void checkJoystickConfig(const TclObject& newValue);
 
 	// Pluggable
 	[[nodiscard]] std::string_view getName() const override;
@@ -48,6 +50,9 @@ private:
 	// MSXEventListener
 	void signalMSXEvent(const Event& event,
 	                    EmuTime::param time) noexcept override;
+	// StateChangeListener
+	void signalStateChange(const StateChange& event) override;
+	void stopReplay(EmuTime::param time) noexcept override;
 
 	void checkTime(EmuTime::param time);
 
@@ -56,18 +61,18 @@ private:
 	MSXEventDistributor& eventDistributor;
 	StateChangeDistributor& stateChangeDistributor;
 	JoystickManager& joystickManager;
-	// StringSetting configSetting;
+	StringSetting configSetting;
 
-	// // up, down, left, right, a, b (in sync with order in JoystickDevice)
-	// std::array<std::vector<BooleanInput>, 6> bindings; // calculated from 'configSetting'
+	// up, down, left, right, a, b (in sync with order in JoystickDevice)
+	std::array<std::vector<BooleanInput>, 6> bindings; // calculated from 'configSetting'
 
 	const std::string description;
 	const uint8_t id;
+	uint8_t status = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT |
+	                 JOY_BUTTONA | JOY_BUTTONB;
 	EmuTime lastTime = EmuTime::zero();
 	uint8_t cycle = 0; // 0-1
 	uint8_t analogValue = 128;
-	uint8_t status = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT |
-	                 JOY_BUTTONA | JOY_BUTTONB;
 };
 
 } // namespace openmsx
