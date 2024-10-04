@@ -234,7 +234,7 @@ void JoyHandle::signalMSXEvent(const Event& event,
 					[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<uint8_t> {
 						return std::nullopt;
 					}
-				}, binding, event)) {
+				}, binding, event);
 		if (newAnalogValue) {
 			analogValue = newAnalogValue;
 		}
