@@ -882,6 +882,8 @@ static constexpr auto sizeDPad = 30.0f;
 	}
 	result[TRIG_A] = insideCircle(mouse, centerA, radius);
 	result[TRIG_B] = insideCircle(mouse, centerB, radius);
+	result[WHEEL_LEFT] = 0;
+	result[WHEEL_RIGHT] = 0;
 	return result;
 }
 
