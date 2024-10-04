@@ -54,12 +54,14 @@ TclObject JoyHandle::getDefaultConfig(JoystickId joyId, const JoystickManager& j
 		((b & 1) ? listB : listA).addListElement(tmpStrCat(joy, " button", b));
 	}
 	return TclObject(TclObject::MakeDictTag{},
-		"UP",    makeTclList(/* tmpStrCat(joy, " -axis1"), */tmpStrCat(joy, " hat0 up")),
-		"DOWN",  makeTclList(/* tmpStrCat(joy, " +axis1"), */tmpStrCat(joy, " hat0 down")),
-		"LEFT",  makeTclList(/* tmpStrCat(joy, " -axis0"), */tmpStrCat(joy, " hat0 left")),
-		"RIGHT", makeTclList(/* tmpStrCat(joy, " +axis0"), */tmpStrCat(joy, " hat0 right")),
-		"A",     listA,
-		"B",     listB);
+		"UP",          makeTclList(/* tmpStrCat(joy, " -axis1"), */tmpStrCat(joy, " hat0 up")),
+		"DOWN",        makeTclList(/* tmpStrCat(joy, " +axis1"), */tmpStrCat(joy, " hat0 down")),
+		"LEFT",        makeTclList(/* tmpStrCat(joy, " -axis0"), */tmpStrCat(joy, " hat0 left")),
+		"RIGHT",       makeTclList(/* tmpStrCat(joy, " +axis0"), */tmpStrCat(joy, " hat0 right")),
+		"A",           listA,
+		"B",           listB,
+		"WHEEL_LEFT",  makeTclList(tmpStrCat(joy, " -axis0")),
+		"WHEEL_RIGHT", makeTclList(tmpStrCat(joy, " +axis0")));
 }
 
 JoyHandle::JoyHandle(CommandController& commandController_,
@@ -99,9 +101,9 @@ void JoyHandle::checkJoystickConfig(const TclObject& newValue)
 		throw CommandException("Need an even number of elements");
 	}
 	for (unsigned i = 0; i < n; i += 2) {
-		static constexpr std::array<std::string_view, 6> keys = {
+		static constexpr std::array<std::string_view, 8> keys = {
 			// order is important!
-			"UP", "DOWN", "LEFT", "RIGHT", "A", "B"
+			"UP", "DOWN", "LEFT", "RIGHT", "A", "B", "WHEEL_LEFT", "WHEEL_RIGHT"
 		};
 		std::string_view key  = newValue.getListIndex(interp, i + 0).getString();
 		auto it = ranges::find(keys, key);
