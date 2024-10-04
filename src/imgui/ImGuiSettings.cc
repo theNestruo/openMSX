@@ -21,6 +21,7 @@
 #include "InputEventGenerator.hh"
 #include "IntegerSetting.hh"
 #include "JoyMega.hh"
+#include "JoyHandle.hh"
 #include "KeyCodeSetting.hh"
 #include "KeyboardSettings.hh"
 #include "Mixer.hh"
