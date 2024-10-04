@@ -63,8 +63,8 @@ private:
 	JoystickManager& joystickManager;
 	StringSetting configSetting;
 
-	// up, down, left, right, a, b (in sync with order in JoystickDevice)
-	std::array<std::vector<BooleanInput>, 6> bindings; // calculated from 'configSetting'
+	// up, down, left, right, a, b, wheel_left, wheel_right (in sync with order in JoystickDevice)
+	std::array<std::vector<BooleanInput>, 8> bindings; // calculated from 'configSetting'
 
 	const std::string description;
 	const uint8_t id;
