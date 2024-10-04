@@ -164,10 +164,10 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 uint8_t JoyHandle::read(EmuTime::param time)
 {
 	checkTime(time);
-	if (analogValue < 48) {
+	if (analogValue < 32) {
 		return status | (1 << 2); // "LEFT"
 	}
-	if (analogValue >= 208) {
+	if (analogValue >= 224) {
 		return status | (1 << 3); // "RIGHT"
 	}
 	if (analogValue < 96) {
@@ -197,17 +197,6 @@ void JoyHandle::checkTime(EmuTime::param time)
 void JoyHandle::signalMSXEvent(const Event& event,
                                EmuTime::param time) noexcept
 {
-	// TODO send analogValue to JoyHandleState
-	std::visit(overloaded{
-		[&](const JoystickAxisMotionEvent& e) {
-			auto value = e.getValue(); // -32768..32768
-			constexpr int CENTER = 128;
-			constexpr int SCALE = 256;
-			analogValue = CENTER + (value / SCALE);
-		},
-		[](const EventBase&) { /*ignore*/ }
-	}, event);
-
 	uint8_t press = 0;
 	uint8_t release = 0;
 
@@ -222,6 +211,35 @@ void JoyHandle::signalMSXEvent(const Event& event,
 			}
 		}
 	}
+
+	for (int i = 6; i < 8; i++) {
+		const auto& binding = bindings[i];
+		if (auto newAnalogValue = std::visit(overloaded{
+					[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) -> std::optional<uint8_t> {
+						if (bind.getJoystick() != e.getJoystick()) return std::nullopt;
+						if (bind.getAxis() != e.getAxis()) return std::nullopt;
+						int deadZone = getJoyDeadZone(bind.getJoystick()); // percentage 0..100
+						int threshold = (deadZone * 32768) / 100; // 0..32768
+						int halfThreshold = (32768 - threshold) / 2; // 0..32768
+						if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
+							return e.getValue() > halfThreshold ? 255
+								: e.getValue() > threshold ? 191
+								: 127;
+						} else {
+							return e.getValue() > halfThreshold ? 0
+								: e.getValue() > threshold ? 63
+								: 127;
+						}
+					},
+					[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<bool> {
+						return std::nullopt;
+					}
+				}, binding, event)) {
+			analogValue = newAnalogValue;
+		}
+	}
+
+	// TODO send analogValue to JoyHandleState
 
 	if (((status & ~press) | release) != status) {
 		stateChangeDistributor.distributeNew<JoyHandleState>(
