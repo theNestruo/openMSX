@@ -231,7 +231,7 @@ void JoyHandle::signalMSXEvent(const Event& event,
 								: 127;
 						}
 					},
-					[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<bool> {
+					[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<uint8_t> {
 						return std::nullopt;
 					}
 				}, binding, event)) {
