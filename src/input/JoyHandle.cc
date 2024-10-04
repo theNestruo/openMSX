@@ -195,8 +195,19 @@ void JoyHandle::checkTime(EmuTime::param time)
 
 // MSXEventListener
 void JoyHandle::signalMSXEvent(const Event& event,
-                                 EmuTime::param time) noexcept
+                               EmuTime::param time) noexcept
 {
+	// TODO send analogValue to JoyHandleState
+	std::visit(overloaded{
+		[&](const JoystickAxisMotionEvent& e) {
+			auto value = e.getValue(); // -32768..32768
+			constexpr int CENTER = 128;
+			constexpr int SCALE = 256;
+			analogValue = CENTER + (value / SCALE);
+		},
+		[](const EventBase&) { /*ignore*/ }
+	}, event);
+
 	uint8_t press = 0;
 	uint8_t release = 0;
 
@@ -211,17 +222,6 @@ void JoyHandle::signalMSXEvent(const Event& event,
 			}
 		}
 	}
-
-	// TODO send analogValue to JoyHandleState
-	visit(overloaded{
-		[&](const JoystickAxisMotionEvent& e) {
-			auto value = e.getValue(); // -32768..32768
-			constexpr int CENTER = 128;
-			constexpr int SCALE = 256;
-			analogValue = CENTER + (value / SCALE);
-		},
-		[](const EventBase&) { /*ignore*/ }
-	}, event);
 
 	if (((status & ~press) | release) != status) {
 		stateChangeDistributor.distributeNew<JoyHandleState>(
