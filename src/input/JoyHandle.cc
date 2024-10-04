@@ -214,7 +214,7 @@ void JoyHandle::signalMSXEvent(const Event& event,
 
 	for (int i = 6; i < 8; i++) {
 		const auto& binding = bindings[i];
-		if (auto newAnalogValue = std::visit(overloaded{
+		std::optional<uint8_t> newAnalogValue = std::visit(overloaded{
 					[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) -> std::optional<uint8_t> {
 						if (bind.getJoystick() != e.getJoystick()) return std::nullopt;
 						if (bind.getAxis() != e.getAxis()) return std::nullopt;
@@ -235,6 +235,7 @@ void JoyHandle::signalMSXEvent(const Event& event,
 						return std::nullopt;
 					}
 				}, binding, event)) {
+		if (newAnalogValue) {
 			analogValue = newAnalogValue;
 		}
 	}
