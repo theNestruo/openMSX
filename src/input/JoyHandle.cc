@@ -214,30 +214,30 @@ void JoyHandle::signalMSXEvent(const Event& event,
 
 	for (int i = 6; i < 8; i++) {
 		const auto& binding = bindings[i];
-		std::optional<uint8_t> newAnalogValue = std::visit(overloaded{
-					[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) -> std::optional<uint8_t> {
-						if (bind.getJoystick() != e.getJoystick()) return std::nullopt;
-						if (bind.getAxis() != e.getAxis()) return std::nullopt;
-						int deadZone = getJoyDeadZone(bind.getJoystick()); // percentage 0..100
-						int threshold = (deadZone * 32768) / 100; // 0..32768
-						int halfThreshold = (32768 - threshold) / 2; // 0..32768
-						if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
-							return e.getValue() > halfThreshold ? 255
-								: e.getValue() > threshold ? 191
-								: 127;
-						} else {
-							return e.getValue() > halfThreshold ? 0
-								: e.getValue() > threshold ? 63
-								: 127;
-						}
-					},
-					[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<uint8_t> {
-						return std::nullopt;
-					}
-				}, binding, event);
-		if (newAnalogValue) {
-			analogValue = newAnalogValue;
-		}
+		std::visit(overloaded{
+			[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) -> std::optional<bool> {
+				if (bind.getJoystick() != e.getJoystick()) return std::nullopt;
+				if (bind.getAxis() != e.getAxis()) return std::nullopt;
+				int deadZone = getJoyDeadZone(bind.getJoystick()); // percentage 0..100
+				int threshold = (deadZone * 32768) / 100; // 0..32768
+				int halfThreshold = (32768 - threshold) / 2; // 0..32768
+				if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
+					analogValue = e.getValue() > halfThreshold ? 255
+						: e.getValue() > threshold ? 191
+						: 127;
+					return e.getValue() > threshold;
+				} else {
+					analogValue = e.getValue() < -halfThreshold ? 0
+						: e.getValue() < -threshold ? 63
+						: 127;
+					return e.getValue() < -threshold;
+				}
+			},
+
+			[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<bool> {
+				return std::nullopt;
+			}
+		}, binding, event);
 	}
 
 	// TODO send analogValue to JoyHandleState
