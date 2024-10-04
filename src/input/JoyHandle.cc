@@ -54,10 +54,10 @@ TclObject JoyHandle::getDefaultConfig(JoystickId joyId, const JoystickManager& j
 		((b & 1) ? listB : listA).addListElement(tmpStrCat(joy, " button", b));
 	}
 	return TclObject(TclObject::MakeDictTag{},
-		"UP",    makeTclList(tmpStrCat(joy, " -axis1"), tmpStrCat(joy, " hat0 up")),
-		"DOWN",  makeTclList(tmpStrCat(joy, " +axis1"), tmpStrCat(joy, " hat0 down")),
-		"LEFT",  makeTclList(tmpStrCat(joy, " -axis0"), tmpStrCat(joy, " hat0 left")),
-		"RIGHT", makeTclList(tmpStrCat(joy, " +axis0"), tmpStrCat(joy, " hat0 right")),
+		"UP",    makeTclList(/* tmpStrCat(joy, " -axis1"), */tmpStrCat(joy, " hat0 up")),
+		"DOWN",  makeTclList(/* tmpStrCat(joy, " +axis1"), */tmpStrCat(joy, " hat0 down")),
+		"LEFT",  makeTclList(/* tmpStrCat(joy, " -axis0"), */tmpStrCat(joy, " hat0 left")),
+		"RIGHT", makeTclList(/* tmpStrCat(joy, " +axis0"), */tmpStrCat(joy, " hat0 right")),
 		"A",     listA,
 		"B",     listB);
 }
@@ -73,7 +73,7 @@ JoyHandle::JoyHandle(CommandController& commandController_,
 	, joystickManager(joystickManager_)
 	, configSetting(commandController, tmpStrCat("joyhandle", id_, "_config"),
 		"joyhandle mapping configuration", getDefaultConfig(JoystickId(id_ - 1), joystickManager).getString())
-	, description(strCat("Panasonic FS-JH1 ", id_, "."))
+	, description(strCat("Panasonic FS-JH1 Joy Handle ", id_, ". Mapping is fully configurable."))
 	, id(id_)
 {
 	configSetting.setChecker([this](const TclObject& newValue) {
@@ -213,8 +213,10 @@ void JoyHandle::signalMSXEvent(const Event& event,
 	// TODO send analogValue to JoyHandleState
 	visit(overloaded{
 		[&](const JoystickAxisMotionEvent& e) {
-			constexpr int SCALE = 2;
-			analogValue = e.getValue() / SCALE;
+			auto value = e.getValue(); // -32768..32768
+			constexpr int CENTER = 128;
+			constexpr int SCALE = 256;
+			analogValue = CENTER + (value / SCALE);
 		},
 		[](const EventBase&) { /*ignore*/ }
 	}, event);
