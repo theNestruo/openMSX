@@ -54,10 +54,10 @@ TclObject JoyHandle::getDefaultConfig(JoystickId joyId, const JoystickManager& j
 		((b & 1) ? listB : listA).addListElement(tmpStrCat(joy, " button", b));
 	}
 	return TclObject(TclObject::MakeDictTag{},
-		"UP",          makeTclList(/* tmpStrCat(joy, " -axis1"), */tmpStrCat(joy, " hat0 up")),
-		"DOWN",        makeTclList(/* tmpStrCat(joy, " +axis1"), */tmpStrCat(joy, " hat0 down")),
-		"LEFT",        makeTclList(/* tmpStrCat(joy, " -axis0"), */tmpStrCat(joy, " hat0 left")),
-		"RIGHT",       makeTclList(/* tmpStrCat(joy, " +axis0"), */tmpStrCat(joy, " hat0 right")),
+		"UP",          makeTclList(tmpStrCat(joy, " hat0 up")),
+		"DOWN",        makeTclList(tmpStrCat(joy, " hat0 down")),
+		"LEFT",        makeTclList(tmpStrCat(joy, " hat0 left")),
+		"RIGHT",       makeTclList(tmpStrCat(joy, " hat0 right")),
 		"A",           listA,
 		"B",           listB,
 		"WHEEL_LEFT",  makeTclList(tmpStrCat(joy, " -axis0")),
@@ -93,7 +93,7 @@ JoyHandle::~JoyHandle()
 
 void JoyHandle::checkJoystickConfig(const TclObject& newValue)
 {
-	std::array<std::vector<BooleanInput>, 6> newBindings;
+	std::array<std::vector<BooleanInput>, 8> newBindings;
 
 	auto& interp = commandController.getInterpreter();
 	unsigned n = newValue.getListLength(interp);
