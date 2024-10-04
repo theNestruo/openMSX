@@ -159,7 +159,7 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 
 
 // MSXJoystickDevice
-uint8_t JoyHandle::read(EmuTime::param /*time*/)
+uint8_t JoyHandle::read(EmuTime::param time)
 {
 	checkTime(time);
 	if (analogValue < 48) {
@@ -177,7 +177,7 @@ uint8_t JoyHandle::read(EmuTime::param /*time*/)
 	return status;
 }
 
-void JoyHandle::write(uint8_t value, EmuTime::param /*time*/)
+void JoyHandle::write(uint8_t /*value*/, EmuTime::param /*time*/)
 {
 }
 
@@ -210,17 +210,18 @@ void JoyHandle::signalMSXEvent(const Event& event,
 		}
 	}
 
+	// TODO send analogValue to JoyHandleState
 	visit(overloaded{
 		[&](const JoystickAxisMotionEvent& e) {
 			constexpr int SCALE = 2;
-			analogValue = e.getValue() / SCALE); // TODO send analogValue to JoyHandleState
+			analogValue = e.getValue() / SCALE;
 		},
 		[](const EventBase&) { /*ignore*/ }
 	}, event);
 
 	if (((status & ~press) | release) != status) {
 		stateChangeDistributor.distributeNew<JoyHandleState>(
-			time, id, press, release); // TODO send analogValue to JoyHandleState
+			time, id, press, release);
 	}
 }
 
