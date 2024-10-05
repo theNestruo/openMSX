@@ -212,17 +212,15 @@ void JoyHandle::signalMSXEvent(const Event& event,
 					if (bind.getAxis() != e.getAxis()) return;
 					int deadZone = getJoyDeadZone(bind.getJoystick()); // percentage 0..100
 					int threshold = (deadZone * 32768) / 100; // 0..32768
-					int halfwayZone = (deadZone + 100) / 2; // percentage 0..100 halfway between deadZone and 100
+					int halfwayZone = 100 - deadZone; // percentage 0..100
 					int halfwayThreshold = (halfwayZone * 32768) / 100; // 0..32768
-					if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
-						analogValue = e.getValue() > halfwayThreshold ? 100
-									: e.getValue() > threshold        ?  50
-																	  :   0;
-					} else {
-						analogValue = e.getValue() < -halfwayThreshold ? -100
-									: e.getValue() < -threshold        ?  -50
-																	   :    0;
-					}
+					int factor = bind.getDirection() == BooleanJoystickAxis::Direction::NEG ? -1 : 1;
+					analogValue = factor * (
+								e.getValue() >  halfwayThreshold ?  100
+							  : e.getValue() < -halfwayThreshold ? -100
+							  : e.getValue() >  threshold        ?   50
+							  : e.getValue() < -threshold        ?  -50
+															     :    0);
 				},
 				[](const auto&, const auto&) { /*ignore*/ }
 			}, binding, event);
