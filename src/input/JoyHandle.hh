@@ -72,7 +72,7 @@ private:
 	                 JOY_BUTTONA | JOY_BUTTONB;
 	EmuTime lastTime = EmuTime::zero();
 	uint8_t cycle = 0; // 0-1
-	uint8_t analogValue = 128;
+	int8_t analogValue = 0;
 };
 
 } // namespace openmsx

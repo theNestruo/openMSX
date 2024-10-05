@@ -150,7 +150,7 @@ void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
 
 	lastTime = EmuTime::zero();
 	cycle = 0;
-	analogValue = 128;
+	analogValue = 0;
 }
 
 void JoyHandle::unplugHelper(EmuTime::param /*time*/)
@@ -164,19 +164,11 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 uint8_t JoyHandle::read(EmuTime::param time)
 {
 	checkTime(time);
-	if (analogValue < 32) {
-		return status | (1 << 2); // "LEFT"
-	}
-	if (analogValue >= 224) {
-		return status | (1 << 3); // "RIGHT"
-	}
-	if (analogValue < 96) {
-		return status | (cycle == 1 ? 1 << 2 : 0x00); // "LEFT" or ""
-	}
-	if (analogValue >= 160) {
-		return status | (cycle == 1 ? 1 << 3 : 0x00); // "RIGHT" or ""
-	}
-	return status;
+	const uint8_t wheelStatus =
+			((analogValue < 0) && ((analogValue == -100) || (cycle == 1))) ? JOY_LEFT
+		  : ((analogValue > 0) && ((analogValue ==  100) || (cycle == 1))) ? JOY_RIGHT
+		  : 0;
+	return status | wheelStatus;
 }
 
 void JoyHandle::write(uint8_t /*value*/, EmuTime::param /*time*/)
@@ -213,30 +205,26 @@ void JoyHandle::signalMSXEvent(const Event& event,
 	}
 
 	for (int i = 6; i < 8; i++) {
-		const auto& binding = bindings[i];
+		const BooleanInput& binding = bindings[i];
 		std::visit(overloaded{
-			[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) -> std::optional<bool> {
-				if (bind.getJoystick() != e.getJoystick()) return std::nullopt;
-				if (bind.getAxis() != e.getAxis()) return std::nullopt;
+			[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) {
+				if (bind.getJoystick() != e.getJoystick()) return;
+				if (bind.getAxis() != e.getAxis()) return;
 				int deadZone = getJoyDeadZone(bind.getJoystick()); // percentage 0..100
 				int threshold = (deadZone * 32768) / 100; // 0..32768
-				int halfThreshold = (32768 - threshold) / 2; // 0..32768
+				int halfwayZone = (deadZone + 100) / 2; // percentage 0..100 halfway between deadZone and 100
+				int halfwayThreshold = (halfwayZone * 32768) / 100; // 0..32768
 				if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
-					analogValue = e.getValue() > halfThreshold ? 255
-						: e.getValue() > threshold ? 191
-						: 127;
-					return e.getValue() > threshold;
+					analogValue = e.getValue() > halfwayThreshold ? 100
+								: e.getValue() > threshold        ?  50
+																  :   0;
 				} else {
-					analogValue = e.getValue() < -halfThreshold ? 0
-						: e.getValue() < -threshold ? 63
-						: 127;
-					return e.getValue() < -threshold;
+					analogValue = e.getValue() < -halfwayThreshold ? -100
+								: e.getValue() < -threshold        ?  -50
+																   :    0;
 				}
 			},
-
-			[](const auto& /*bind*/, const auto& /*event*/) -> std::optional<bool> {
-				return std::nullopt;
-			}
+			[](const BooleanInput&, const EventBase&) { /*ignore*/ }
 		}, binding, event);
 	}
 
