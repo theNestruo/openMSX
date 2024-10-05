@@ -164,8 +164,6 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 uint8_t JoyHandle::read(EmuTime::param time)
 {
 	checkTime(time);
-	analogValue = -50; // DEBUG
-	cycle = 1; // DEBUG
 	const uint8_t wheelStatus =
 			((analogValue < 0) && ((analogValue == -100) || (cycle == 1))) ? JOY_LEFT
 		  : ((analogValue > 0) && ((analogValue ==  100) || (cycle == 1))) ? JOY_RIGHT
