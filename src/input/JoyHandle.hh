@@ -55,6 +55,9 @@ private:
 	void stopReplay(EmuTime::param time) noexcept override;
 
 	void checkTime(EmuTime::param time);
+	[[nodiscard]] std::optional<int8_t> matchAnalog(const BooleanInput& binding,
+												    const Event& event,
+												    function_ref<int(JoystickId)> getJoyDeadZone);
 
 private:
 	CommandController& commandController;
