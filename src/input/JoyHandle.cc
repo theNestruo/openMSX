@@ -170,7 +170,7 @@ uint8_t JoyHandle::read(EmuTime::param time)
 			((analogValue < 0) && ((analogValue == -100) || (cycle == 1))) ? JOY_LEFT
 		  : ((analogValue > 0) && ((analogValue ==  100) || (cycle == 1))) ? JOY_RIGHT
 		  : 0;
-	return status | wheelStatus;
+	return status & ~wheelStatus;
 }
 
 void JoyHandle::write(uint8_t /*value*/, EmuTime::param /*time*/)
