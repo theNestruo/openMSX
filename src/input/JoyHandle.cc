@@ -232,15 +232,15 @@ std::optional<int8_t> matchAnalog(const BooleanInput& binding, const Event& even
 			int halfwayZone = 100 - deadZone; // percentage 0..100
 			int halfwayThreshold = (halfwayZone * 32768) / 100; // 0..32768
 			if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
+				if (e.getValue() < 0) return std::nullopt;
 				return e.getValue() >  halfwayThreshold ? 100
 					 : e.getValue() >  threshold        ?  50
-					 : e.getValue() >= 0                ?   0
-					 : std::nullopt;
+					 									:   0;
 			} else {
-				return e.getValue() <  -halfwayThreshold ? -100
-					 : e.getValue() <  -threshold        ?  -50
-					 : e.getValue() <=  0                ?    0
-					 : std::nullopt;
+				if (e.getValue() > 0) return std::nullopt;
+				return e.getValue() < -halfwayThreshold ? -100
+					 : e.getValue() < -threshold        ?  -50
+					 									:    0;
 			}
 		},
 
