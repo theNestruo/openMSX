@@ -205,7 +205,7 @@ void JoyHandle::signalMSXEvent(const Event& event,
 	}
 
 	for (int i = 6; i < 8; i++) {
-		const BooleanInput& binding = bindings[i];
+		const auto& binding = bindings[i];
 		std::visit(overloaded{
 			[&](const BooleanJoystickAxis& bind, const JoystickAxisMotionEvent& e) {
 				if (bind.getJoystick() != e.getJoystick()) return;
