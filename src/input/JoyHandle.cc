@@ -229,7 +229,13 @@ std::optional<int8_t> matchAnalog(const BooleanInput& binding, const Event& even
 			if (bind.getAxis() != e.getAxis()) return std::nullopt;
 			int deadZone = getJoyDeadZone(bind.getJoystick()); // percentage 0..100
 			int threshold = (deadZone * 32768) / 100; // 0..32768
-			int halfwayZone = 98; // (100 - deadZone); // percentage 0..100
+			/*
+			 * Modern gamepad saturate analog values halfway already,
+			 * so let's use a minimal upper dead zone (99%) for now
+			 * instead of mirroring the lower dead zone percentage
+			int halfwayZone = (100 - deadZone); // percentage 0..100
+			 */
+			int halfwayZone = 99;
 			int halfwayThreshold = (halfwayZone * 32768) / 100; // 0..32768
 			if (bind.getDirection() == BooleanJoystickAxis::Direction::POS) {
 				if (e.getValue() < 0) return std::nullopt;
