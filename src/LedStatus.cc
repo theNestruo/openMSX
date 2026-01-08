@@ -1,18 +1,20 @@
 #include "LedStatus.hh"
 
-#include "MSXCliComm.hh"
 #include "CommandController.hh"
+#include "MSXCliComm.hh"
 #include "Timer.hh"
 
-#include "ranges.hh"
 #include "stl.hh"
 #include "strCat.hh"
 #include "xrange.hh"
 
+#include <algorithm>
 #include <array>
 #include <string_view>
 
 namespace openmsx {
+
+using namespace std::literals;
 
 [[nodiscard]] static std::string_view getLedName(LedStatus::Led led)
 {
@@ -38,7 +40,7 @@ LedStatus::LedStatus(
 	}))
 	, lastTime(Timer::getTime())
 {
-	ranges::fill(ledValue, false);
+	std::ranges::fill(ledValue, false);
 }
 
 void LedStatus::setLed(Led led, bool status)
@@ -66,7 +68,7 @@ void LedStatus::setLed(Led led, bool status)
 
 void LedStatus::handleEvent(Led led) noexcept
 {
-	std::string_view str = ledValue[led] ? "on": "off";
+	std::string_view str = ledValue[led] ? "on"sv : "off"sv;
 	ledStatus[led].setReadOnlyValue(TclObject(str));
 	msxCliComm.updateFiltered(CliComm::UpdateType::LED, getLedName(led), str);
 }

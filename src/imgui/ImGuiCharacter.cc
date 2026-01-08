@@ -16,9 +16,20 @@
 
 #include <imgui.h>
 
+#include <ranges>
+
 namespace openmsx {
 
 using namespace std::literals;
+
+ImGuiCharacter::ImGuiCharacter(ImGuiManager& manager_, size_t index)
+	: ImGuiPart(manager_)
+	, title("Tile viewer")
+{
+	if (index) {
+		strAppend(title, " (", index + 1, ')');
+	}
+}
 
 void ImGuiCharacter::save(ImGuiTextBuffer& buf)
 {
@@ -52,7 +63,7 @@ void ImGuiCharacter::initHexDigits()
 
 	// transform to 32-bit RGBA
 	std::array<uint32_t, totalSize> pixels;
-	for (auto [c, p] : view::zip_equal(glyphs, pixels)) {
+	for (auto [c, p] : view::zip(glyphs, pixels)) {
 		p = (c == ' ') ? ImColor(0.0f, 0.0f, 0.0f, 0.0f)  // transparent
 		  : (c == '.') ? ImColor(0.0f, 0.0f, 0.0f, 0.7f)  // black semi-transparent outline
 		               : ImColor(1.0f, 1.0f, 1.0f, 0.7f); // white semi-transparent
@@ -67,8 +78,8 @@ void ImGuiCharacter::initHexDigits()
 void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 {
 	if (!show || !motherBoard) return;
-	ImGui::SetNextWindowSize({686, 886}, ImGuiCond_FirstUseEver);
-	im::Window("Tile viewer", &show, [&]{
+	ImGui::SetNextWindowSize({692, 886}, ImGuiCond_FirstUseEver);
+	im::Window(title.c_str(), &show, [&]{
 		auto* vdp = dynamic_cast<VDP*>(motherBoard->findDevice("VDP")); // TODO name based OK?
 		if (!vdp) return;
 		const auto& vram = vdp->getVRAM().getData();
@@ -123,10 +134,20 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 		bool manRows    = overrideAll || overrideRows;
 		bool manColor0  = overrideAll || overrideColor0;
 
+		int mode = manMode ? manualMode : vdpMode;
+		if (mode == SCR4) mode = SCR2;
+
+		auto rasterBeamPos = vdp->getMSXPos(vdp->getCurrentTime());
+		if (mode == one_of(TEXT40, TEXT80)) rasterBeamPos.x -= (512 - (6 * 80)) / 2;
+		if (mode != TEXT80) rasterBeamPos.x /= 2;
+
 		im::TreeNode("Settings", ImGuiTreeNodeFlags_DefaultOpen, [&]{
 			static const char* const color0Str = "0\0001\0002\0003\0004\0005\0006\0007\0008\0009\00010\00011\00012\00013\00014\00015\000none\000";
 			im::Group([&]{
 				ImGui::TextUnformatted("VDP settings");
+				auto pos = ImGui::GetCursorPos();
+				ImGui::Dummy(ImGui::CalcTextSize("Screen mode: screen 0, width 80"));
+				ImGui::SetCursorPos(pos);
 				im::Disabled(manMode, [&]{
 					ImGui::AlignTextToFramePadding();
 					ImGui::StrCat("Screen mode: ", modeToStr(vdpMode));
@@ -149,7 +170,7 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 				});
 				im::Disabled(manBlink, [&]{
 					ImGui::AlignTextToFramePadding();
-					ImGui::StrCat("Blink: ", vdpBlink ? "enabled" : "disabled");
+					ImGui::StrCat("Blink: ", vdpBlink ? "enabled"sv : "disabled"sv);
 				});
 				im::Disabled(manPat, [&]{
 					ImGui::AlignTextToFramePadding();
@@ -165,7 +186,7 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 				});
 				im::Disabled(manRows, [&]{
 					ImGui::AlignTextToFramePadding();
-					ImGui::StrCat("Visible rows: ", (vdpLines == 192) ? "24" : "26.5");
+					ImGui::StrCat("Visible rows: ", (vdpLines == 192) ? "24"sv : "26.5"sv);
 				});
 				im::Disabled(manColor0, [&]{
 					ImGui::AlignTextToFramePadding();
@@ -264,14 +285,46 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 						ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar);
 				});
 				ImGui::Checkbox("Name table overlay", &nameTableOverlay);
+
+				ImGui::Checkbox("Override color table", &overrideColorTable);
+				HelpMarker("Ignore the content of the color table and instead use this value for everything.\n"
+				           "Could be useful to visualize the patterns when the color table has the same value for fg and bg.");
+				const char* col0_15 = "0\0001\0002\0003\0004\0005\0006\0007\000"
+				                      "8\0009\00010\00011\00012\00013\00014\00015\000";
+				im::DisabledIndent(!overrideColorTable, [&]{
+					int fg = (overrideColorValue >> 4) & 0x0f;
+					int bg = (overrideColorValue >> 0) & 0x0f;
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 3.0f);
+					if (ImGui::Combo("fg", &fg, col0_15)) {
+						overrideColorValue = (fg << 4) | bg;
+					}
+					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 3.0f);
+					ImGui::SameLine();
+					if (ImGui::Combo("bg", &bg, col0_15)) {
+						overrideColorValue = (fg << 4) | bg;
+					}
+				});
+
+				ImGui::Separator();
+				ImGui::Checkbox("beam", &rasterBeam);
+				ImGui::SameLine();
+				im::Disabled(!rasterBeam, [&]{
+					ImGui::ColorEdit4("raster beam color", rasterBeamColor.data(),
+						ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar);
+					ImGui::SameLine();
+					im::Font(manager.fontMono, [&]{
+						ImGui::StrCat('(', dec_string<4>(rasterBeamPos.x),
+						              ',', dec_string<4>(rasterBeamPos.y), ')');
+					});
+				});
+				HelpMarker("Position of the raster beam, expressed in MSX coordinates.\n"
+				           "Left/top border have negative x/y-coordinates.\n"
+				           "Only practically useful when emulation is paused.");
 			});
 		});
 		int manualLines = (manualRows == 0) ? 192
 		                : (manualRows == 1) ? 212
 		                : 256;
-
-		int mode = manMode ? manualMode : vdpMode;
-		if (mode == SCR4) mode = SCR2;
 
 		int lines = manRows ? manualLines : vdpLines;
 		int color0 = manColor0 ? manualColor0 : vdpColor0;
@@ -284,15 +337,18 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 		unsigned colReg = (manCol ? (manualColBase | (colMult(manualMode) - 1)) : vdp->getColorTableBase()) >> 6;
 		colTable.setRegister(colReg, 6);
 
+		auto colorTabVal = uint8_t(overrideColorValue);
+		if (overrideColorTable) {
+			colTable = VramTable(std::span(&colorTabVal, 1));
+			colTable.setRegister(0, 0);
+		}
+
 		VramTable namTable(vram);
 		unsigned namReg = (manNam ? (manualNamBase | (namMult(manualMode) - 1)) : vdp->getNameTableBase()) >> 10;
 		namTable.setRegister(namReg, 10);
 		namTable.setIndexSize((mode == TEXT80) ? 12 : 10);
 
-		std::array<uint32_t, 16> palette;
-		auto msxPalette = manager.palette->getPalette(vdp);
-		ranges::transform(msxPalette, palette.data(),
-			[](uint16_t msx) { return ImGuiPalette::toRGBA(msx); });
+		auto palette = manager.palette->getPalette(vdp);
 		if (color0 < 16) palette[0] = palette[color0];
 
 		auto fgCol = manFgCol ? manualFgCol : vdpFgCol;
@@ -307,7 +363,7 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 		gl::vec2 zm{float(zx), float(zy)};
 
 		// Render the patterns to a texture, we need this both to display the name-table and the pattern-table
-		auto patternTexSize = [&]() -> gl::ivec2 {
+		auto patternTexSize = [&] -> gl::ivec2 {
 			if (mode == TEXT40) return {192,  64}; // 8 rows of 32 characters, each 6x8 pixels
 			if (mode == TEXT80) return {192, 128}; // 8 rows of 32 characters, each 6x8 pixels, x2 for blink
 			if (mode == SCR1) return {256,  64}; // 8 rows of 32 characters, each 8x8 pixels
@@ -315,14 +371,14 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 			if (mode == SCR3) return { 64,  64}; // 8 rows of 32 characters, each 2x2 pixels, all this 4 times
 			return {1, 1}; // OTHER -> dummy
 		}();
-		auto patternTexChars = [&]() -> gl::vec2 {
+		auto patternTexChars = [&] -> gl::vec2 {
 			if (mode == SCR3) return {32.0f, 32.0f};
 			if (mode == SCR2) return {32.0f, lines == 192 ? 24.0f : 32.0f};
 			if (mode == TEXT80) return {32.0f, 16.0f};
 			return {32.0f, 8.0f};
 		}();
 		auto recipPatTexChars = recip(patternTexChars);
-		auto patternDisplaySize = [&]() -> gl::ivec2 {
+		auto patternDisplaySize = [&] -> gl::ivec2 {
 			if (mode == TEXT40) return {192,  64};
 			if (mode == TEXT80) return {192, 128};
 			if (mode == SCR2) return {256, lines == 192 ? 192 : 256};
@@ -364,28 +420,82 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 			initHexDigits();
 		}
 
+		auto printPatternNr = [](unsigned pat) {
+			ImGui::StrCat("Pattern: ", pat, " (0x", hex_string<3>(pat), ')');
+		};
+		auto printAddressName = [](std::string_view name) {
+			ImGui::StrCat(name, " address:");
+		};
+		auto printAddress = [&](std::string_view name, unsigned address) {
+			printAddressName(name);
+			ImGui::StrCat("  0x", hex_string<5>(address));
+		};
+		auto printAddressRange8 = [&](std::string_view name, unsigned address) {
+			printAddressName(name);
+			ImGui::StrCat("  0x", hex_string<5>(address), "-0x", hex_string<5>(address + 7));
+		};
+		auto printPatternColorAddress = [&](unsigned pattern) {
+			printAddressRange8("Pattern", patTable.getAddress(8 * pattern));
+			if (mode == one_of(SCR1, SCR2, SCR4)) {
+				printAddressRange8("Color", colTable.getAddress((mode == SCR1) ? (pattern / 8) : (8 * pattern)));
+			}
+		};
+		auto formatBinaryData = [&](unsigned address) {
+			return formatToString([&](unsigned addr){ return vram[addr]; }, address, address + 7, {}, 1, {}, "%02X", manager.getInterpreter());
+		};
+		auto getPatternFromGrid = [&] {
+			return gridPosition.x + 32 * gridPosition.y;
+		};
+		auto copyPatternColorPopup = [&] {
+			return im::PopupContextWindow("PatternCopyPopup", [&]{
+				bool hasColorData = mode == one_of(SCR1, SCR2);
+				const char* caption = hasColorData
+					? "Copy pattern and color data to clipboard"
+					: "Copy pattern data to clipboard";
+				if (ImGui::MenuItem(caption)) {
+					auto pattern = getPatternFromGrid();
+					auto text = strCat("Pattern data\n", formatBinaryData(patTable.getAddress(8 * pattern)));
+					if (hasColorData) {
+						auto cp = (mode == SCR1) ? (pattern / 8) : (8 * pattern);
+						strAppend(text, "Color data\n", formatBinaryData(colTable.getAddress(cp)));
+					}
+					ImGui::SetClipboardText(text.c_str());
+				}
+			});
+		};
+		auto drawGrid = [&] {
+			auto pat = getPatternFromGrid();
+			printPatternNr(pat);
+			auto uv1 = gl::vec2(gridPosition) * recipPatTexChars;
+			auto uv2 = uv1 + recipPatTexChars;
+			auto pos2 = ImGui::GetCursorPos();
+			ImGui::Image(patternTex.getImGui(), zoomCharSize, uv1, uv2);
+			if (grid) {
+				ImGui::SetCursorPos(pos2);
+				ImGui::Image(gridTex.getImGui(),
+					zoomCharSize, {}, charSize);
+			}
+			printPatternColorAddress(pat);
+		};
+
 		ImGui::Separator();
 		im::TreeNode("Pattern Table", ImGuiTreeNodeFlags_DefaultOpen, [&]{
 			auto size = gl::vec2(patternDisplaySize) * zm;
-			im::Child("##pattern", {0, size.y}, 0, ImGuiWindowFlags_HorizontalScrollbar, [&]{
+			auto textLines = (mode == TEXT40) ? 3.0f : 5.0f;
+			auto previewHeight = zoomCharSize.y + textLines * ImGui::GetTextLineHeightWithSpacing();
+			im::Child("##pattern", {0, std::max(size.y, previewHeight)}, 0, ImGuiWindowFlags_HorizontalScrollbar, [&]{
 				auto pos1 = ImGui::GetCursorPos();
 				gl::vec2 scrnPos = ImGui::GetCursorScreenPos();
 				ImGui::Image(patternTex.getImGui(), size);
 				bool hovered = ImGui::IsItemHovered() && (mode != OTHER);
 				ImGui::SameLine();
 				im::Group([&]{
-					if (hovered) {
-						auto gridPos = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / charZoom);
-						ImGui::StrCat("Pattern: ", gridPos.x + 32 * gridPos.y);
-						auto uv1 = gl::vec2(gridPos) * recipPatTexChars;
-						auto uv2 = uv1 + recipPatTexChars;
-						auto pos2 = ImGui::GetCursorPos();
-						ImGui::Image(patternTex.getImGui(), zoomCharSize, uv1, uv2);
-						if (grid) {
-							ImGui::SetCursorPos(pos2);
-							ImGui::Image(gridTex.getImGui(),
-								zoomCharSize, {}, charSize);
-						}
+					if (copyPatternColorPopup()) {
+						drawGrid();
+					} else if (hovered) {
+						// store last selected position before popup
+						gridPosition = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / charZoom);
+						drawGrid();
 					} else {
 						ImGui::Dummy(zoomCharSize);
 					}
@@ -414,7 +524,7 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 				auto* drawList = ImGui::GetWindowDrawList();
 
 				auto getPattern = [&](unsigned column, unsigned row) {
-					auto block = [&]() -> unsigned {
+					auto block = [&] -> unsigned {
 						if (mode == TEXT80 && blink) {
 							auto colPat = colTable[10 * row + (column / 8)];
 							return (colPat & (0x80 >> (column % 8))) ? 1 : 0;
@@ -439,7 +549,7 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 					auto rowsCeil = int(ceilf(rows));
 					auto numChars = rowsCeil * columns;
 					drawList->PushClipRect(scrnPos, scrnPos + hostSize, true);
-					drawList->PushTextureID(patternTex.getImGui());
+					drawList->PushTexture(patternTex.getImGui());
 					drawList->PrimReserve(6 * numChars, 4 * numChars);
 					for (auto row : xrange(rowsCeil)) {
 						for (auto column : xrange(columns)) {
@@ -450,9 +560,9 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 							drawList->PrimRectUV(p1, p2, uv1, uv2, 0xffffffff);
 						}
 					}
-					drawList->PopTextureID();
+					drawList->PopTexture();
 					if (nameTableOverlay) {
-						drawList->PushTextureID(smallHexDigits.getImGui());
+						drawList->PushTexture(smallHexDigits.getImGui());
 						drawList->PrimReserve(12 * numChars, 8 * numChars);
 						static constexpr gl::vec2 digitSize{5.0f, 8.0f};
 						static constexpr float texDigitWidth = 1.0f / 16.0f;
@@ -469,9 +579,21 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 								drawList->PrimRectUV(p2, p2 + digitSize, uv2, uv2 + texDigitSize, 0xffffffff);
 							}
 						}
-						drawList->PopTextureID();
+						drawList->PopTexture();
 					}
 					drawList->PopClipRect();
+				}
+				if (rasterBeam) {
+					auto center = scrnPos + (gl::vec2(rasterBeamPos) + gl::vec2{0.5f}) * zm;
+					auto color = ImGui::ColorConvertFloat4ToU32(rasterBeamColor);
+					auto thickness = zm.y * 0.5f;
+					auto zm1 = 1.5f * zm;
+					auto zm3 = 3.5f * zm;
+					drawList->AddRect(center - zm, center + zm, color, 0.0f, 0, thickness);
+					drawList->AddLine(center - gl::vec2{zm1.x, 0.0f}, center - gl::vec2{zm3.x, 0.0f}, color, thickness);
+					drawList->AddLine(center + gl::vec2{zm1.x, 0.0f}, center + gl::vec2{zm3.x, 0.0f}, color, thickness);
+					drawList->AddLine(center - gl::vec2{0.0f, zm1.y}, center - gl::vec2{0.0f, zm3.y}, color, thickness);
+					drawList->AddLine(center + gl::vec2{0.0f, zm1.y}, center + gl::vec2{0.0f, zm3.y}, color, thickness);
 				}
 
 				auto pos1 = ImGui::GetCursorPos();
@@ -483,7 +605,7 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 						auto gridPos = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / charZoom);
 						ImGui::StrCat("Column: ", gridPos.x, " Row: ", gridPos.y);
 						auto pattern = getPattern(gridPos.x, gridPos.y);
-						ImGui::StrCat("Pattern: ", pattern);
+						printPatternNr(pattern);
 						auto [uv1, uv2] = getPatternUV(pattern);
 						auto pos2 = ImGui::GetCursorPos();
 						ImGui::Image(patternTex.getImGui(), zoomCharSize, uv1, uv2);
@@ -491,6 +613,12 @@ void ImGuiCharacter::paint(MSXMotherBoard* motherBoard)
 							ImGui::SetCursorPos(pos2);
 							ImGui::Image(gridTex.getImGui(),
 								zoomCharSize, {}, charSize);
+						}
+						auto nameIndex = columns * gridPos.y + gridPos.x;
+						printAddress("Name", namTable.getAddress(nameIndex));
+						printPatternColorAddress(pattern);
+						if (mode == TEXT80) {
+							printAddress("Color", colTable.getAddress(nameIndex / 8));
 						}
 					} else {
 						gl::vec2 textSize = ImGui::CalcTextSize("Column: 31 Row: 23"sv);

@@ -1,22 +1,22 @@
 #ifndef Y8950_HH
 #define Y8950_HH
 
+#include "DACSound16S.hh"
+#include "ResampledSoundDevice.hh"
 #include "Y8950Adpcm.hh"
 #include "Y8950KeyboardConnector.hh"
-#include "ResampledSoundDevice.hh"
-#include "DACSound16S.hh"
 
-#include "SimpleDebuggable.hh"
-#include "IRQHelper.hh"
-#include "EmuTimer.hh"
 #include "EmuTime.hh"
+#include "EmuTimer.hh"
 #include "FixedPoint.hh"
+#include "IRQHelper.hh"
+#include "SimpleDebuggable.hh"
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
-#include <memory>
 
 namespace openmsx {
 
@@ -56,17 +56,17 @@ public:
 	static constexpr int STATUS_T1      = R04_MASK_T1;
 
 	Y8950(const std::string& name, const DeviceConfig& config,
-	      unsigned sampleRam, EmuTime::param time, MSXAudio& audio);
+	      unsigned sampleRam, EmuTime time, MSXAudio& audio);
 	~Y8950();
 
-	void setEnabled(bool enabled, EmuTime::param time);
+	void setEnabled(bool enabled, EmuTime time);
 	void clearRam();
-	void reset(EmuTime::param time);
-	void writeReg(uint8_t rg, uint8_t data, EmuTime::param time);
-	[[nodiscard]] uint8_t readReg(uint8_t rg, EmuTime::param time);
-	[[nodiscard]] uint8_t peekReg(uint8_t rg, EmuTime::param time) const;
-	[[nodiscard]] uint8_t readStatus(EmuTime::param time) const;
-	[[nodiscard]] uint8_t peekStatus(EmuTime::param time) const;
+	void reset(EmuTime time);
+	void writeReg(uint8_t rg, uint8_t data, EmuTime time);
+	[[nodiscard]] uint8_t readReg(uint8_t rg, EmuTime time);
+	[[nodiscard]] uint8_t peekReg(uint8_t rg, EmuTime time) const;
+	[[nodiscard]] uint8_t readStatus(EmuTime time) const;
+	[[nodiscard]] uint8_t peekStatus(EmuTime time) const;
 
 	// for ADPCM
 	void setStatus(uint8_t flags);
@@ -108,7 +108,7 @@ public:
 	static constexpr int EG_DP_BITS = 23;
 	using EnvPhaseIndex = FixedPoint<EG_DP_BITS - EG_BITS>;
 
-	enum class EnvelopeState { ATTACK, DECAY, SUSTAIN, RELEASE, FINISH };
+	enum class EnvelopeState : uint8_t { ATTACK, DECAY, SUSTAIN, RELEASE, FINISH };
 
 private:
 	enum KeyPart : uint8_t { KEY_MAIN = 1, KEY_RHYTHM = 2 };
@@ -211,8 +211,8 @@ private:
 
 	struct Debuggable final : SimpleDebuggable {
 		Debuggable(MSXMotherBoard& motherBoard, const std::string& name);
-		[[nodiscard]] uint8_t read(unsigned address, EmuTime::param time) override;
-		void write(unsigned address, uint8_t value, EmuTime::param time) override;
+		[[nodiscard]] uint8_t read(unsigned address, EmuTime time) override;
+		void write(unsigned address, uint8_t value, EmuTime time) override;
 	} debuggable;
 
 	const std::unique_ptr<EmuTimer> timer1; //  80us timer

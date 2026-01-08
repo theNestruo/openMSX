@@ -2,11 +2,13 @@
 #define STRCAT_HH
 
 #include "TemporaryString.hh"
-#include "ranges.hh"
 #include "xrange.hh"
 #include "zstring_view.hh"
+
+#include <algorithm>
 #include <array>
 #include <climits>
+#include <cstdint>
 #include <limits>
 #include <span>
 #include <sstream>
@@ -14,6 +16,13 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+
+// Suppress false positive -Wstringop-overflow warnings in GCC for template instantiations in this header.
+// No push/pop because the warnings come from template instantiations inside this header itself.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
 
 // strCat and strAppend()
 //
@@ -96,7 +105,7 @@ void strAppend(std::string& result, Ts&& ...ts);
 struct Digits {
 	size_t n;
 };
-enum class HexCase {
+enum class HexCase : uint8_t {
 	lower, upper
 };
 
@@ -131,7 +140,7 @@ struct ConcatViaString
 
 	[[nodiscard]] char* copy(char* dst) const
 	{
-		ranges::copy(s, dst);
+		std::ranges::copy(s, dst);
 		return dst + s.size();
 	}
 
@@ -139,27 +148,23 @@ private:
 	std::string s;
 };
 
-#if 0
-// Dingux doesn't have std::to_string() ???
-
 // Helper for types which are printed via std::to_string(),
 // e.g. floating point types.
 template<typename T>
 struct ConcatToString : ConcatViaString
 {
-	ConcatToString(T t)
+	explicit ConcatToString(T t)
 		: ConcatViaString(std::to_string(t))
 	{
 	}
 };
-#endif
 
 // The default (slow) implementation uses 'operator<<(ostream&, T)'
 template<typename T>
 struct ConcatUnit : ConcatViaString
 {
 	explicit ConcatUnit(const T& t)
-		: ConcatViaString([&](){
+		: ConcatViaString([&]{
 			std::ostringstream os;
 			os << t;
 			return os.str();
@@ -185,7 +190,7 @@ template<> struct ConcatUnit<std::string_view>
 
 	[[nodiscard]] char* copy(char* dst) const
 	{
-		ranges::copy(v, dst);
+		std::ranges::copy(v, dst);
 		return dst + v.size();
 	}
 
@@ -305,14 +310,14 @@ template<std::integral T> struct ConcatIntegral
 
 	[[nodiscard]] char* copy(char* dst) const
 	{
-		ranges::copy(std::span{data(), sz}, dst);
+		std::ranges::copy(std::span{data(), sz}, dst);
 		return dst + sz;
 	}
 
 	[[nodiscard]] char* copyTail(char* dst, size_t n) const
 	{
 		assert(n <= sz);
-		ranges::copy(std::span{buf.data() + BUF_SIZE - n, n}, dst);
+		std::ranges::copy(std::span{buf.data() + BUF_SIZE - n, n}, dst);
 		return dst + n;
 	}
 
@@ -402,6 +407,49 @@ private:
 	T t;
 };
 
+// Format an integral as a hexadecimal value (variable width)
+template<HexCase Case, std::integral T> struct ConcatHexIntegral
+{
+	explicit ConcatHexIntegral(T t)
+	{
+		using U = std::make_unsigned_t<T>;
+		U u = static_cast<U>(t);
+
+		char* p = buf.data() + buf.size();
+		if (u == 0) {
+			*--p = '0';
+		} else {
+			static constexpr char A = (Case == HexCase::lower) ? 'a' : 'A';
+			do {
+				auto d = u & 15;
+				*--p = (d < 10) ? static_cast<char>(d + '0')
+						: static_cast<char>(d - 10 + A);
+				u >>= 4;
+			} while (u);
+		}
+
+		n = static_cast<uint8_t>(buf.data() + buf.size() - p);
+	}
+
+	[[nodiscard]] size_t size() const { return n; }
+
+	[[nodiscard]] char* copy(char* dst) const
+	{
+		const char* start = buf.data() + buf.size() - n;
+		std::memcpy(dst, start, n);
+		return dst + n;
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const ConcatHexIntegral& v)
+	{
+		const char* start = v.buf.data() + v.buf.size() - v.n;
+		return os.write(start, v.n);
+	}
+private:
+	std::array<char, sizeof(T) * 2> buf{};
+	uint8_t n = 0;
+};
+
 // Format an integral as a binary value with a fixed number of characters.
 // This fixed width means it either adds leading zeros or truncates the result
 // (it keeps the rightmost digits).
@@ -434,6 +482,45 @@ private:
 	T t;
 };
 
+// Format an integral as a binary value (variable width).
+template<std::integral T> struct ConcatBinIntegral
+{
+	explicit ConcatBinIntegral(T t) {
+		using U = std::make_unsigned_t<T>;
+		U u = static_cast<U>(t);
+
+		char* p = buf.data() + buf.size();
+		if (u == 0) {
+			*--p = '0';
+		} else {
+			do {
+				*--p = static_cast<char>((u & 1) + '0');
+				u >>= 1;
+			} while (u);
+		}
+
+		n = static_cast<uint8_t>(buf.data() + buf.size() - p);
+	}
+
+	[[nodiscard]] size_t size() const { return n; }
+
+	[[nodiscard]] char* copy(char* dst) const
+	{
+		const char* start = buf.data() + buf.size() - n;
+		std::memcpy(dst, start, n);
+		return dst + n;
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const ConcatBinIntegral& v)
+	{
+		const char* start = v.buf.data() + v.buf.size() - v.n;
+		return os.write(start, v.n);
+	}
+
+private:
+	std::array<char, sizeof(T) * 8> buf{};
+	uint8_t n = 0;
+};
 
 // Prints a number of spaces (without constructing a temporary string).
 struct ConcatSpaces
@@ -450,7 +537,7 @@ struct ConcatSpaces
 
 	[[nodiscard]] char* copy(char* dst) const
 	{
-		ranges::fill(std::span{dst, n}, ' ');
+		std::ranges::fill(std::span{dst, n}, ' ');
 		return dst + n;
 	}
 
@@ -577,12 +664,8 @@ template<typename T>
 	return ConcatIntegral<unsigned long long>(l);
 }
 
-#if 0
 // Converting float->string via std::to_string() might be faster than via
-// std::stringstream. Though the former doesn't seem to work on Dingux??
-//
-// But for openMSX this isn't critical, so we can live with the default
-// (slower?) version.
+// std::stringstream.
 
 [[nodiscard]] inline auto makeConcatUnit(float f)
 {
@@ -598,7 +681,6 @@ template<typename T>
 {
 	return ConcatToString<long double>(d);
 }
-#endif
 
 template<HexCase Case, std::integral T>
 [[nodiscard]] inline auto makeConcatUnit(const ConcatVariableWidthHexIntegral<Case, T>& t)
@@ -614,6 +696,12 @@ template<size_t N, HexCase Case, std::integral T>
 
 template<size_t N, std::integral T>
 [[nodiscard]] inline auto makeConcatUnit(const ConcatFixedWidthBinIntegral<N, T>& t)
+{
+	return t;
+}
+
+template<std::integral T>
+[[nodiscard]] inline auto makeConcatUnit(const ConcatBinIntegral<T>& t)
 {
 	return t;
 }
@@ -681,12 +769,14 @@ template<typename... Ts>
 
 	auto t = std::tuple(strCatImpl::makeConcatUnit(std::forward<Ts>(ts))...);
 	auto size = strCatImpl::calcTotalSize(t);
-	// Ideally we want an uninitialized string with given size, but that's not
-	// yet possible. Though see the following proposal (for c++20):
-	//   www.open-std.org/jtc1/sc22/wg21/docs/papers/2018/p1072r0.html
-	std::string result(size, ' ');
-	char* dst = result.data();
-	strCatImpl::copyUnits(dst, t);
+
+	std::string result;
+	result.resize_and_overwrite(size, [&](char* dst, size_t /*sz*/) {
+		//assert(sz == size) <-- not true with gcc-12 (bug)
+		// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104222
+		strCatImpl::copyUnits(dst, t);
+		return size;
+	});
 	return result;
 }
 
@@ -757,9 +847,14 @@ void strAppend(std::string& result, Ts&& ...ts)
 	auto t = std::tuple(strCatImpl::makeConcatUnit(std::forward<Ts>(ts))...);
 	auto extraSize = strCatImpl::calcTotalSize(t);
 	auto oldSize = result.size();
-	result.append(extraSize, ' '); // see note in strCat() about uninitialized string
-	char* dst = &result[oldSize];
-	strCatImpl::copyUnits(dst, t);
+
+	auto newSize = oldSize + extraSize;
+	result.resize_and_overwrite(newSize, [&](char* p, size_t /*sz*/) {
+		//assert(sz == newSize); // see above (gcc-12 bug)
+		// p[0..oldSize-1] still/already contains old content
+		strCatImpl::copyUnits(&p[oldSize], t);
+		return newSize;
+	});
 }
 
 // Degenerate case
@@ -786,10 +881,22 @@ template<size_t N, HexCase Case = HexCase::lower, std::integral T>
 	return strCatImpl::ConcatFixedWidthHexIntegral<N, Case, T>{t};
 }
 
+template<HexCase Case = HexCase::lower, std::integral T>
+[[nodiscard]] inline auto hex_string(T t)
+{
+	return strCatImpl::ConcatHexIntegral<Case, T>{t};
+}
+
 template<size_t N, std::integral T>
 [[nodiscard]] inline auto bin_string(T t)
 {
 	return strCatImpl::ConcatFixedWidthBinIntegral<N, T>{t};
+}
+
+template<std::integral T>
+[[nodiscard]] inline auto bin_string(T t)
+{
+	return strCatImpl::ConcatBinIntegral<T>{t};
 }
 
 template<size_t N, std::integral T>

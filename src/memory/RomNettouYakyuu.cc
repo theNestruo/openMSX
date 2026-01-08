@@ -39,10 +39,13 @@
 // specialized class some time in the future.
 
 #include "RomNettouYakyuu.hh"
+
 #include "FileOperations.hh"
-#include "ranges.hh"
+
 #include "serialize.hh"
 #include "xrange.hh"
+
+#include <algorithm>
 
 namespace openmsx {
 
@@ -57,7 +60,7 @@ RomNettouYakyuu::RomNettouYakyuu(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomNettouYakyuu::reset(EmuTime::param /*time*/)
+void RomNettouYakyuu::reset(EmuTime /*time*/)
 {
 	// ASCII8 behaviour
 	setUnmapped(0);
@@ -68,11 +71,11 @@ void RomNettouYakyuu::reset(EmuTime::param /*time*/)
 	setUnmapped(6);
 	setUnmapped(7);
 
-	ranges::fill(redirectToSamplePlayer, false);
+	std::ranges::fill(redirectToSamplePlayer, false);
 	samplePlayer.reset();
 }
 
-void RomNettouYakyuu::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomNettouYakyuu::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if ((address < 0x4000) || (0xC000 <= address)) return;
 
@@ -110,7 +113,7 @@ void RomNettouYakyuu::writeMem(word address, byte value, EmuTime::param /*time*/
 	samplePlayer.repeat(value & 0xF);
 }
 
-byte* RomNettouYakyuu::getWriteCacheLine(word /*address*/)
+byte* RomNettouYakyuu::getWriteCacheLine(uint16_t /*address*/)
 {
 	return nullptr;
 }

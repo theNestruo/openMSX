@@ -12,12 +12,14 @@
  */
 
 #include "TurboRFDC.hh"
-#include "MSXCPU.hh"
+
 #include "CacheLine.hh"
-#include "Rom.hh"
+#include "MSXCPU.hh"
 #include "MSXException.hh"
-#include "narrow.hh"
+#include "Rom.hh"
 #include "serialize.hh"
+
+#include "narrow.hh"
 
 namespace openmsx {
 
@@ -38,7 +40,7 @@ namespace openmsx {
 	}
 }
 
-TurboRFDC::TurboRFDC(const DeviceConfig& config)
+TurboRFDC::TurboRFDC(DeviceConfig& config)
 	: MSXFDC(config)
 	, controller(getScheduler(), drives, getCliComm(), getCurrentTime())
 	, romBlockDebug(*this, std::span{&bank, 1}, 0x4000, 0x4000, 14)
@@ -59,13 +61,13 @@ TurboRFDC::TurboRFDC(const DeviceConfig& config)
 	reset(getCurrentTime());
 }
 
-void TurboRFDC::reset(EmuTime::param time)
+void TurboRFDC::reset(EmuTime time)
 {
 	setBank(0);
 	controller.reset(time);
 }
 
-byte TurboRFDC::readMem(word address, EmuTime::param time_)
+byte TurboRFDC::readMem(uint16_t address, EmuTime time_)
 {
 	EmuTime time = time_;
 	if (0x3FF0 <= (address & 0x3FFF)) {
@@ -99,7 +101,7 @@ byte TurboRFDC::readMem(word address, EmuTime::param time_)
 }
 
 
-byte TurboRFDC::peekMem(word address, EmuTime::param time) const
+byte TurboRFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	if (0x3FF0 <= (address & 0x3FFF)) {
 		// note: this implementation requires that the handled
@@ -151,7 +153,7 @@ byte TurboRFDC::peekMem(word address, EmuTime::param time) const
 	}
 }
 
-const byte* TurboRFDC::getReadCacheLine(word start) const
+const byte* TurboRFDC::getReadCacheLine(uint16_t start) const
 {
 	if ((start & 0x3FF0) == (0x3FF0 & CacheLine::HIGH)) {
 		return nullptr;
@@ -162,7 +164,7 @@ const byte* TurboRFDC::getReadCacheLine(word start) const
 	}
 }
 
-void TurboRFDC::writeMem(word address, byte value, EmuTime::param time_)
+void TurboRFDC::writeMem(uint16_t address, byte value, EmuTime time_)
 {
 	EmuTime time = time_;
 	if (0x3FF0 <= (address & 0x3FFF)) {
@@ -208,7 +210,7 @@ void TurboRFDC::setBank(byte value)
 	memory = subspan<0x4000>(*rom, 0x4000 * bank);
 }
 
-byte* TurboRFDC::getWriteCacheLine(word address)
+byte* TurboRFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address == (0x7FF0 & CacheLine::HIGH)) ||
 	    ((address & 0x3FF0) == (0x3FF0 & CacheLine::HIGH))) {

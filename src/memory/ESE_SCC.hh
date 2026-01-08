@@ -1,10 +1,12 @@
 #ifndef ESE_SCC_HH
 #define ESE_SCC_HH
 
-#include "MSXDevice.hh"
-#include "SRAM.hh"
-#include "SCC.hh"
 #include "RomBlockDebuggable.hh"
+#include "SRAM.hh"
+
+#include "MSXDevice.hh"
+#include "SCC.hh"
+
 #include <array>
 
 namespace openmsx {
@@ -14,16 +16,16 @@ class MB89352;
 class ESE_SCC final : public MSXDevice
 {
 public:
-	ESE_SCC(const DeviceConfig& config, bool withSCSI);
+	ESE_SCC(DeviceConfig& config, bool withSCSI);
 
-	void powerUp(EmuTime::param time) override;
-	void reset(EmuTime::param time) override;
+	void powerUp(EmuTime time) override;
+	void reset(EmuTime time) override;
 
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word address) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t address) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

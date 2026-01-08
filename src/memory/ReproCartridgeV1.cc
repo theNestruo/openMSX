@@ -1,8 +1,11 @@
 #include "ReproCartridgeV1.hh"
+
 #include "DummyAY8910Periphery.hh"
 #include "MSXCPUInterface.hh"
-#include "narrow.hh"
 #include "serialize.hh"
+
+#include "narrow.hh"
+
 #include <array>
 
 
@@ -29,13 +32,17 @@ Otherwise, the mapper is enabled and the flash is readonly.
 namespace openmsx {
 
 ReproCartridgeV1::ReproCartridgeV1(
-		const DeviceConfig& config, Rom&& rom_)
+		DeviceConfig& config, Rom&& rom_)
 	: MSXRom(config, std::move(rom_))
 	, flash(rom, AmdFlashChip::M29W640GB, {}, config)
 	, scc("ReproCartV1 SCC", config, getCurrentTime(), SCC::Mode::Compatible)
 	, psg("ReproCartV1 PSG", DummyAY8910Periphery::instance(), config,
 	      getCurrentTime())
 {
+	// adjust PSG volume, see details in https://github.com/openMSX/openMSX/issues/1934
+	// note: this is a theoretical value. The actual relative volume should be measured!
+	psg.setSoftwareVolume(21000.0f/9000.0f, getCurrentTime());
+
 	powerUp(getCurrentTime());
 	auto& cpuInterface = getCPUInterface();
 	for (auto port : {0x10, 0x11, 0x13}) {
@@ -51,13 +58,13 @@ ReproCartridgeV1::~ReproCartridgeV1()
 	}
 }
 
-void ReproCartridgeV1::powerUp(EmuTime::param time)
+void ReproCartridgeV1::powerUp(EmuTime time)
 {
 	scc.powerUp(time);
 	reset(time);
 }
 
-void ReproCartridgeV1::reset(EmuTime::param time)
+void ReproCartridgeV1::reset(EmuTime time)
 {
 	flashRomWriteEnabled = false;
 	mainBankReg = 0;
@@ -83,7 +90,7 @@ unsigned ReproCartridgeV1::getFlashAddr(unsigned addr) const
 }
 
 // Note: implementation (mostly) copied from KUC
-bool ReproCartridgeV1::isSCCAccess(word addr) const
+bool ReproCartridgeV1::isSCCAccess(uint16_t addr) const
 {
 	if (sccMode & 0x10) return false;
 
@@ -104,7 +111,7 @@ bool ReproCartridgeV1::isSCCAccess(word addr) const
 	}
 }
 
-byte ReproCartridgeV1::readMem(word addr, EmuTime::param time)
+byte ReproCartridgeV1::readMem(uint16_t addr, EmuTime time)
 {
 	if (isSCCAccess(addr)) {
 		return scc.readMem(narrow_cast<uint8_t>(addr & 0xFF), time);
@@ -112,11 +119,11 @@ byte ReproCartridgeV1::readMem(word addr, EmuTime::param time)
 
 	unsigned flashAddr = getFlashAddr(addr);
 	return (flashAddr != unsigned(-1))
-		? flash.read(flashAddr)
+		? flash.read(flashAddr, time)
 		: 0xFF; // unmapped read
 }
 
-byte ReproCartridgeV1::peekMem(word addr, EmuTime::param time) const
+byte ReproCartridgeV1::peekMem(uint16_t addr, EmuTime time) const
 {
 	if (isSCCAccess(addr)) {
 		return scc.peekMem(narrow_cast<uint8_t>(addr & 0xFF), time);
@@ -124,11 +131,11 @@ byte ReproCartridgeV1::peekMem(word addr, EmuTime::param time) const
 
 	unsigned flashAddr = getFlashAddr(addr);
 	return (flashAddr != unsigned(-1))
-		? flash.peek(flashAddr)
+		? flash.peek(flashAddr, time)
 		: 0xFF; // unmapped read
 }
 
-const byte* ReproCartridgeV1::getReadCacheLine(word addr) const
+const byte* ReproCartridgeV1::getReadCacheLine(uint16_t addr) const
 {
 	if (isSCCAccess(addr)) return nullptr;
 
@@ -138,7 +145,7 @@ const byte* ReproCartridgeV1::getReadCacheLine(word addr) const
 		: unmappedRead.data();
 }
 
-void ReproCartridgeV1::writeMem(word addr, byte value, EmuTime::param time)
+void ReproCartridgeV1::writeMem(uint16_t addr, byte value, EmuTime time)
 {
 	unsigned page8kB = (addr >> 13) - 2;
 	if (page8kB >= 4) return; // outside [0x4000, 0xBFFF]
@@ -183,19 +190,19 @@ void ReproCartridgeV1::writeMem(word addr, byte value, EmuTime::param time)
 		}
 	} else {
 		if (flashAddr != unsigned(-1)) {
-			flash.write(flashAddr, value);
+			flash.write(flashAddr, value, time);
 		}
 	}
 }
 
-byte* ReproCartridgeV1::getWriteCacheLine(word addr)
+byte* ReproCartridgeV1::getWriteCacheLine(uint16_t addr)
 {
 	return ((0x4000 <= addr) && (addr < 0xC000))
 	       ? nullptr        // [0x4000,0xBFFF] isn't cacheable
 	       : unmappedWrite.data();
 }
 
-void ReproCartridgeV1::writeIO(word port, byte value, EmuTime::param time)
+void ReproCartridgeV1::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	switch (port & 0xFF)
 	{

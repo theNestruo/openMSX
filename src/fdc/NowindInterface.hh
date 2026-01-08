@@ -1,30 +1,31 @@
 #ifndef NOWINDINTERFACE_HH
 #define NOWINDINTERFACE_HH
 
-#include "MSXDevice.hh"
 #include "NowindCommand.hh"
 #include "NowindHost.hh"
-#include "Rom.hh"
+
 #include "AmdFlash.hh"
+#include "MSXDevice.hh"
+#include "Rom.hh"
+
 #include <bitset>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace openmsx {
 
 class NowindInterface final : public MSXDevice
 {
 public:
-	explicit NowindInterface(const DeviceConfig& config);
+	explicit NowindInterface(DeviceConfig& config);
 	~NowindInterface() override;
 
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word address) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t address) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

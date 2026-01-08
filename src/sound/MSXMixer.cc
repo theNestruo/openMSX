@@ -2,39 +2,38 @@
 
 #include "Mixer.hh"
 #include "SoundDevice.hh"
-#include "MSXMotherBoard.hh"
-#include "MSXCommandController.hh"
-#include "TclObject.hh"
-#include "ThrottleManager.hh"
-#include "GlobalSettings.hh"
-#include "IntegerSetting.hh"
-#include "StringSetting.hh"
+
+#include "AviRecorder.hh"
 #include "BooleanSetting.hh"
 #include "CommandException.hh"
-#include "AviRecorder.hh"
-#include "Filename.hh"
 #include "FileOperations.hh"
+#include "Filename.hh"
+#include "GlobalSettings.hh"
+#include "IntegerSetting.hh"
 #include "MSXCliComm.hh"
+#include "MSXCommandController.hh"
+#include "MSXMotherBoard.hh"
+#include "StringSetting.hh"
+#include "TclObject.hh"
+#include "ThrottleManager.hh"
 
-#include "stl.hh"
+#include "Math.hh"
 #include "aligned.hh"
 #include "enumerate.hh"
+#include "inplace_buffer.hh"
 #include "narrow.hh"
 #include "one_of.hh"
 #include "outer.hh"
 #include "ranges.hh"
+#include "stl.hh"
 #include "unreachable.hh"
 #include "view.hh"
-#include "vla.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <memory>
 #include <tuple>
-
-#ifdef __SSE2__
-#include "emmintrin.h"
-#endif
 
 namespace openmsx {
 
@@ -152,12 +151,11 @@ double MSXMixer::getEffectiveSpeed() const
 	return synchronousCounter ? 1.0 : speedManager.getSpeed();
 }
 
-void MSXMixer::updateStream(EmuTime::param time)
+void MSXMixer::updateStream(EmuTime time)
 {
 	unsigned count = prevTime.getTicksTill(time);
 	assert(count <= 8192);
-	ALIGNAS_SSE std::array<StereoFloat, 8192> mixBuffer_;
-	auto mixBuffer = subspan(mixBuffer_, 0, count);
+	inplace_buffer<StereoFloat, 8192> mixBuffer(uninitialized_tag{}, count);
 
 	// call generate() even if count==0 and even if muted
 	generate(mixBuffer, time);
@@ -186,7 +184,6 @@ static inline void mul(float* buf, size_t n, float f)
 	// C++ version, unrolled 4x,
 	//   this allows gcc/clang to do much better auto-vectorization
 	// Note that this can process upto 3 samples too many, but that's OK.
-	assume_SSE_aligned(buf);
 	size_t i = 0;
 	do {
 		buf[i + 0] *= f;
@@ -212,8 +209,6 @@ static inline void mulAcc(
 	float* __restrict acc, const float* __restrict mul, size_t n, float f)
 {
 	// C++ version, unrolled 4x, see comments above.
-	assume_SSE_aligned(acc);
-	assume_SSE_aligned(mul);
 	size_t i = 0;
 	do {
 		acc[i + 0] += mul[i + 0] * f;
@@ -433,8 +428,10 @@ static bool approxEqual(float x, float y)
 	return std::abs(x - y) < threshold;
 }
 
-void MSXMixer::generate(std::span<StereoFloat> output, EmuTime::param time)
+void MSXMixer::generate(std::span<StereoFloat> output, EmuTime time)
 {
+	Math::DenormalGuard noDenormals; // flush denormals to zero in this scope
+
 	// The code below is specialized for a lot of cases (before this
 	// routine was _much_ shorter). This is done because this routine
 	// ends up relatively high (top 5) in a profile run.
@@ -445,6 +442,7 @@ void MSXMixer::generate(std::span<StereoFloat> output, EmuTime::param time)
 	// When samples==0, call updateBuffer() but skip all further processing
 	// (handling this as a special case allows to simplify the code below).
 	auto samples = output.size(); // per channel
+	assert(samples <= 8192);
 	if (samples == 0) {
 		ALIGNAS_SSE std::array<float, 4> dummyBuf;
 		for (auto& info : infos) {
@@ -456,15 +454,15 @@ void MSXMixer::generate(std::span<StereoFloat> output, EmuTime::param time)
 
 	// +3 to allow processing samples in groups of 4 (and upto 3 samples
 	// more than requested).
-	VLA_SSE_ALIGNED(float,       monoBufExtra,   samples + 3);
-	VLA_SSE_ALIGNED(StereoFloat, stereoBufExtra, samples + 3);
-	VLA_SSE_ALIGNED(StereoFloat, tmpBufExtra,    samples + 3);
+	inplace_buffer<float,       8192 + 3> monoBufExtra  (uninitialized_tag{}, samples + 3);
+	inplace_buffer<StereoFloat, 8192 + 3> stereoBufExtra(uninitialized_tag{}, samples + 3);
+	inplace_buffer<StereoFloat, 8192 + 3> tmpBufExtra   (uninitialized_tag{}, samples + 3);
 	auto* monoBufPtr   = monoBufExtra.data();
 	auto* stereoBufPtr = &stereoBufExtra.data()->left;
 	auto* tmpBufPtr    = &tmpBufExtra.data()->left; // can be used either for mono or stereo data
-	auto monoBuf      = monoBufExtra  .subspan(0, samples);
-	auto stereoBuf    = stereoBufExtra.subspan(0, samples);
-	auto tmpBufStereo = tmpBufExtra   .subspan(0, samples); // StereoFloat
+	auto monoBuf      = subspan(monoBufExtra,   0, samples);
+	auto stereoBuf    = subspan(stereoBufExtra, 0, samples);
+	auto tmpBufStereo = subspan(tmpBufExtra,    0, samples); // StereoFloat
 	auto tmpBufMono   = std::span{tmpBufPtr, samples};      // float
 
 	constexpr unsigned HAS_MONO_FLAG = 1;
@@ -562,7 +560,7 @@ void MSXMixer::generate(std::span<StereoFloat> output, EmuTime::param time)
 			if (approxEqual(tl0, 0.0f)) {
 				// Output was zero, new input is zero,
 				// after DC-filter output will still be zero.
-				ranges::fill(output, StereoFloat{});
+				std::ranges::fill(output, StereoFloat{});
 				tl0 = tr0 = 0.0f;
 			} else {
 				// Output was not zero, but it was the same left and right.
@@ -596,7 +594,7 @@ void MSXMixer::generate(std::span<StereoFloat> output, EmuTime::param time)
 
 bool MSXMixer::needStereoRecording() const
 {
-	return ranges::any_of(infos, [](auto& info) {
+	return std::ranges::any_of(infos, [](auto& info) {
 		return info.device->isStereo() ||
 		       info.balanceSetting->getInt() != 0;
 	});
@@ -622,7 +620,7 @@ void MSXMixer::unmute()
 void MSXMixer::reInit()
 {
 	prevTime.reset(getCurrentTime());
-	prevTime.setFreq(narrow_cast<unsigned>(hostSampleRate / getEffectiveSpeed()));
+	prevTime.setPeriod(EmuDuration::sec(getEffectiveSpeed() / double(hostSampleRate)));
 	reschedule();
 }
 void MSXMixer::reschedule()
@@ -784,7 +782,7 @@ void MSXMixer::updateSoftwareVolume(SoundDevice& device)
 	updateVolumeParams(*it);
 }
 
-void MSXMixer::executeUntil(EmuTime::param time)
+void MSXMixer::executeUntil(EmuTime time)
 {
 	updateStream(time);
 	reschedule2();
@@ -804,7 +802,7 @@ void MSXMixer::executeUntil(EmuTime::param time)
 
 const MSXMixer::SoundDeviceInfo* MSXMixer::findDeviceInfo(std::string_view name) const
 {
-	auto it = ranges::find(infos, name,
+	auto it = std::ranges::find(infos, name,
 		[](auto& i) { return i.device->getName(); });
 	return (it != end(infos)) ? std::to_address(it) : nullptr;
 }
@@ -827,7 +825,7 @@ void MSXMixer::SoundDeviceInfoTopic::execute(
 	auto& msxMixer = OUTER(MSXMixer, soundDeviceInfo);
 	switch (tokens.size()) {
 	case 2:
-		result.addListElements(view::transform(
+		result.addListElements(std::views::transform(
 			msxMixer.infos,
 			[](const auto& info) { return info.device->getName(); }));
 		break;
@@ -852,7 +850,7 @@ std::string MSXMixer::SoundDeviceInfoTopic::help(std::span<const TclObject> /*to
 void MSXMixer::SoundDeviceInfoTopic::tabCompletion(std::vector<std::string>& tokens) const
 {
 	if (tokens.size() == 3) {
-		completeString(tokens, view::transform(
+		completeString(tokens, std::views::transform(
 			OUTER(MSXMixer, soundDeviceInfo).infos,
 			[](auto& info) -> std::string_view { return info.device->getName(); }));
 	}

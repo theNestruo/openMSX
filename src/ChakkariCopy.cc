@@ -1,4 +1,5 @@
 #include "ChakkariCopy.hh"
+
 #include "MSXCliComm.hh"
 #include "serialize.hh"
 
@@ -81,7 +82,9 @@
 
 namespace openmsx {
 
-ChakkariCopy::ChakkariCopy(const DeviceConfig& config)
+using namespace std::literals;
+
+ChakkariCopy::ChakkariCopy(DeviceConfig& config)
 	: MSXDevice(config)
 	, biosRam(config, getName() + " BIOS RAM", "Chakkari Copy BIOS RAM", 0x4000)
 	, workRam(config, getName() + " work RAM", "Chakkari Copy work RAM", 0x0800)
@@ -94,9 +97,9 @@ ChakkariCopy::ChakkariCopy(const DeviceConfig& config)
 		"controls the COPY button state", false, Setting::Save::NO)
 	, modeSetting(getCommandController(), getName() + " mode",
 		"Sets mode of the cartridge: in COPY mode you can hardcopy MSX1 screens, "
-		"in RAM mode you just have a 16kB RAM expansion", ChakkariCopy::COPY,
+		"in RAM mode you just have a 16kB RAM expansion", ChakkariCopy::Mode::COPY,
 		EnumSetting<ChakkariCopy::Mode>::Map{
-			{"COPY", ChakkariCopy::COPY}, {"RAM", ChakkariCopy::RAM}})
+			{"COPY", ChakkariCopy::Mode::COPY}, {"RAM", ChakkariCopy::Mode::RAM}})
 {
 	reset(getCurrentTime());
 	modeSetting.attach(*this);
@@ -107,38 +110,38 @@ ChakkariCopy::~ChakkariCopy()
 	modeSetting.detach(*this);
 }
 
-void ChakkariCopy::reset(EmuTime::param time)
+void ChakkariCopy::reset(EmuTime time)
 {
 	writeIO(0, 0xFF, time);
 }
 
-void ChakkariCopy::writeIO(word /*port*/, byte value, EmuTime::param /*time*/)
+void ChakkariCopy::writeIO(uint16_t /*port*/, byte value, EmuTime /*time*/)
 {
 	byte diff = reg ^ value;
 	reg = value;
 
 	if (diff & 0x01) {
 		getCliComm().printInfo(getName(), " COPY LED ",
-			(((value & 1) == 0x01) ? "OFF" : "ON"));
+			(((value & 1) == 0x01) ? "OFF"sv : "ON"sv));
 	}
 	if (diff & 0x02) {
 		getCliComm().printInfo(getName(), " PAUSE LED ",
-			(((value & 2) == 0x02) ? "OFF" : "ON"));
+			(((value & 2) == 0x02) ? "OFF"sv : "ON"sv));
 	}
 	if (diff & 0x04) {
-		if (modeSetting.getEnum() == COPY) {
+		if (modeSetting.getEnum() == Mode::COPY) {
 			// page 0 toggles writable/read-only
 			invalidateDeviceRWCache(0x0000, 0x4000);
 		}
 	}
 }
 
-byte ChakkariCopy::readIO(word port, EmuTime::param time)
+byte ChakkariCopy::readIO(uint16_t port, EmuTime time)
 {
 	return peekIO(port, time);
 }
 
-byte ChakkariCopy::peekIO(word /*port*/, EmuTime::param /*time*/) const
+byte ChakkariCopy::peekIO(uint16_t /*port*/, EmuTime /*time*/) const
 {
 	byte retVal = 0xFF;
 	if (copyButtonPressedSetting .getBoolean()) retVal &= ~0x01;
@@ -146,19 +149,19 @@ byte ChakkariCopy::peekIO(word /*port*/, EmuTime::param /*time*/) const
 	return retVal;
 }
 
-byte ChakkariCopy::readMem(word address, EmuTime::param time)
+byte ChakkariCopy::readMem(uint16_t address, EmuTime time)
 {
 	return peekMem(address, time);
 }
 
-byte ChakkariCopy::peekMem(word address, EmuTime::param /*time*/) const
+byte ChakkariCopy::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	return *getReadCacheLine(address);
 }
 
-const byte* ChakkariCopy::getReadCacheLine(word address) const
+const byte* ChakkariCopy::getReadCacheLine(uint16_t address) const
 {
-	if (modeSetting.getEnum() == COPY) {
+	if (modeSetting.getEnum() == Mode::COPY) {
 		// page 0
 		if (address < 0x4000) {
 			return &biosRam[address];
@@ -180,14 +183,14 @@ const byte* ChakkariCopy::getReadCacheLine(word address) const
 	return unmappedRead.data();
 }
 
-void ChakkariCopy::writeMem(word address, byte value, EmuTime::param /*time*/)
+void ChakkariCopy::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	*getWriteCacheLine(address) = value;
 }
 
-byte* ChakkariCopy::getWriteCacheLine(word address)
+byte* ChakkariCopy::getWriteCacheLine(uint16_t address)
 {
-	if (modeSetting.getEnum() == COPY) {
+	if (modeSetting.getEnum() == Mode::COPY) {
 		// page 0
 		if ((address < 0x4000) && ((reg & 0x04) == 0)) {
 			return &biosRam[address & 0x3FFF];

@@ -3,8 +3,10 @@
 
 #include "EmuTime.hh"
 #include "serialize_meta.hh"
+
+#include "zstring_view.hh"
+
 #include <memory>
-#include <string_view>
 
 namespace openmsx {
 
@@ -33,27 +35,27 @@ public:
 	/**
 	 * Get a description for this connector
 	 */
-	[[nodiscard]] virtual std::string_view getDescription() const = 0;
+	[[nodiscard]] virtual zstring_view getDescription() const = 0;
 
 	/**
 	 * A Connector belong to a certain class.
 	 * Only Pluggables of this class can be plugged in this Connector.
 	 */
-	[[nodiscard]] virtual std::string_view getClass() const = 0;
+	[[nodiscard]] virtual zstring_view getClass() const = 0;
 
 	/**
 	 * This plugs a Pluggable in this Connector.
 	 * The default implementation is ok.
 	 * @throw PlugException
 	 */
-	virtual void plug(Pluggable& device, EmuTime::param time);
+	virtual void plug(Pluggable& device, EmuTime time);
 
 	/**
 	 * This unplugs the currently inserted Pluggable from this Connector.
 	 * It is replaced by the dummy Pluggable provided by the concrete
 	 * Connector subclass.
 	 */
-	virtual void unplug(EmuTime::param time);
+	virtual void unplug(EmuTime time);
 
 	/**
 	 * Returns the Pluggable currently plugged in.

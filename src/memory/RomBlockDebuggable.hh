@@ -1,8 +1,9 @@
 #ifndef ROMBLOCKDEBUGGABLE_HH
 #define ROMBLOCKDEBUGGABLE_HH
 
-#include "SimpleDebuggable.hh"
 #include "MSXDevice.hh"
+#include "SimpleDebuggable.hh"
+
 #include <span>
 #include <string>
 
@@ -19,10 +20,21 @@ public:
 		        0x10000)
 	{
 	}
+
+	// For the 'Debuggable' interface we need to have an 8-bit read(). For most mappers that's sufficient.
+	[[nodiscard]] byte read(unsigned address) override {
+		return narrow_cast<byte>(readExt(address));
+	}
+
+	// To support larger than 8 bit segment numbers.
+	[[nodiscard]] virtual unsigned readExt(unsigned address) = 0;
+
 protected:
 	~RomBlockDebuggableBase() = default;
 };
 
+// Generic implementation. This (only) works when the segment numbers are stored
+// in some byte-array (so limited to 8-bit segment numbers).
 class RomBlockDebuggable final : public RomBlockDebuggableBase
 {
 public:
@@ -48,14 +60,14 @@ public:
 		assert(((mappedSize >> bankSizeShift) & debugMask) < blockNr_.size()); // here we do need 'debugMask'
 	}
 
-	[[nodiscard]] byte read(unsigned address) override
+	[[nodiscard]] unsigned readExt(unsigned address) override
 	{
 		unsigned addr = address - startAddress;
 		if (addr < mappedSize) {
 			byte tmp = blockNr[(addr >> bankSizeShift) & debugMask];
 			return (tmp != 255) ? (tmp >> debugShift) : tmp;
 		} else {
-			return 255; // outside mapped address space
+			return unsigned(-1); // outside mapped address space
 		}
 	}
 

@@ -2,10 +2,13 @@
 #define VDPACCESSSLOTS_HH
 
 #include "VDP.hh"
+
 #include "narrow.hh"
+
 #include <cassert>
 #include <cstdint>
 #include <span>
+#include <utility>
 
 namespace openmsx::VDPAccessSlots {
 
@@ -39,8 +42,8 @@ class Calculator
 {
 public:
 	/** This shouldn't be called directly, instead use getCalculator(). */
-	Calculator(EmuTime::param frame, EmuTime::param time,
-	           EmuTime::param limit_, std::span<const uint8_t, NUM_DELTAS * TICKS> tab_)
+	Calculator(EmuTime frame, EmuTime time,
+	           EmuTime limit_, std::span<const uint8_t, NUM_DELTAS * TICKS> tab_)
 		: ref(frame), tab(tab_)
 	{
 		assert(frame <= time);
@@ -57,21 +60,21 @@ public:
 	}
 
 	/** Has 'time' advanced to or past 'limit'? */
-	[[nodiscard]] inline bool limitReached() const {
+	[[nodiscard]] bool limitReached() const {
 		return ticks >= limit;
 	}
 
 	/** Get the current time. Initially this will return the 'time'
 	  * constructor parameter. Each call to next() will increase this
 	  * value. */
-	[[nodiscard]] inline EmuTime getTime() const {
+	[[nodiscard]] EmuTime getTime() const {
 		return ref.getFastAdd(ticks);
 	}
 
 	/** Advance time to the earliest access slot that is at least 'delta'
 	  * ticks later than the current time. */
-	inline void next(Delta delta) {
-		ticks += tab[to_underlying(delta) + ticks];
+	void next(Delta delta) {
+		ticks += tab[std::to_underlying(delta) + ticks];
 		if (ticks >= TICKS) [[unlikely]] {
 			ticks -= TICKS;
 			limit -= TICKS;
@@ -89,13 +92,13 @@ private:
 /** Return the time of the next available access slot that is at least 'delta'
   * cycles later than 'time'. The start of the current 'frame' is needed for
   * reference. */
-[[nodiscard]] EmuTime getAccessSlot(EmuTime::param frame, EmuTime::param time, Delta delta,
+[[nodiscard]] EmuTime getAccessSlot(EmuTime frame, EmuTime time, Delta delta,
                       const VDP& vdp);
 
 /** When many calls to getAccessSlot() are needed, it's more efficient to
   * instead use this function. */
 [[nodiscard]] Calculator getCalculator(
-	EmuTime::param frame, EmuTime::param time, EmuTime::param limit,
+	EmuTime frame, EmuTime time, EmuTime limit,
 	const VDP& vdp);
 
 } // namespace openmsx::VDPAccessSlots

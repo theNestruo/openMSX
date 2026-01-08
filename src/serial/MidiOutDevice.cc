@@ -1,6 +1,6 @@
 #include "MidiOutDevice.hh"
-#include "unreachable.hh"
 
+#include "unreachable.hh"
 
 namespace openmsx {
 
@@ -46,7 +46,7 @@ static constexpr uint8_t MIDI_MSG_RESET     = 0xFF;
 	}
 }
 
-std::string_view MidiOutDevice::getClass() const
+zstring_view MidiOutDevice::getClass() const
 {
 	return "midi out";
 }
@@ -57,7 +57,7 @@ void MidiOutDevice::clearBuffer()
 	isSysEx = false;
 }
 
-void MidiOutDevice::recvByte(byte value, EmuTime::param time)
+void MidiOutDevice::recvByte(uint8_t value, EmuTime time)
 {
 	if (value & 0x80) { // status byte
 		if (value == MIDI_MSG_SYSEX_END) {
@@ -117,7 +117,7 @@ void MidiOutDevice::recvByte(byte value, EmuTime::param time)
 }
 
 void MidiOutDevice::recvMessage(
-		const std::vector<uint8_t>& /*message*/, EmuTime::param /*time*/)
+		const std::vector<uint8_t>& /*message*/, EmuTime /*time*/)
 {
 	UNREACHABLE;
 }

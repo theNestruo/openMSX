@@ -1,9 +1,9 @@
 #ifndef V9990SDLRASTERIZER_HH
 #define V9990SDLRASTERIZER_HH
 
-#include "V9990Rasterizer.hh"
 #include "V9990BitmapConverter.hh"
 #include "V9990PxConverter.hh"
+#include "V9990Rasterizer.hh"
 
 #include "Observer.hh"
 
@@ -44,10 +44,10 @@ public:
 	[[nodiscard]] bool isActive() override;
 	void reset() override;
 	void frameStart() override;
-	void frameEnd(EmuTime::param time) override;
+	void frameEnd(EmuTime time) override;
 	void setDisplayMode(V9990DisplayMode displayMode) override;
 	void setColorMode(V9990ColorMode colorMode) override;
-	void setPalette(int index, byte r, byte g, byte b, bool ys) override;
+	void setPalette(int index, uint8_t r, uint8_t g, uint8_t b, bool ys) override;
 	void setSuperimpose(bool enabled) override;
 	void drawBorder(int fromX, int fromY, int limitX, int limitY) override;
 	void drawDisplay(int fromX, int fromY, int toX, int toY,

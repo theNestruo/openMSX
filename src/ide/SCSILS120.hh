@@ -34,7 +34,7 @@ public:
 	           StateChangeDistributor& stateChangeDistributor,
 	           Scheduler& scheduler, SCSILS120& ls);
 	void execute(std::span<const TclObject> tokens,
-	             TclObject& result, EmuTime::param time) override;
+	             TclObject& result, EmuTime time) override;
 	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:
@@ -42,7 +42,7 @@ private:
 };
 
 class SCSILS120 final : public SCSIDevice, public SectorAccessibleDisk
-                      , public DiskContainer, public MediaInfoProvider
+                      , public DiskContainer, public MediaProvider
 {
 public:
 	SCSILS120(const DeviceConfig& targetConfig,
@@ -55,6 +55,7 @@ public:
 
 	// MediaInfoProvider
 	void getMediaInfo(TclObject& result) override;
+	void setMedia(const TclObject& info, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -64,7 +65,7 @@ private:
 	void readSectorsImpl(
 		std::span<SectorBuffer> buffers, size_t startSector) override;
 	void writeSectorImpl(size_t sector, const SectorBuffer& buf) override;
-	[[nodiscard]] size_t getNbSectorsImpl() const override;
+	[[nodiscard]] size_t getNbSectorsImpl() override;
 	[[nodiscard]] bool isWriteProtectedImpl() const override;
 	[[nodiscard]] Sha1Sum getSha1SumImpl(FilePool& filePool) override;
 

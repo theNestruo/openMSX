@@ -8,8 +8,8 @@
 #include "narrow.hh"
 #include "strCat.hh"
 
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
 namespace openmsx {
 
@@ -24,19 +24,20 @@ DebugDevice::DebugDevice(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void DebugDevice::reset(EmuTime::param /*time*/)
+void DebugDevice::reset(EmuTime /*time*/)
 {
-	mode = OFF;
+	mode = Mode::OFF;
 	modeParameter = 0;
 }
 
-void DebugDevice::writeIO(word port, byte value, EmuTime::param time)
+void DebugDevice::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	if (const auto& newName = fileNameSetting.getString();
 	    newName != fileNameString) {
 		openOutput(newName);
 	}
 
+	using enum Mode;
 	switch (port & 0x01) {
 	case 0:
 		switch ((value & 0x30) >> 4) {
@@ -75,8 +76,9 @@ void DebugDevice::writeIO(word port, byte value, EmuTime::param time)
 	}
 }
 
-void DebugDevice::outputSingleByte(byte value, EmuTime::param time)
+void DebugDevice::outputSingleByte(byte value, EmuTime time)
 {
+	using enum DisplayType;
 	if (modeParameter & 0x01) {
 		displayByte(value, HEX);
 	}
@@ -102,8 +104,9 @@ void DebugDevice::outputSingleByte(byte value, EmuTime::param time)
 
 void DebugDevice::outputMultiByte(byte value)
 {
-	DisplayType dispType = [&] {
+	auto dispType = [&] {
 		switch (modeParameter) {
+			using enum DisplayType;
 			case 0:  return HEX;
 			case 1:  return BIN;
 			case 2:  return DEC;
@@ -117,6 +120,7 @@ void DebugDevice::outputMultiByte(byte value)
 void DebugDevice::displayByte(byte value, DisplayType type)
 {
 	switch (type) {
+	using enum DisplayType;
 	case HEX:
 		(*outputStrm) << std::hex << std::setw(2)
 		              << std::setfill('0')
@@ -156,13 +160,13 @@ void DebugDevice::openOutput(std::string_view name)
 	}
 }
 
-static constexpr std::initializer_list<enum_string<DebugDevice::DebugMode>> debugModeInfo = {
-	{ "OFF",        DebugDevice::OFF },
-	{ "SINGLEBYTE", DebugDevice::SINGLEBYTE },
-	{ "MULTIBYTE",  DebugDevice::MULTIBYTE },
-	{ "ASCII",      DebugDevice::ASCII }
-};
-SERIALIZE_ENUM(DebugDevice::DebugMode, debugModeInfo);
+static constexpr auto debugModeInfo = std::to_array<enum_string<DebugDevice::Mode>>({
+	{ "OFF",        DebugDevice::Mode::OFF },
+	{ "SINGLEBYTE", DebugDevice::Mode::SINGLEBYTE },
+	{ "MULTIBYTE",  DebugDevice::Mode::MULTIBYTE },
+	{ "ASCII",      DebugDevice::Mode::ASCII },
+});
+SERIALIZE_ENUM(DebugDevice::Mode, debugModeInfo);
 
 template<typename Archive>
 void DebugDevice::serialize(Archive& ar, unsigned /*version*/)

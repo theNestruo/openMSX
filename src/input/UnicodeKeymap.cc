@@ -10,16 +10,17 @@
 #include "ranges.hh"
 #include "stl.hh"
 
+#include <algorithm>
 #include <bit>
 #include <optional>
 
-using std::string_view;
-
 namespace openmsx {
+
+using namespace std::literals;
 
 /** Parses the given string as a hexadecimal integer.
   */
-[[nodiscard]] static constexpr std::optional<unsigned> parseHex(string_view str)
+[[nodiscard]] static constexpr std::optional<unsigned> parseHex(std::string_view str)
 {
 	if (str.empty()) {
 		return {};
@@ -54,7 +55,7 @@ namespace openmsx {
 /** Removes separator characters at the start of the given string reference.
   * Characters between a hash mark and the following newline are also skipped.
   */
-static constexpr void skipSep(string_view& str)
+static constexpr void skipSep(std::string_view& str)
 {
 	while (!str.empty()) {
 		const char c = str.front();
@@ -71,7 +72,7 @@ static constexpr void skipSep(string_view& str)
 /** Returns the next token in the given string.
   * The token and any separators preceding it are removed from the string.
   */
-[[nodiscard]] static constexpr string_view nextToken(string_view& str)
+[[nodiscard]] static constexpr std::string_view nextToken(std::string_view& str)
 {
 	skipSep(str);
 	const auto* tokenBegin = str.data();
@@ -83,15 +84,13 @@ static constexpr void skipSep(string_view& str)
 }
 
 
-UnicodeKeymap::UnicodeKeymap(string_view keyboardType)
+UnicodeKeymap::UnicodeKeymap(std::string_view keyboardType)
 {
 	auto filename = systemFileContext().resolve(
 		tmpStrCat("unicodemaps/unicodemap.", keyboardType));
 	try {
-		File file(filename);
-		auto buf = file.mmap();
-		parseUnicodeKeyMapFile(
-			string_view(std::bit_cast<const char*>(buf.data()), buf.size()));
+		auto buf = File(filename).mmap<const char>();
+		parseUnicodeKeyMapFile(std::string_view(buf.data(), buf.size())); // TODO c++23
 		// TODO in the future we'll require the presence of
 		//      "MSX-Video-Characterset" in the keyboard information
 		//      file, then we don't need this fallback.
@@ -115,9 +114,9 @@ UnicodeKeymap::KeyInfo UnicodeKeymap::getDeadKey(unsigned n) const
 	return deadKeys[n];
 }
 
-void UnicodeKeymap::parseUnicodeKeyMapFile(string_view data)
+void UnicodeKeymap::parseUnicodeKeyMapFile(std::string_view data)
 {
-	ranges::fill(relevantMods, 0);
+	std::ranges::fill(relevantMods, 0);
 
 	while (!data.empty()) {
 		if (data.front() == '\n') {
@@ -125,7 +124,7 @@ void UnicodeKeymap::parseUnicodeKeyMapFile(string_view data)
 			data.remove_prefix(1);
 		}
 
-		string_view token = nextToken(data);
+		std::string_view token = nextToken(data);
 		if (token.empty()) {
 			// Skip empty line.
 			continue;
@@ -177,7 +176,7 @@ void UnicodeKeymap::parseUnicodeKeyMapFile(string_view data)
 		auto rowcol = parseHex(token);
 		if (!rowcol || *rowcol >= 0x100) {
 			throw MSXException(
-				(token.empty() ? "Missing" : "Wrong"),
+				(token.empty() ? "Missing"sv : "Wrong"sv),
 				" <ROW><COL> value in keymap file");
 		}
 		if ((*rowcol >> 4) >= KeyMatrixPosition::NUM_ROWS) {
@@ -217,13 +216,13 @@ void UnicodeKeymap::parseUnicodeKeyMapFile(string_view data)
 			}
 			deadKeys[deadKeyIndex] = KeyInfo(pos, 0);
 		} else {
-			mapData.emplace_back(Entry{unicode, KeyInfo(pos, modMask)});
+			mapData.emplace_back(Entry{.unicode = unicode, .keyInfo = KeyInfo(pos, modMask)});
 			// Note: getRowCol() uses 3 bits for column, rowcol uses 4.
 			relevantMods[pos.getRowCol()] |= modMask;
 		}
 	}
 
-	ranges::sort(mapData, {}, &Entry::unicode);
+	std::ranges::sort(mapData, {}, &Entry::unicode);
 }
 
 } // namespace openmsx

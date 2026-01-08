@@ -1,23 +1,24 @@
 #include "CartridgeSlotManager.hh"
-#include "HardwareConfig.hh"
+
 #include "CommandException.hh"
 #include "FileContext.hh"
-#include "TclObject.hh"
-#include "MSXException.hh"
+#include "HardwareConfig.hh"
 #include "MSXCPUInterface.hh"
-#include "MSXRom.hh"
 #include "MSXCliComm.hh"
+#include "MSXException.hh"
+#include "MSXRom.hh"
+#include "TclObject.hh"
+
 #include "narrow.hh"
 #include "one_of.hh"
 #include "outer.hh"
-#include "ranges.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
+
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <memory>
-
-using std::string;
 
 namespace openmsx {
 
@@ -38,6 +39,16 @@ bool CartridgeSlotManager::Slot::used(const HardwareConfig* allowed) const
 	assert((useCount == 0) == (config == nullptr));
 	return config && (config != allowed);
 }
+
+void CartridgeSlotManager::Slot::setConfig(const HardwareConfig* cfg)
+{
+	config = cfg;
+	if (cfg && cfg->getType() == HardwareConfig::Type::MACHINE) {
+		throw MSXException("Invalid external slot specification "
+		                   "for ps=", ps, " ss=", ss);
+	}
+}
+
 
 void CartridgeSlotManager::Slot::getMediaInfo(TclObject& result)
 {
@@ -68,6 +79,40 @@ void CartridgeSlotManager::Slot::getMediaInfo(TclObject& result)
 		}
 	} else {
 		result.addDictKeyValue("target", std::string_view{});
+	}
+}
+
+void CartridgeSlotManager::Slot::setMedia(const TclObject& info, EmuTime /*time*/)
+{
+	assert(cartCommand);
+	const auto& cartName = cartCommand->getName();
+	auto& manager = cartCommand->getManager();
+
+	auto type = info.getOptionalDictValue(TclObject("type"));
+	if (!type) {
+		manager.removeCartridge(cartName);
+
+	} else if (type->getString() == "rom") {
+		auto target = info.getOptionalDictValue(TclObject("target"));
+		if (!target) return;
+		auto romName = target->getString();
+
+		std::vector<TclObject> options;
+		if (auto mappertype = info.getOptionalDictValue(TclObject("mappertype"))) {
+			options.emplace_back("-romtype");
+			options.push_back(*mappertype);
+		}
+		if (auto patches = info.getOptionalDictValue(TclObject("patches"))) {
+			for (auto i : xrange(patches->size())) {
+				options.emplace_back("-ips");
+				options.push_back(patches->getListIndexUnchecked(i));
+			}
+		}
+
+		manager.insertCartridge(cartName, romName, options);
+
+	} else {
+		// we don't handle extensions
 	}
 }
 
@@ -131,7 +176,7 @@ void CartridgeSlotManager::createExternalSlot(int ps, int ss)
 				CliComm::UpdateType::HARDWARE, slotName.data(), "add");
 			slot.cartCommand.emplace(
 				*this, motherBoard, slotName.data());
-			motherBoard.registerMediaInfo(
+			motherBoard.registerMediaProvider(
 				slot.cartCommand->getName(), slot);
 
 			std::array extName = {'e','x','t','X','\0'};
@@ -182,7 +227,8 @@ void CartridgeSlotManager::removeExternalSlot(int ps, int ss)
 	auto slotNum = getSlot(ps, ss);
 	auto& slot = slots[slotNum];
 	assert(!slot.used());
-	motherBoard.unregisterMediaInfo(slot);
+	motherBoard.unregisterMediaProvider(slot);
+	assert(slot.cartCommand);
 	motherBoard.getMSXCliComm().update(
 		CliComm::UpdateType::HARDWARE, slot.cartCommand->getName(), "remove");
 	slot.cartCommand.reset();
@@ -215,7 +261,7 @@ int CartridgeSlotManager::allocateSpecificPrimarySlot(unsigned slot, const Hardw
 		throw MSXException("slot-", char('a' + slot), " is not a primary slot.");
 	}
 	assert(slots[slot].useCount == 0);
-	slots[slot].config = &hwConfig;
+	slots[slot].setConfig(&hwConfig);
 	slots[slot].useCount = 1;
 	return slots[slot].ps;
 }
@@ -245,7 +291,7 @@ int CartridgeSlotManager::allocateAnyPrimarySlot(const HardwareConfig& hwConfig)
 		if (slots[slot].exists() && (slots[slot].ss == -1) &&
 		    !slots[slot].used()) {
 			assert(slots[slot].useCount == 0);
-			slots[slot].config = &hwConfig;
+			slots[slot].setConfig(&hwConfig);
 			slots[slot].useCount = 1;
 			return slots[slot].ps;
 		}
@@ -259,7 +305,7 @@ void CartridgeSlotManager::freePrimarySlot(
 	auto slot = getSlot(ps, -1);
 	assert(slots[slot].config == &hwConfig); (void)hwConfig;
 	assert(slots[slot].useCount == 1);
-	slots[slot].config = nullptr;
+	slots[slot].setConfig(nullptr);
 	slots[slot].useCount = 0;
 }
 
@@ -269,8 +315,9 @@ void CartridgeSlotManager::allocateSlot(
 	for (auto slot : xrange(MAX_SLOTS)) {
 		if (!slots[slot].exists()) continue;
 		if ((slots[slot].ps == ps) && (slots[slot].ss == ss)) {
-			if (slots[slot].useCount == 0) {
-				slots[slot].config = &hwConfig;
+			++slots[slot].useCount;
+			if (slots[slot].useCount == 1) {
+				slots[slot].setConfig(&hwConfig);
 			} else {
 				if (slots[slot].config != &hwConfig) {
 					throw MSXException(
@@ -279,7 +326,6 @@ void CartridgeSlotManager::allocateSlot(
 						slots[slot].config->getName());
 				}
 			}
-			++slots[slot].useCount;
 		}
 	}
 	// Slot not found, was not an external slot. No problem.
@@ -295,7 +341,7 @@ void CartridgeSlotManager::freeSlot(
 			assert(slots[slot].useCount > 0);
 			--slots[slot].useCount;
 			if (slots[slot].useCount == 0) {
-				slots[slot].config = nullptr;
+				slots[slot].setConfig(nullptr);
 			}
 			return;
 		}
@@ -305,12 +351,40 @@ void CartridgeSlotManager::freeSlot(
 
 bool CartridgeSlotManager::isExternalSlot(int ps, int ss, bool convert) const
 {
-	return ranges::any_of(xrange(MAX_SLOTS), [&](auto slot) {
+	return std::ranges::any_of(xrange(MAX_SLOTS), [&](auto slot) {
 		int tmp = (convert && (slots[slot].ss == -1)) ? 0 : slots[slot].ss;
 		return slots[slot].exists() && (slots[slot].ps == ps) && (tmp == ss);
 	});
 }
 
+std::string CartridgeSlotManager::insertCartridge(
+	std::string_view cartName, std::string_view romName, std::span<const TclObject> options)
+{
+	auto slotName = (cartName.size() == 5) ? cartName.substr(4, 1) : "any";
+	auto extension = HardwareConfig::createRomConfig(
+		motherBoard, romName, slotName, options);
+	if (cartName.size() == 5) {
+		if (const auto* extConf = getExtensionConfig(cartName)) {
+			// still a cartridge inserted, (try to) remove it now
+			motherBoard.removeExtension(*extConf);
+		}
+	}
+	auto result = motherBoard.insertExtension("ROM", std::move(extension));
+	motherBoard.getMSXCliComm().update(CliComm::UpdateType::MEDIA, cartName, romName);
+	return result;
+}
+
+void CartridgeSlotManager::removeCartridge(std::string_view cartName)
+{
+	if (const auto* extConf = getExtensionConfig(cartName)) {
+		try {
+			motherBoard.removeExtension(*extConf);
+			motherBoard.getMSXCliComm().update(CliComm::UpdateType::MEDIA, cartName, {});
+		} catch (MSXException& e) {
+			throw CommandException("Can't remove cartridge: ", e.getMessage());
+		}
+	}
+}
 
 // CartCmd
 CartridgeSlotManager::CartCmd::CartCmd(
@@ -321,21 +395,20 @@ CartridgeSlotManager::CartCmd::CartCmd(
 	                  motherBoard_.getScheduler(),
 	                  commandName)
 	, manager(manager_)
-	, cliComm(motherBoard_.getMSXCliComm())
 {
 }
 
-const HardwareConfig* CartridgeSlotManager::CartCmd::getExtensionConfig(
+const HardwareConfig* CartridgeSlotManager::getExtensionConfig(
 	std::string_view cartName) const
 {
 	if (cartName.size() != 5) {
 		throw SyntaxError();
 	}
-	return manager.getConfigForSlot(cartName[4] - 'a');
+	return getConfigForSlot(cartName[4] - 'a');
 }
 
 void CartridgeSlotManager::CartCmd::execute(
-	std::span<const TclObject> tokens, TclObject& result, EmuTime::param /*time*/)
+	std::span<const TclObject> tokens, TclObject& result, EmuTime /*time*/)
 {
 	std::string_view cartName = tokens[0].getString();
 
@@ -348,9 +421,9 @@ void CartridgeSlotManager::CartCmd::execute(
 	}
 	if (tokens.size() == 1) {
 		// query name of cartridge
-		const auto* extConf = getExtensionConfig(cartName);
+		const auto* extConf = manager.getExtensionConfig(cartName);
 		result.addListElement(tmpStrCat(cartName, ':'),
-		                      extConf ? extConf->getName() : string{});
+		                      extConf ? extConf->getName() : std::string{});
 		if (!extConf) {
 			TclObject options = makeTclList("empty");
 			result.addListElement(options);
@@ -362,20 +435,9 @@ void CartridgeSlotManager::CartCmd::execute(
 				"Warning: use of '-eject' is deprecated, "
 				"instead use the 'eject' subcommand";
 		}
-		if (const auto* extConf = getExtensionConfig(cartName)) {
-			try {
-				manager.motherBoard.removeExtension(*extConf);
-				cliComm.update(CliComm::UpdateType::MEDIA, cartName, {});
-			} catch (MSXException& e) {
-				throw CommandException("Can't remove cartridge: ",
-				                       e.getMessage());
-			}
-		}
+		manager.removeCartridge(cartName);
 	} else {
 		// insert cartridge
-		auto slotName = (cartName.size() == 5)
-			? cartName.substr(4, 1)
-			: "any";
 		size_t extensionNameToken = 1;
 		if (tokens[1] == "insert") {
 			if (tokens.size() > 2) {
@@ -384,27 +446,13 @@ void CartridgeSlotManager::CartCmd::execute(
 				throw CommandException("Missing argument to insert subcommand");
 			}
 		}
+		std::string_view romName = tokens[extensionNameToken].getString();
 		auto options = tokens.subspan(extensionNameToken + 1);
-		try {
-			std::string_view romName = tokens[extensionNameToken].getString();
-			auto extension = HardwareConfig::createRomConfig(
-				manager.motherBoard, romName, slotName, options);
-			if (slotName != "any") {
-				if (const auto* extConf = getExtensionConfig(cartName)) {
-					// still a cartridge inserted, (try to) remove it now
-					manager.motherBoard.removeExtension(*extConf);
-				}
-			}
-			result = manager.motherBoard.insertExtension(
-				"ROM", std::move(extension));
-			cliComm.update(CliComm::UpdateType::MEDIA, cartName, romName);
-		} catch (MSXException& e) {
-			throw CommandException(std::move(e).getMessage());
-		}
+		result = manager.insertCartridge(cartName, romName, options);
 	}
 }
 
-string CartridgeSlotManager::CartCmd::help(std::span<const TclObject> tokens) const
+std::string CartridgeSlotManager::CartCmd::help(std::span<const TclObject> tokens) const
 {
 	auto cart = tokens[0].getString();
 	return strCat(
@@ -417,7 +465,7 @@ string CartridgeSlotManager::CartCmd::help(std::span<const TclObject> tokens) co
 		"-romtype <romtype> : specify the ROM mapper type\n");
 }
 
-void CartridgeSlotManager::CartCmd::tabCompletion(std::vector<string>& tokens) const
+void CartridgeSlotManager::CartCmd::tabCompletion(std::vector<std::string>& tokens) const
 {
 	using namespace std::literals;
 	static constexpr std::array extra = {"eject"sv, "insert"sv};
@@ -448,7 +496,7 @@ void CartridgeSlotManager::CartridgeSlotInfo::execute(
 	switch (tokens.size()) {
 	case 2: {
 		// return list of slots
-		string slot = "slotX";
+		std::string slot = "slotX";
 		for (auto i : xrange(CartridgeSlotManager::MAX_SLOTS)) {
 			if (!manager.slots[i].exists()) continue;
 			slot[4] = char('a' + i);
@@ -486,7 +534,7 @@ void CartridgeSlotManager::CartridgeSlotInfo::execute(
 	}
 }
 
-string CartridgeSlotManager::CartridgeSlotInfo::help(
+std::string CartridgeSlotManager::CartridgeSlotInfo::help(
 	std::span<const TclObject> /*tokens*/) const
 {
 	return "Without argument: show list of available external slots.\n"

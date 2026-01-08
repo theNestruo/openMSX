@@ -1,9 +1,11 @@
 #include "DACSound16S.hh"
+
 #include "DeviceConfig.hh"
-#include "MSXMotherBoard.hh"
 #include "DynamicClock.hh"
-#include "narrow.hh"
+#include "MSXMotherBoard.hh"
 #include "serialize.hh"
+
+#include "narrow.hh"
 
 namespace openmsx {
 
@@ -26,12 +28,12 @@ void DACSound16S::setOutputRate(unsigned hostSampleRate, double /*speed*/)
 	setInputRate(hostSampleRate);
 }
 
-void DACSound16S::reset(EmuTime::param time)
+void DACSound16S::reset(EmuTime time)
 {
 	writeDAC(0, time);
 }
 
-void DACSound16S::writeDAC(int16_t value, EmuTime::param time)
+void DACSound16S::writeDAC(int16_t value, EmuTime time)
 {
 	int delta = value - lastWrittenValue;
 	if (delta == 0) return;
@@ -54,7 +56,7 @@ void DACSound16S::generateChannels(std::span<float*> bufs, unsigned num)
 }
 
 bool DACSound16S::updateBuffer(size_t length, float* buffer,
-                               EmuTime::param /*time*/)
+                               EmuTime /*time*/)
 {
 	return mixChannels(buffer, length);
 }

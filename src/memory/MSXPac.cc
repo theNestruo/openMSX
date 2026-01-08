@@ -1,4 +1,5 @@
 #include "MSXPac.hh"
+
 #include "CacheLine.hh"
 #include "serialize.hh"
 
@@ -13,13 +14,13 @@ MSXPac::MSXPac(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void MSXPac::reset(EmuTime::param /*time*/)
+void MSXPac::reset(EmuTime /*time*/)
 {
 	sramEnabled = false;
 	r1ffe = r1fff = 0xFF; // TODO check
 }
 
-byte MSXPac::readMem(word address, EmuTime::param /*time*/)
+byte MSXPac::readMem(uint16_t address, EmuTime /*time*/)
 {
 	address &= 0x3FFF;
 	if (sramEnabled) {
@@ -37,7 +38,7 @@ byte MSXPac::readMem(word address, EmuTime::param /*time*/)
 	}
 }
 
-const byte* MSXPac::getReadCacheLine(word address) const
+const byte* MSXPac::getReadCacheLine(uint16_t address) const
 {
 	address &= 0x3FFF;
 	if (sramEnabled) {
@@ -53,7 +54,7 @@ const byte* MSXPac::getReadCacheLine(word address) const
 	}
 }
 
-void MSXPac::writeMem(word address, byte value, EmuTime::param /*time*/)
+void MSXPac::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	address &= 0x3FFF;
 	switch (address) {
@@ -72,7 +73,7 @@ void MSXPac::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* MSXPac::getWriteCacheLine(word address)
+byte* MSXPac::getWriteCacheLine(uint16_t address)
 {
 	address &= 0x3FFF;
 	if (address == (0x1FFE & CacheLine::HIGH)) {

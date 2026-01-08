@@ -129,8 +129,8 @@ You can also create your own machine descriptions,
 to expand existing MSX models or to create your own fantasy MSX. There are
 currently some of such fantasy MSX machines, based on real MSX machines,
 shipped with openMSX. Examples of such machines are "Boosted_MSX2_EN" (a
-European MSX2 with loads of hardware built in) and
-"Boosted_MSX2+_JP" (a Japanese MSX2+ with loads of hardware built in). You can
+European MSX2 with loads of hardware built-in) and
+"Boosted_MSX2+_JP" (a Japanese MSX2+ with loads of hardware built-in). You can
 find some more information about them in their accompanying txt file in
 <code>share/machines/</code>. More about creating fantasy MSX machines in a
 <a class="internal" href="#hardwareedit">later chapter</a>.
@@ -150,6 +150,12 @@ Some extensions need ROM images in order to run, similar to system ROMs.
 <p>
 In general, the XML files that describe the hardware configuration are called
 "hardware configuration XML files".
+</p>
+
+<p>
+If you want to be able to run a combination of a machine and plugged in extensions at a later time, you can store this combination as a setup with the GUI via <span class="menu-reference">Main menu bar
+&rarr; Machine &rarr; Save setup</span> or the <code><a class="external"
+href="commands.html#store_setup">store_setup</a></code> command.
 </p>
 
 <h2><a id="systemroms">3. System ROMs</a></h2>
@@ -202,8 +208,9 @@ openMSX contains several machine configurations using C-BIOS.
 The machine <code>C-BIOS_MSX1</code> is an MSX1 with 64 kB RAM.
 The machine <code>C-BIOS_MSX2</code> is an MSX2 with 512 kB RAM and 128 kB VRAM.
 The machine <code>C-BIOS_MSX2+</code> is an MSX2+ with 512 kB RAM, 128 kB VRAM and MSX-MUSIC.
-The latter is the default machine for openMSX after installation,
-so if you change nothing to the openMSX configuration,
+The latter is the <a class="external"
+href="commands.html#default_machine">default machine</a> for openMSX after
+installation, so if you change nothing to the openMSX configuration,
 then <code>C-BIOS_MSX2+</code> is the machine that will be booted. The
 mentioned machines have a US English (international) keyboard layout and
 character set and run at 60Hz (like NTSC) interrupt frequency. Since C-BIOS
@@ -261,7 +268,7 @@ system ROMs you dumped yourself, see the previous section.
 <p>
 It may be illegal in your country to download system ROMs.
 Please inform yourself of the legal aspects before considering this option.
-Whatever you decide, is your own responsibility.
+Whatever you decide is your own responsibility.
 </p>
 
 <h3><a id="installrom">3.4 Installing ROMs</a></h3>
@@ -308,7 +315,7 @@ installation directory of openMSX, which is also platform dependent:
 
 <p> The quickest way to see where openMSX is searching for system ROMs on your
 installation is via the GUI under <span class="menu-reference">Main menu bar
-&rarr; Machine &rarr; Test MSX hardware...</span>. At the bottom of this dialog
+&rarr; Machine &rarr; Test MSX hardware</span>. At the bottom of this dialog
 you can find buttons to quickly open a (native) file browser on the locations
 where the ROMs are searched for, both for the user folder and the system wide
 folder. The main function of this window is to verify whether your system ROMs
@@ -360,11 +367,11 @@ wrong place, or you put it in a large ZIP file with multiple files). </p>
 <p> The quickest way to see which machine and extensions work (i.e.: openMSX
 can find the required system ROMs the configuration is referring to) is by
 using the GUI under <span class="menu-reference">Main menu bar &rarr; Machine
-&rarr; Test MSX hardware...</span>. It will quickly check all machines and
+&rarr; Test MSX hardware</span>. It will quickly check all machines and
 extensions and will show which are working and which are not, and which error
 occurred when trying to use it.  Besides this, when selecting to run a machine
 using the GUI under <span class="menu-reference">Main menu bar &rarr; Machine
-&rarr; Select MSX machine ...</span>, you can also see which are working and
+&rarr; Select MSX machine...</span>, you can also see which are working and
 which not and why. Likewise for extensions via <span
 class="menu-reference">Main menu bar &rarr; Media &rarr; Extensions &rarr;
 Insert</span> for instance. </p>
@@ -540,7 +547,7 @@ class="external" href="commands.html#maxframeskip">maxframeskip</a> 10</code>,
 for example).
 </li>
 <li>
-Use the <a class="external" href="commands.html#resampler">fast resampler</a> instead of the hq or blip one.
+Use the <a class="external" href="commands.html#resampler">blip resampler</a> instead of the hq one.
 </li>
 <li>
 Emulate MSX software that uses fewer sound channels, for example MSX-MUSIC

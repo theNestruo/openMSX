@@ -1,16 +1,18 @@
 #include "MicrosolFDC.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
 #include "serialize.hh"
 
 namespace openmsx {
 
-MicrosolFDC::MicrosolFDC(const DeviceConfig& config)
+MicrosolFDC::MicrosolFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config)
 {
 }
 
-byte MicrosolFDC::readIO(word port, EmuTime::param time)
+byte MicrosolFDC::readIO(uint16_t port, EmuTime time)
 {
 	switch (port & 0x07) {
 	case 0:
@@ -32,7 +34,7 @@ byte MicrosolFDC::readIO(word port, EmuTime::param time)
 	}
 }
 
-byte MicrosolFDC::peekIO(word port, EmuTime::param time) const
+byte MicrosolFDC::peekIO(uint16_t port, EmuTime time) const
 {
 	switch (port & 0x07) {
 	case 0:
@@ -54,7 +56,7 @@ byte MicrosolFDC::peekIO(word port, EmuTime::param time) const
 	}
 }
 
-void MicrosolFDC::writeIO(word port, byte value, EmuTime::param time)
+void MicrosolFDC::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	switch (port & 0x07) {
 	case 0:

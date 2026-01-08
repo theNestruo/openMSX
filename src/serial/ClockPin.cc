@@ -1,6 +1,7 @@
 #include "ClockPin.hh"
-#include "narrow.hh"
+
 #include "serialize.hh"
+
 #include <cassert>
 
 namespace openmsx {
@@ -10,7 +11,7 @@ ClockPin::ClockPin(Scheduler& scheduler_, ClockPinListener* listener_)
 {
 }
 
-void ClockPin::setState(bool newStatus, EmuTime::param time)
+void ClockPin::setState(bool newStatus, EmuTime time)
 {
 	periodic = false;
 	if (signalEdge) {
@@ -30,8 +31,8 @@ void ClockPin::setState(bool newStatus, EmuTime::param time)
 	}
 }
 
-void ClockPin::setPeriodicState(EmuDuration::param total,
-	EmuDuration::param hi, EmuTime::param time)
+void ClockPin::setPeriodicState(EmuDuration total,
+	EmuDuration hi, EmuTime time)
 {
 	referenceTime = time;
 	totalDur = total;
@@ -52,7 +53,7 @@ void ClockPin::setPeriodicState(EmuDuration::param total,
 }
 
 
-bool ClockPin::getState(EmuTime::param time) const
+bool ClockPin::getState(EmuTime time) const
 {
 	if (!periodic) {
 		return status;
@@ -61,19 +62,19 @@ bool ClockPin::getState(EmuTime::param time) const
 	}
 }
 
-EmuDuration::param ClockPin::getTotalDuration() const
+EmuDuration ClockPin::getTotalDuration() const
 {
 	assert(periodic);
 	return totalDur;
 }
 
-EmuDuration::param ClockPin::getHighDuration() const
+EmuDuration ClockPin::getHighDuration() const
 {
 	assert(periodic);
 	return hiDur;
 }
 
-unsigned ClockPin::getTicksBetween(EmuTime::param begin, EmuTime::param end) const
+unsigned ClockPin::getTicksBetween(EmuTime begin, EmuTime end) const
 {
 	assert(begin <= end);
 	if (!periodic) {
@@ -91,7 +92,7 @@ unsigned ClockPin::getTicksBetween(EmuTime::param begin, EmuTime::param end) con
 }
 
 
-void ClockPin::generateEdgeSignals(bool wanted, EmuTime::param time)
+void ClockPin::generateEdgeSignals(bool wanted, EmuTime time)
 {
 	if (signalEdge != wanted) {
 		signalEdge = wanted;
@@ -116,13 +117,13 @@ void ClockPin::unschedule()
 	removeSyncPoint();
 }
 
-void ClockPin::schedule(EmuTime::param time)
+void ClockPin::schedule(EmuTime time)
 {
 	assert(signalEdge && periodic && listener);
 	setSyncPoint(time);
 }
 
-void ClockPin::executeUntil(EmuTime::param time)
+void ClockPin::executeUntil(EmuTime time)
 {
 	assert(signalEdge && periodic && listener);
 	listener->signalPosEdge(*this, time);

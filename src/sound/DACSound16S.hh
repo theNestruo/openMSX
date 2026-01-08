@@ -3,8 +3,9 @@
 #ifndef DACSOUND16S_HH
 #define DACSOUND16S_HH
 
-#include "SoundDevice.hh"
 #include "BlipBuffer.hh"
+#include "SoundDevice.hh"
+
 #include <cstdint>
 
 namespace openmsx {
@@ -16,8 +17,8 @@ public:
 	            const DeviceConfig& config);
 	virtual ~DACSound16S();
 
-	void reset(EmuTime::param time);
-	void writeDAC(int16_t value, EmuTime::param time);
+	void reset(EmuTime time);
+	void writeDAC(int16_t value, EmuTime time);
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -27,7 +28,7 @@ private:
 	void setOutputRate(unsigned hostSampleRate, double speed) override;
 	void generateChannels(std::span<float*> bufs, unsigned num) override;
 	bool updateBuffer(size_t length, float* buffer,
-	                  EmuTime::param time) override;
+	                  EmuTime time) override;
 
 private:
 	BlipBuffer blip;

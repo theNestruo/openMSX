@@ -1,15 +1,17 @@
 #ifndef EVENTDELAY_HH
 #define EVENTDELAY_HH
 
-#include "EventListener.hh"
-#include "Schedulable.hh"
 #include "EmuTime.hh"
 #include "Event.hh"
+#include "EventListener.hh"
 #include "FloatSetting.hh"
+#include "Schedulable.hh"
+
 #include "build-info.hh"
-#include <vector>
-#include <deque>
+
 #include <cstdint>
+#include <deque>
+#include <vector>
 
 namespace openmsx {
 
@@ -32,7 +34,7 @@ public:
 	           ReverseManager& reverseManager);
 	~EventDelay();
 
-	void sync(EmuTime::param curEmu);
+	void sync(EmuTime curEmu);
 	void flush();
 
 private:
@@ -40,7 +42,7 @@ private:
 	bool signalEvent(const Event& event) override;
 
 	// Schedulable
-	void executeUntil(EmuTime::param time) override;
+	void executeUntil(EmuTime time) override;
 
 private:
 	EventDistributor& eventDistributor;

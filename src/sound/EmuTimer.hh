@@ -1,9 +1,10 @@
 #ifndef EMUTIMER_HH
 #define EMUTIMER_HH
 
-#include "Schedulable.hh"
 #include "DynamicClock.hh"
-#include "openmsx.hh"
+#include "Schedulable.hh"
+
+#include <cstdint>
 #include <memory>
 
 namespace openmsx {
@@ -11,7 +12,7 @@ namespace openmsx {
 class EmuTimerCallback
 {
 public:
-	virtual void callback(byte value) = 0;
+	virtual void callback(uint8_t value) = 0;
 
 protected:
 	~EmuTimerCallback() = default;
@@ -22,7 +23,7 @@ class EmuTimer final : public Schedulable
 {
 public:
 	EmuTimer(Scheduler& scheduler, EmuTimerCallback& cb,
-	         byte flag, unsigned freq_num, unsigned freq_denom,
+	         uint8_t flag, unsigned freq_num, unsigned freq_denom,
 	         int maxVal);
 
 	[[nodiscard]] static std::unique_ptr<EmuTimer> createOPM_1(
@@ -41,14 +42,14 @@ public:
 		Scheduler& scheduler, EmuTimerCallback& cb);
 
 	void setValue(int value);
-	void setStart(bool start, EmuTime::param time);
+	void setStart(bool start, EmuTime time);
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	void executeUntil(EmuTime::param time) override;
-	void schedule(EmuTime::param time);
+	void executeUntil(EmuTime time) override;
+	void schedule(EmuTime time);
 	void unschedule();
 
 private:
@@ -56,7 +57,7 @@ private:
 	DynamicClock clock{EmuTime::zero()};
 	const int maxVal;
 	int count;
-	const byte flag;
+	const uint8_t flag;
 	bool counting = false;
 };
 

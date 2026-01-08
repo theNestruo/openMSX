@@ -60,10 +60,12 @@
         <li><a class="internal" href="#savestate">savestate / loadstate / list_savestates / delete_savestate</a></li>
         <li><a class="internal" href="#screenshot">screenshot</a></li>
         <li><a class="internal" href="#set">set</a></li>
+        <li><a class="internal" href="#setup">setup</a></li>
         <li><a class="internal" href="#slotmap">slotmap</a></li>
         <li><a class="internal" href="#slotselect">slotselect</a></li>
         <li><a class="internal" href="#soundlog">soundlog</a></li>
         <li><a class="internal" href="#store_machine">store_machine / restore_machine</a></li>
+        <li><a class="internal" href="#store_setup">store_setup</a></li>
         <li><a class="internal" href="#test_machine">test_machine</a></li>
         <li><a class="internal" href="#toggle">toggle</a></li>
         <li><a class="internal" href="#trainer">trainer</a></li>
@@ -92,8 +94,9 @@
         <li><a class="internal" href="#console">console</a></li>
         <li><a class="internal" href="#contrast">contrast</a></li>
         <li><a class="internal" href="#cputrace">cputrace</a></li>
-        <li><a class="internal" href="#debugoutput">debugoutput</a></li>
+        <li><a class="internal" href="#debugoutput">Debug Device output</a></li>
         <li><a class="internal" href="#default_machine">default_machine</a></li>
+        <li><a class="internal" href="#default_setup">default_setup</a></li>
         <li><a class="internal" href="#deflicker">deflicker</a></li>
         <li><a class="internal" href="#deinterlace">deinterlace</a></li>
         <li><a class="internal" href="#DirAsDSKmode">DirAsDSKmode</a></li>
@@ -107,6 +110,7 @@
         <li><a class="internal" href="#firmwareswitch">firmwareswitch</a></li>
         <li><a class="internal" href="#fullscreen">fullscreen</a></li>
         <li><a class="internal" href="#fullspeedwhenloading">fullspeedwhenloading</a></li>
+        <li><a class="internal" href="#full_stretch">full_stretch</a></li>
         <li><a class="internal" href="#gamma">gamma</a></li>
         <li><a class="internal" href="#glow">glow</a></li>
         <li><a class="internal" href="#grabinput">grabinput</a></li>
@@ -157,6 +161,8 @@
         <li><a class="internal" href="#rtcmode">rtcmode</a></li>
         <li><a class="internal" href="#samples">samples</a></li>
         <li><a class="internal" href="#save_settings_on_exit">save_settings_on_exit</a></li>
+        <li><a class="internal" href="#save_setup_at_exit_name">save_setup_at_exit_name</a></li>
+        <li><a class="internal" href="#save_setup_at_exit_depth">save_setup_at_exit_depth</a></li>
         <li><a class="internal" href="#scale_algorithm">scale_algorithm</a></li>
         <li><a class="internal" href="#scale_factor">scale_factor</a></li>
         <li><a class="internal" href="#scanline">scanline</a></li>
@@ -185,7 +191,7 @@
 
   <h2><a id="introduction">Introduction</a></h2>
 
-  <p>This manual describes all commands and settings which are available in openMSX. You can use them to control openMSX fully from the Console (a built in command line interface, use F10 to call it), via Tcl scripts and via remote connections (explained in <a class="external" href="openmsx-control.html">Controlling openMSX from External Applications</a>). If you want to unleash the full potential of openMSX or just want a reference of all available possibilities, this manual should serve you well.</p>
+  <p>This manual describes all commands and settings which are available in openMSX. You can use them to control openMSX fully from the Console (a built-in command-line interface, use F10 to call it), via Tcl scripts and via remote connections (explained in <a class="external" href="openmsx-control.html">Controlling openMSX from External Applications</a>). If you want to unleash the full potential of openMSX or just want a reference of all available possibilities, this manual should serve you well.</p>
 
   <h2><a id="commands">Commands</a></h2>
 
@@ -217,7 +223,7 @@
     <tr>
       <td><code>after idle &lt;seconds&gt; &lt;command&gt;</code></td>
 
-      <td>Execute a command after some time being idle</td>
+      <td>Execute a command after being idle for some time</td>
     </tr>
 
     <tr>
@@ -243,6 +249,12 @@
       <td><code>after machine_switch &lt;command&gt;</code></td>
 
       <td>Execute a command after switch to new a machine</td>
+    </tr>
+
+    <tr>
+      <td><code>after quit &lt;command&gt;</code></td>
+
+      <td>Execute a command after receiving a quit event, while openMSX shuts down.</td>
     </tr>
 
     <tr>
@@ -281,7 +293,7 @@
   <p>Associate events (such as key presses) with commands. Whenever the
   specified event occurs (e.g. you press the specified key), the corresponding
   command will be executed. Any Tcl command or combination of commands
-  separated with <code>;</code> (normal Tcl syntax) can be used. To customize your
+  separated with <code>;</code> (normal Tcl syntax) can be used. To customise your
   bindings you should use the (un)bind commands. A script that wants to provide
   a default binding for its functionality needs to use <code>bind_default</code>,
   this allows users with different preferences to overrule the default
@@ -475,7 +487,7 @@
     <tr>
       <td><code>cassetteplayer insert &lt;tape image&gt;</code></td>
 
-      <td>Insert tape image (WAV or CAS format) in the cassette player</td>
+      <td>Insert tape image (WAV, CAS or TSX format) in the cassette player</td>
     </tr>
 
     <tr>
@@ -578,16 +590,15 @@
 
   <h3><a id="debug">debug</a></h3>
 
-  <p>This command provides access to the debugger functionality of openMSX. It's meant to be used by an external debugger (see also <a class="external" href="openmsx-control.html">Controlling openMSX from External Applications</a>). The general format of the debug command is:</p>
+  <p>This command provides access to the debugger functionality of openMSX. It can be used by an external debugger (see also <a class="external" href="openmsx-control.html">Controlling openMSX from External Applications</a>), but openMSX has since evolved to include its own debugger. The general format of the debug command is:</p>
 
   <p><code>debug &lt;subcommand&gt; [&lt;extra arguments&gt;]</code></p>
 
-  <p>where 'extra arguments' are specific for each subcommand. Below is a list of all subcommands:</p>
+  <p>where 'extra arguments' are specific for each subcommand. Below is a list of the most common subcommands (deprecated commands are not listed):</p>
 
   <table>
     <tr>
       <td><code>debug list</code></td>
-
       <td>Return a list of all debuggables.<br />
       A debuggable is (part of) the state of an MSX device that can be accessed
       via these debug commands.<br />
@@ -602,184 +613,93 @@
 
     <tr>
       <td><code>debug desc &lt;name&gt;</code></td>
-
       <td>Return a description of this debuggable</td>
     </tr>
 
     <tr>
       <td><code>debug size &lt;name&gt;</code></td>
-
       <td>Return the size of this debuggable</td>
     </tr>
 
     <tr>
       <td><code>debug read &lt;name&gt; &lt;addr&gt;</code></td>
-
       <td>Read a byte from a debuggable</td>
     </tr>
 
     <tr>
       <td><code>debug write &lt;name&gt; &lt;addr&gt; &lt;val&gt;</code></td>
-
       <td>Write a byte to a debuggable</td>
     </tr>
 
     <tr>
       <td><code>debug read_block &lt;name&gt; &lt;addr&gt; &lt;size&gt;</code></td>
-
       <td>Read a whole block at once</td>
     </tr>
 
     <tr>
       <td><code>debug write_block &lt;name&gt; &lt;addr&gt; &lt;values&gt;</code></td>
-
       <td>Write a whole block at once</td>
     </tr>
 
     <tr>
-      <td><code>debug probe &lt;subcommand&gt;</code></td>
-      <td>See below.</td>
-    </tr>
-
-    <tr>
       <td><code>debug break</code></td>
-
       <td>Break CPU at current position</td>
     </tr>
 
     <tr>
       <td><code>debug breaked</code></td>
-
       <td>Query CPU break status</td>
     </tr>
 
     <tr>
       <td><code>debug cont</code></td>
-
       <td>Continue execution after break</td>
     </tr>
 
     <tr>
       <td><code>debug step</code></td>
-
       <td>Execute one instruction</td>
     </tr>
 
     <tr>
-      <td><code>debug list_bp</code></td>
-
-      <td>List the active breakpoints</td>
+      <td><code>debug breakpoint &lt;subcommand&gt;</code></td>
+      <td>Breakpoint related commands. Type <code>help debug breakpoint</code> for more details.</td>
     </tr>
 
     <tr>
-      <td><code>debug set_bp [-once] &lt;addr&gt; [&lt;cond&gt;] [&lt;cmd&gt;]</code></td>
-
-      <td>Insert a new breakpoint at the given address. Optionally you can specify a condition and a command. When
-      the CPU is about to execute the instruction at the given address, the condition will be evaluated, if this
-      evaluates to true then the command is executed. The condition can be any Tcl expression and the command can be
-      any Tcl command. The default condition is 'true' and the default command is <code>"debug break"</code>.
-      If the <code>-once</code> flag is passed, the breakpoint is automatically removed after it triggered.
-      In other words: it will only trigger once.</td>
+      <td><code>debug watchpoint &lt;subcommand&gt;</code></td>
+      <td>Watchpoint related commands. Type <code>help debug watchpoint</code> for more details.</td>
     </tr>
 
     <tr>
-      <td><code>debug remove_bp &lt;id&gt;</code></td>
-
-      <td>Remove a certain breakpoint</td>
+      <td><code>debug watchexpr &lt;subcommand&gt;</code></td>
+      <td>Watch expression related commands. Type <code>help debug watchexpr</code> for more details.</td>
     </tr>
 
     <tr>
-      <td><code>debug list_watchpoints</code></td>
-
-      <td>List all defined watchpoints</td>
+      <td><code>debug condition &lt;subcommand&gt;</code></td>
+      <td>Condition related commands. Type <code>help debug condition</code> for more details.</td>
     </tr>
 
     <tr>
-      <td><code>debug set_watchpoint [-once] &lt;type&gt; &lt;region&gt; [&lt;cond&gt;] [&lt;cmd&gt;]</code></td>
-
-      <td>Insert a new watchpoint. When the CPU is about to read or write to/from the specified memory or I/O region,
-      the condition is evaluated. If the condition evaluated to true, the command is executed. The -once flag, the condition and the
-      command are similar to the ones in the <code>set_bp</code> subcommand. A watchpoint can either be set on a single memory
-      address or I/O port (specify a single value), or on a whole memory or I/O port range (specify a begin/end pair).
-      For example: <code>debug set_watchpoint write_mem {0x8000 0x8FFF}</code>. During the execution of <code>&lt;cmd&gt;</code>, the following global Tcl variables are set: <code>::wp_last_address</code>, which is the actual address of the mem/io read/write that triggered the watchpoint and <code>::wp_last_value</code>, the actual value that was written by the mem/io write that triggered the watchpoint.</td>
+      <td><code>debug probe &lt;subcommand&gt;</code></td>
+      <td>Probe related commands. Type <code>help debug probe</code> for more details.</td>
     </tr>
 
     <tr>
-      <td><code>debug remove_watchpoint &lt;id&gt;</code></td>
-
-      <td>Remove a certain watchpoint</td>
-    </tr>
-
-    <tr>
-      <td><code>debug list_conditions</code></td>
-
-      <td>List the active conditions</td>
-    </tr>
-
-    <tr>
-      <td><code>debug set_condition [-once] &lt;cond&gt; [&lt;cmd&gt;]</code></td>
-
-      <td>Set a new debugger condition. Conditions are like breakpoints, but not
-          tied to a specific address. Simulation is much slower when conditions
-          are used (though generally while debugging this is not a problem).</td>
-    </tr>
-
-    <tr>
-      <td><code>debug remove_condition &lt;id&gt;</code></td>
-
-      <td>Remove a certain condition</td>
+      <td><code>debug symbols &lt;subcommand&gt;</code></td>
+      <td>Manage debug symbols.<br />
+      openMSX also provides a shortcut to access debug symbol addresses via Tcl dictionary <code>$::sym(&lt;symbol-name&gt;)</code>.
     </tr>
 
     <tr>
       <td><code>debug disasm [&lt;addr&gt;]</code></td>
-
       <td>Disassemble instructions at PC or given address</td>
     </tr>
+
   </table>
 
-  <p>The probe subcommand again has subcommands:</p>
-  <table>
-    <tr>
-      <td><code>debug probe list</code></td>
-      <td>Returns a list of all probes.</td>
-    </tr>
-    <tr>
-      <td><code>debug probe desc &lt;probe&gt;</code></td>
-      <td>Returns a description of this probe.</td>
-    </tr>
-    <tr>
-      <td><code>debug probe read &lt;probe&gt;</code></td>
-      <td>Returns the current value of a probe. But note that not all probes have a value</td>
-    </tr>
-    <tr>
-      <td><code>debug probe set_bp [-once] &lt;probe&gt; [&lt;cond&gt;] [&lt;cmd&gt;]</code></td>
-      <td>Set a breakpoint on a probe. Like in the 'set_bp' subcommand you can optionally specify a condition and a command.</td>
-    </tr>
-    <tr>
-      <td><code>debug probe remove_bp &lt;id&gt;</code></td>
-      <td>Remove the given breakpoint.</td>
-    </tr>
-    <tr>
-      <td><code>debug probe list_bp</code></td>
-      <td>List the active breakpoints set on probes.</td>
-    </tr>
-  </table>
-
-  <p>At first sight 'probes' and 'debuggables' are very similar. Though there are some important differences and that's why probes and debuggables use different subcommands:</p>
-  <table>
-    <tr>
-      <td>A debuggable is an array of bytes.</td>
-      <td>A probe is a single value and can have any type.</td>
-    </tr>
-    <tr>
-      <td>A debuggable is readable and (usually) writable.</td>
-      <td>A probe is always read-only.</td>
-    </tr>
-    <tr>
-      <td>It's not possible to set breakpoints on a debuggable.</td>
-      <td>You can set breakpoints on a probe (and sometimes this is the only purpose of a probe).</td>
-    </tr>
-  </table>
+  <p>This command is much better documented in openMSX itself. Type <code>help debug</code> or <code>help debug &lt;subcommand&gt;</code> for more detailed help.</p>
 
   <p>Many examples of usage of the debug command can be found in the scripts that come with openMSX (in the <code>share/scripts</code> directory). We also list a few here.
   </p>
@@ -791,18 +711,20 @@
   <div class="examples">
     <ul>
       <li>break (only!) after 0 is written to 0x8000):<br/>
-         <code>debug set_watchpoint write_mem 0x8000 {[debug read "memory" 0x8000] ==
+         <code>debug watchpoint create write_mem 0x8000 {[debug read "memory" 0x8000] ==
 0x00}</code></li>
       <li>break on address 0xF37D, but only when Z80 register C has the value 0x2F:<br/>
-         <code>debug set_bp 0xF37D {[reg C] == 0x2F}</code></li>
+         <code>debug breakpoint create 0xF37D {[reg C] == 0x2F}</code></li>
       <li>break when CPU reads from any addresses between 0xFBE5 and 0xFBEF:<br/>
-         <code>debug set_watchpoint read_mem {0xFBE5 0xFBEF}</code></li>
+         <code>debug watchpoint create read_mem {0xFBE5 0xFBEF}</code></li>
       <li>break after a write was done to I/O port 0x99, but only when Z80 register A has a value of 0x81:<br/>
-         <code>debug set_watchpoint write_io 0x99 {[reg A] == 0x81}</code></li>
+         <code>debug watchpoint create write_io 0x99 {[reg A] == 0x81}</code></li>
       <li>break as soon as there is a pending Z80 IRQ (even when in DI mode):<br/>
          <code>debug probe set_bp z80.pendingIRQ</code></li>
       <li>break when register HL has the value 1234:<br/>
-         <code>debug set_condition {[reg hl] == 1234}</code></li>
+         <code>debug condition create {[reg hl] == 1234}</code></li>
+      <li>list the contents of all symbol files previously loaded by the Symbol Manager or by the <code>debug symbols load</code> subcommand:<br/>
+         <code>debug symbols lookup</code></li>
     </ul>
   </div>
 
@@ -1307,7 +1229,7 @@
   </table>
 
   <h3><a id="message">message</a></h3>
-  <p>Show a message, with optional level (info, warning, error). By default this message will be shown in a colored box at the top of the screen for a (short) duration and then fade away.</p>
+  <p>Show a message, with optional level (info, warning, error). By default this message will be shown in a coloured box at the top of the screen for a (short) duration and then fade away.</p>
   <div class="subsectiontitle">
     usage:
   </div>
@@ -1403,7 +1325,7 @@
   commands there is a <code>nowind&lt;x&gt;</code> command for each nowind
   interface. This command is modelled after the 'usbhost' command of the real
   nowind interface. Though only a subset of the options is supported. Here's a
-  short overview of the command line options:</p>
+  short overview of the command-line options:</p>
 
   <table>
     <tr><th>long</th>      <th>short</th><th>explanation</th></tr>
@@ -1517,7 +1439,7 @@
 
   <h3><a id="osd">osd</a></h3>
 
-  <p>openMSX has the possibility to show OSD (on screen display) elements. For example, the LEDs and the fps-indicator are implemented via OSD elements. This command allows to create new OSD elements, configure existing elements or delete elements.</p>
+  <p>openMSX has the possibility to show OSD (on screen display) elements. For example, the game overlays and TAS tools are implemented via OSD elements. This command allows to create new OSD elements, configure existing elements or delete elements.</p>
 
   <p>This command is only useful if you plan to adjust or enhance the openMSX OSD, or create your own OSD widgets.</p>
 
@@ -1803,7 +1725,7 @@
     <tr>
       <td><code>reverse loadreplay [-goto &lt;begin|end|savetime|&lt;n&gt;&gt;] [-viewonly] &lt;filename&gt;</code></td>
 
-      <td>Load the replay from the given file and start it. Loads the initial snapshot and starts replaying the recorded events. Enables the reverse feature automatically. With the <code>-goto</code> option, you can specify where to jump to in the replay after loading (<code>begin</code> is default), where <code>savetime</code> is the time at which the replay was saved and <code>n</code> is an absolute time in seconds in the replay. The <code>-viewonly</code> option is a shortcut to put the reverse feature in viewonly mode directly after loading the replay. Without this option, it will always go to normal mode.</td>
+      <td>Load the replay from the given file and start it. It loads the initial snapshot, starts replaying the recorded events, and enables the reverse feature automatically. With the <code>-goto</code> option, you can specify where to jump to in the replay after loading (<code>begin</code> is default), where <code>savetime</code> is the time at which the replay was saved and <code>n</code> is an absolute time in seconds in the replay. The <code>-viewonly</code> option is a shortcut to put the reverse feature in viewonly mode directly after loading the replay. Without this option, it will always go to normal mode.</td>
     </tr>
   </table>
 
@@ -1886,7 +1808,7 @@
   <table>
     <tr>
       <td>
-        <code>screenshot [-with-osd] [-raw [-doublesize]] [-no-sprites] [-prefix &lt;prefix&gt;] [&lt;filename&gt;]</code>
+        <code>screenshot [-with-osd] [-raw [-size &lt;width&gt;]] [-no-sprites] [-prefix &lt;prefix&gt;] [&lt;filename&gt;]</code>
       </td>
     </tr>
   </table>
@@ -1913,7 +1835,15 @@
       <td>Create screenshot of the raw MSX screen only (so no icons or console and no scaling)</td>
     </tr>
     <tr>
-      <td><code>screenshot -raw -doublesize</code></td>
+      <td><code>screenshot -raw -size auto</code></td>
+      <td>Create screenshot of the raw MSX screen only, with resolution dependent on the displayed MSX screen mode</td>
+    </tr>
+    <tr>
+      <td><code>screenshot -raw -size 320</code></td>
+      <td>Create screenshot of the raw MSX screen only, with resolution 320&times;240</td>
+    </tr>
+    <tr>
+      <td><code>screenshot -raw -size 640</code></td>
       <td>Create screenshot of the raw MSX screen only, with resolution 640&times;480</td>
     </tr>
     <tr>
@@ -1959,6 +1889,26 @@
     <code>set blur 25</code><br />
     <code>set scanline 20</code><br />
     <code>set deinterlace on</code><br />
+  </div>
+
+  <h3><a id="setup">setup</a></h3>
+
+  <p>Switch to a previously saved setup.</p>
+
+  <div class="subsectiontitle">
+    usage:
+  </div>
+
+  <table>
+    <tr>
+      <td><code>setup &lt;setup name&gt;</code></td>
+
+      <td>Switch to the specified setup, which you have saved before with the GUI or the <code><a class="internal" href="#store_setup">store_setup</a></code> command. Also returns the handle of the new machine.</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    Note: The machine handle is mostly used by external applications controlling openMSX (see also <a class="external" href="openmsx-control.html">Controlling openMSX from External Applications</a>). For interactive use you can omit the machine handle to have the commands operate on the current machine.
   </div>
 
   <h3><a id="slotmap">slotmap</a></h3>
@@ -2068,11 +2018,39 @@
     Note: These commands are pretty low level. The <code><a class="internal" href="#savestate">savestate</a></code> and <code><a class="internal" href="#savestate">loadstate</a></code> scripts are built on top of this and are much more convenient to use.
   </div>
 
+  <h3><a id="store_setup">store_setup</a></h3>
+
+  <p>Store the current setup in a file.</p>
+
+  <table>
+    <tr>
+      <td><code>store_setup [depth] &lt;filename&gt;</code></td>
+      <td>Save the setup with the given depth to specified file</td>
+    </tr>
+  </table>
+
+  <p>If the filename isn't specified, openMSX creates a unique one for you, based on the name of the machine. The depth argument is mandatory and must be one of the following.</p>
+
+  <dl>
+    <dt><code>machine</code></dt>
+    <dd>Save only the machine. This isn't too useful... but you can use it to give your favourite machine your own setup name</dd>
+    <dt><code>extensions</code></dt>
+    <dd>Save the machine with all plugged in extensions</dd>
+    <dt><code>connectors</code></dt>
+    <dd>As previous, but also include plugged in equipment in its connectors</dd>
+    <dt><code>media</code></dt>
+    <dd>As previous, but also include inserted media in its media slots</dd>
+    <dt><code>complete_state</code></dt>
+    <dd>As previous, but also include the run time state. This is basically identical to a savestate</dd>
+  </dl>
+
+  <p>Storing the current setup can also be done with the GUI via <span class="menu-reference">Main menu bar
+&rarr; Machine &rarr; Save setup</span>.</p>
 
   <h3><a id="test_machine">test_machine / test_all_machines / test_all_extensions</a></h3>
 
   <p>Test whether the given MSX machine configuration works. For example whether you have all required system ROMs for this machine. See also <code><a class="internal" href="#machines">load_machine</a></code>. This is an alternative to using the equivalent option in the GUI <span class="menu-reference">Main menu bar
-&rarr; Machine &rarr; Test MSX hardware...</span></p>
+&rarr; Machine &rarr; Test MSX hardware</span></p>
 
   <div class="subsectiontitle">
     usage:
@@ -2421,6 +2399,10 @@
       <td>Print an overview of the defined OSD elements</td>
     </tr>
     <tr>
+      <td><code>shuffler</code></td>
+      <td>A basic ROM-game shuffler, that switches between a set of ROM programs in a given folder after a certain time is passed.</td>
+    </tr>
+    <tr>
       <td><code>skip_instruction</code></td>
       <td>Skip the current CPU instruction</td>
     </tr>
@@ -2453,26 +2435,12 @@
       <td>Show (or hide) a widget which shows which keys are pressed</td>
     </tr>
     <tr>
-      <td><code>toggle_fps</code></td>
-      <td>Show (or hide) a frames-per-second (fps) indicator</td>
-    </tr>
-    <tr>
       <td><code>toggle_frame_counter</code></td>
       <td>Show (or hide) a widget which shows the current frame number since start-up</td>
     </tr>
     <tr>
       <td><code>toggle_freq</code></td>
       <td>Switch between PAL/NTSC</td>
-    </tr>
-    <tr>
-      <td><code>toggle_info_panel</code></td>
-      <td>Show (or hide) a panel with various types of info on the currently
-          running MSX (emulation); similar to the info in the panel you get
-          when using the DIGIblue theme in blueMSX. In the future, this will be
-          fully replaced by the Status bar, which can be toggled via <span
-          class="menu-reference">Main menu bar &rarr; Settings &rarr; Misc
-          &rarr; Show status bar</span>.
-      </td>
     </tr>
     <tr>
       <td><code>toggle_mog_overlay</code></td>
@@ -2503,7 +2471,7 @@
       <td>Show a graphical view of the SCC chip(s) of the system, showing
           waveforms and volume per channel. In the future, this will be fully
           replaced by <span class="menu-reference">Main menu bar &rarr; Tools
-          &rarr; SCC viewer ...</span>.
+          &rarr; SCC viewer</span>.
       </td>
     </tr>
     <tr>
@@ -2517,15 +2485,6 @@
     <tr>
       <td><code>toggle_vdp_busy</code></td>
       <td>Enable (or disable) display on the OSD how busy the VDP is</td>
-    </tr>
-    <tr>
-      <td><code>toggle_vu_meters</code></td>
-      <td>Show (or hide) a graphical view of the volumes of the sound channels
-      of several sound chips. These are volumes based on the current register
-      values of the chips and only for those for which this is implemented. For
-      "physical" VU-meters for all possible audio channels, check out <span
-      class="menu-reference">Main menu bar &rarr; Tools &rarr; Audio channel
-      viewer...</span>.</td>
     </tr>
     <tr>
       <td><code>type_via_keybuf</code></td>
@@ -2550,6 +2509,14 @@
     <tr>
       <td><code>vdpreg</code></td>
       <td>Read or write a V99x8 register</td>
+    </tr>
+    <tr>
+      <td><code>vdpstatus</code></td>
+      <td>Shortcut for reading the VDP status registers</td>
+    </tr>
+    <tr>
+      <td><code>vdpvramaddress</code></td>
+      <td>Gives the current VDP VRAM pointer</td>
     </tr>
     <tr>
       <td><code>vdrive</code></td>
@@ -2678,7 +2645,7 @@
   </table>
 
   <div class="note">
-    Note: Autorun is only supported for cassette images in the CAS format.
+    Note: Autorun works practically always for cassette images in the CAS and TSX formats. If that fails or for WAV files, openMSX will try to find a hint of the loading instruction (in upper case) in the filename.
   </div>
 
   <h3><a id="autorunlaserdisc">autorunlaserdisc</a></h3>
@@ -2968,7 +2935,7 @@
     </tr>
   </table>
 
-  <h3><a id="debugoutput">debugoutput</a></h3>
+  <h3><a id="debugoutput">Debug Device output</a></h3>
 
   <p>Selects the file to where the output from the debug device goes.</p>
 
@@ -2980,25 +2947,25 @@
 
   <table>
     <tr>
-      <td><code>set debugoutput</code></td>
+      <td><code>set {Debug Device output}</code></td>
 
       <td>Shows the current output file name</td>
     </tr>
 
     <tr>
-      <td><code>set debugoutput stdout</code></td>
+      <td><code>set {Debug Device output} stdout</code></td>
 
       <td>Writes debug output to openMSX's standard output stream</td>
     </tr>
 
     <tr>
-      <td><code>set debugoutput stderr</code></td>
+      <td><code>set {Debug Device output} stderr</code></td>
 
       <td>Writes debug output to openMSX's standard error stream</td>
     </tr>
 
     <tr>
-      <td><code>set debugoutput &lt;output file&gt;</code></td>
+      <td><code>set {Debug Device output} &lt;output file&gt;</code></td>
 
       <td>Writes debug output to the specified file</td>
     </tr>
@@ -3010,7 +2977,10 @@
 
   <h3><a id="default_machine">default_machine</a></h3>
 
-  <p>Selects the default MSX model. openMSX uses this machine when it is started without the <code>-machine</code> option. This is a typical setting that should be saved, see also <a class="internal" href="#save_settings"><code>save_settings</code></a>.</p>
+  <p>Selects the default MSX model. openMSX uses this machine when it is started without the <code>-machine</code> option and without the <code>-setup</code> option and the <code><a class="internal" href="#default_setup">default_setup</a></code> setting is empty or pointing to a non-existing setup. This is a typical setting that should be saved, see also <a class="internal" href="#save_settings"><code>save_settings</code></a>.</p>
+
+  <p>In the GUI, under <span class="menu-reference">Main menu bar &rarr; Machine
+  &rarr; Setup settings</span> you can also configure what openMSX must do at startup, configuring this setting there.</p>
 
   <div class="subsectiontitle">
     usage:
@@ -3029,6 +2999,35 @@
       <td>Use the turboR GT the next time openMSX is started</td>
     </tr>
   </table>
+
+  <h3><a id="default_setup">default_setup</a></h3>
+
+  <p>Selects the default setup. openMSX uses this setup when it is started without the <code>-setup</code> or <code>-machine</code> option. By default, this setting is empty, because no setups are shipped with openMSX: they have to be created by users, after which this setting can be set to automatically start that setup that got saved earlier. If it is indeed empty or pointing to a non-existing setup, the value for the <code><a class="internal" href="#default_machine">default_machine</a></code> setting is used to determine what to start.</p>
+
+  <p>In the GUI, under <span class="menu-reference">Main menu bar &rarr; Machine
+  &rarr; Setup settings</span> you can also configure what openMSX must do at startup, configuring this setting there.</p>
+
+  <div class="subsectiontitle">
+    usage:
+  </div>
+
+  <table>
+    <tr>
+      <td><code>set default_setup</code></td>
+
+      <td>Shows current setting</td>
+    </tr>
+
+    <tr>
+      <td><code>set default_setup mymsx</code></td>
+
+      <td>Use the <code>mymsx</code> setup the next time openMSX is started without specifying setup or machine</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    If you set this setting to the same value as the <code><a class="internal" href="#save_setup_at_exit_name">save_setup_at_exit_name</a></code> setting and have the <code><a class="internal" href="#save_setup_at_exit_depth">save_setup_at_exit_depth</a></code> setting set to another depth than <code>none</code> , openMSX will automatically continue with the last setup when being started up again (and no other machine or setup is specified).
+  </div>
 
   <h3><a id="DirAsDSKmode">DirAsDSKmode</a></h3>
 
@@ -3373,6 +3372,31 @@
       <td><code>set fullspeedwhenloading off</code></td>
 
       <td>Load at the same speed as a real MSX</td>
+    </tr>
+  </table>
+
+  <h3><a id="full_stretch">full_stretch</a></h3>
+
+  <p>Stretches the image to fill the entire screen when in fullscreen mode. This setting is useful when you want to use the full screen real estate, for example when displaying 4:3 content on a 16:9 monitor, or when you prefer to eliminate any black borders around the image.</p>
+
+  <div class="subsectiontitle">
+    usage:
+  </div>
+
+  <table>
+    <tr>
+      <td><code>set full_stretch</code></td>
+      <td>Shows the current setting</td>
+    </tr>
+
+    <tr>
+      <td><code>set full_stretch on</code></td>
+      <td>Enable full screen stretching</td>
+    </tr>
+
+    <tr>
+      <td><code>set full_stretch off</code></td>
+      <td>Disable full screen stretching</td>
     </tr>
   </table>
 
@@ -4664,12 +4688,6 @@
     </tr>
 
     <tr>
-      <td><code>set resampler fast</code></td>
-
-      <td>Sets a fast, but low quality resampler. This uses simple linear interpolation, which can result in very audible aliasing effects in some cases. Although this is a relatively low quality algorithm, it's the algorithm that was used in pre-0.6.3 openMSX versions (and most other MSX emulators).</td>
-    </tr>
-
-    <tr>
       <td><code>set resampler blip</code></td>
 
       <td>Sets the <a href="http://slack.net/~ant/libs/audio.html#Blip_Buffer">Blip_Buffer</a> based resampler, which has the best quality per CPU usage ratio.</td>
@@ -4883,6 +4901,68 @@
       <td>Disable auto save</td>
     </tr>
   </table>
+
+  <h3><a id="save_setup_at_exit_name">save_setup_at_exit_name</a></h3>
+
+  <p>Specify the setup name to use when automatically saving the setup when exiting openMSX is active. See also the <code><a class="internal" href="#save_setup_at_exit_depth">save_setup_at_exit_depth</a></code> setting.</p>
+
+  <p>In the GUI, under <span class="menu-reference">Main menu bar &rarr; Machine
+  &rarr; Setup settings</span> you can also configure what openMSX must do at startup, configuring this setting there.</p>
+
+  <div class="subsectiontitle">
+    usage:
+  </div>
+
+  <table>
+    <tr>
+      <td><code>set save_setup_at_exit_name</code></td>
+
+      <td>Show current setting</td>
+    </tr>
+
+    <tr>
+      <td><code>set save_setup_at_exit_name last_used</code></td>
+
+      <td>Set the setup name to be used for auto-save at exit to <code>last_used</code></td>
+    </tr>
+
+  </table>
+
+  <h3><a id="save_setup_at_exit_depth">save_setup_at_exit_depth</a></h3>
+
+  <p>Specify the depth to use when automatically saving the setup when exiting openMSX. If the depth is set to <code>none</code> (which is the default), the auto-save is not active, but otherwise the setup will be saved under the name specified by the <code><a class="internal" href="#save_setup_at_exit_name">save_setup_at_exit_name</a></code> setting. See also the <code><a class="internal" href="#store_setup">store_setup</a></code> command to find out about other depths that can be specified.</p>
+
+  <p>In the GUI, under <span class="menu-reference">Main menu bar &rarr; Machine
+  &rarr; Setup settings</span> you can also configure what openMSX must do at startup, configuring this setting there.</p>
+
+  <div class="subsectiontitle">
+    usage:
+  </div>
+
+  <table>
+    <tr>
+      <td><code>set save_setup_at_exit_depth</code></td>
+
+      <td>Show current setting</td>
+    </tr>
+
+    <tr>
+      <td><code>set save_setup_at_exit_depth extensions</code></td>
+
+      <td>When openMSX exits, the current setup is saved including all extensions in the machine.</td>
+    </tr>
+
+    <tr>
+      <td><code>set save_setup_at_exit_depth complete_state</code></td>
+
+      <td>When openMSX exits, the complete state is saved into the setup.</td>
+    </tr>
+
+  </table>
+
+  <div class="note">
+    If you enable this auto save of the setup and use the same name as for the <code><a class="internal" href="#default_setup">default_setup</a></code> setting, openMSX will automatically continue with the last setup when being started up again (and no other machine or setup is specified).
+  </div>
 
   <h3><a id="scale_algorithm">scale_algorithm</a></h3>
 
@@ -5405,7 +5485,7 @@
     Video 9000 is available), <code>GFX9000</code> (V9990),
     <code>Video9000</code> (V9990 superimposed on top of V99x8, default if
     available) and <code>Laserdisc</code> (for Palcom machines). There can be
-    even more video sources, e.g. offered by cartridges with a built in VDP such as the Neos MA-20(V).
+    even more video sources, e.g. offered by cartridges with a built-in VDP such as the Neos MA-20(V).
   </p>
 
   <div class="subsectiontitle">

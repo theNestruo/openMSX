@@ -3,19 +3,20 @@
 
 #include "RS232Device.hh"
 
-#include "EventListener.hh"
-#include "StringSetting.hh"
 #include "BooleanSetting.hh"
+#include "EventListener.hh"
 #include "Socket.hh"
+#include "StringSetting.hh"
 
 #include "Poller.hh"
 #include "circular_buffer.hh"
 
 #include <atomic>
+#include <cstdint>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <thread>
-#include <cstdint>
 
 namespace openmsx {
 
@@ -43,23 +44,23 @@ public:
 	~RS232Net() override;
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// input
-	void signal(EmuTime::param time) override;
+	void signal(EmuTime time) override;
 
 	// output
-	void recvByte(uint8_t value, EmuTime::param time) override;
+	void recvByte(uint8_t value, EmuTime time) override;
 
-	[[nodiscard]] std::optional<bool> getDSR(EmuTime::param time) const override;
-	[[nodiscard]] std::optional<bool> getCTS(EmuTime::param time) const override;
-	[[nodiscard]] std::optional<bool> getDCD(EmuTime::param time) const override;
-	[[nodiscard]] std::optional<bool> getRI(EmuTime::param time) const override;
-	void setDTR(bool status, EmuTime::param time) override;
-	void setRTS(bool status, EmuTime::param time) override;
+	[[nodiscard]] std::optional<bool> getDSR(EmuTime time) const override;
+	[[nodiscard]] std::optional<bool> getCTS(EmuTime time) const override;
+	[[nodiscard]] std::optional<bool> getDCD(EmuTime time) const override;
+	[[nodiscard]] std::optional<bool> getRI(EmuTime time) const override;
+	void setDTR(bool status, EmuTime time) override;
+	void setRTS(bool status, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -85,7 +86,7 @@ private:
 
 	std::thread thread; // receiving thread (reads from 'sockfd')
 	std::mutex mutex; // to protect shared data between emulation and receiving thread
-	Poller poller; // safe to use from main and receiver thread without extra locking
+	std::optional<Poller> poller; // safe to use from main and receiver thread without extra locking
 	cb_queue<char> queue; // read/written by both the main and the receiver thread. Must hold 'mutex' while doing so.
 	std::atomic<SOCKET> sockfd; // read/written by both threads (use std::atomic as an alternative for locking)
 

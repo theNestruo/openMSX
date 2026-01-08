@@ -1,8 +1,12 @@
 #include "RS232Connector.hh"
-#include "RS232Device.hh"
+
 #include "DummyRS232Device.hh"
-#include "checked_cast.hh"
+#include "RS232Device.hh"
+
 #include "serialize.hh"
+
+#include "checked_cast.hh"
+
 #include <memory>
 
 namespace openmsx {
@@ -14,12 +18,12 @@ RS232Connector::RS232Connector(PluggingController& pluggingController_,
 {
 }
 
-std::string_view RS232Connector::getDescription() const
+zstring_view RS232Connector::getDescription() const
 {
 	return "Serial RS232 connector";
 }
 
-std::string_view RS232Connector::getClass() const
+zstring_view RS232Connector::getClass() const
 {
 	return "RS232";
 }

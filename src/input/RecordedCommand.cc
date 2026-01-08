@@ -1,15 +1,17 @@
 #include "RecordedCommand.hh"
-#include "StateChangeDistributor.hh"
-#include "TclObject.hh"
+
 #include "Scheduler.hh"
 #include "StateChange.hh"
+#include "StateChangeDistributor.hh"
+#include "TclObject.hh"
+
 #include "ScopedAssign.hh"
 #include "dynarray.hh"
 #include "serialize.hh"
 #include "serialize_stl.hh"
 #include "stl.hh"
-#include "view.hh"
-#include "xrange.hh"
+
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -79,7 +81,7 @@ void RecordedCommand::signalStateChange(const StateChange& event)
 	}
 }
 
-void RecordedCommand::stopReplay(EmuTime::param /*time*/) noexcept
+void RecordedCommand::stopReplay(EmuTime /*time*/) noexcept
 {
 	// nothing
 }
@@ -87,7 +89,7 @@ void RecordedCommand::stopReplay(EmuTime::param /*time*/) noexcept
 
 // class MSXCommandEvent
 
-MSXCommandEvent::MSXCommandEvent(EmuTime::param time_, std::span<const TclObject> tokens_)
+MSXCommandEvent::MSXCommandEvent(EmuTime time_, std::span<const TclObject> tokens_)
 	: StateChange(time_)
 	, tokens(dynarray<TclObject>::construct_from_range_tag{}, tokens_)
 {
@@ -101,14 +103,14 @@ void MSXCommandEvent::serialize(Archive& ar, unsigned /*version*/)
 	// serialize vector<TclObject> as vector<string>
 	std::vector<std::string> str;
 	if constexpr (!Archive::IS_LOADER) {
-		str = to_vector(view::transform(
+		str = to_vector(std::views::transform(
 			tokens, [](auto& t) { return std::string(t.getString()); }));
 	}
 	ar.serialize("tokens", str);
 	if constexpr (Archive::IS_LOADER) {
 		assert(tokens.empty());
 		tokens = dynarray<TclObject>(dynarray<TclObject>::construct_from_range_tag{},
-		                             view::transform(str, [](const auto& s) { return TclObject(s); }));
+		                             std::views::transform(str, [](const auto& s) { return TclObject(s); }));
 	}
 }
 REGISTER_POLYMORPHIC_CLASS(StateChange, MSXCommandEvent, "MSXCommandEvent");

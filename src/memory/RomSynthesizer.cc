@@ -34,19 +34,19 @@ RomSynthesizer::RomSynthesizer(const DeviceConfig& config, Rom&& rom_)
 	reset(getCurrentTime());
 }
 
-void RomSynthesizer::reset(EmuTime::param time)
+void RomSynthesizer::reset(EmuTime time)
 {
 	dac.reset(time);
 }
 
-void RomSynthesizer::writeMem(word address, byte value, EmuTime::param time)
+void RomSynthesizer::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if ((address & 0xC010) == 0x4000) {
 		dac.writeDAC(value, time);
 	}
 }
 
-byte* RomSynthesizer::getWriteCacheLine(word address)
+byte* RomSynthesizer::getWriteCacheLine(uint16_t address)
 {
 	if ((address & 0xC010 & CacheLine::HIGH) == 0x4000) {
 		return nullptr;

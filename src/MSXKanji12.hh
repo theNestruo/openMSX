@@ -10,15 +10,15 @@ namespace openmsx {
 class MSXKanji12 final : public MSXDevice, public MSXSwitchedDevice
 {
 public:
-	explicit MSXKanji12(const DeviceConfig& config);
+	explicit MSXKanji12(DeviceConfig& config);
 
 	// MSXDevice
-	void reset(EmuTime::param time) override;
+	void reset(EmuTime time) override;
 
 	// MSXSwitchedDevice
-	[[nodiscard]] byte readSwitchedIO(word port, EmuTime::param time) override;
-	[[nodiscard]] byte peekSwitchedIO(word port, EmuTime::param time) const override;
-	void writeSwitchedIO(word port, byte value, EmuTime::param time) override;
+	[[nodiscard]] byte readSwitchedIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] byte peekSwitchedIO(uint16_t port, EmuTime time) const override;
+	void writeSwitchedIO(uint16_t port, byte value, EmuTime time) override;
 
 	void getExtraDeviceInfo(TclObject& result) const override;
 

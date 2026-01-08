@@ -1,31 +1,45 @@
 #include "CassettePort.hh"
+
 #include "CassetteDevice.hh"
 #include "CassettePlayer.hh"
+#include "DummyCassetteDevice.hh"
+
+#include "HardwareConfig.hh"
+#include "MSXMotherBoard.hh"
+#include "PluggingController.hh"
+#include "serialize.hh"
+
+#include "checked_cast.hh"
+
 #include "components.hh"
 #if COMPONENT_LASERDISC
 #include "LaserdiscPlayer.hh"
 #endif
-#include "DummyCassetteDevice.hh"
-#include "HardwareConfig.hh"
-#include "MSXMotherBoard.hh"
-#include "PluggingController.hh"
-#include "checked_cast.hh"
-#include "serialize.hh"
+
 #include <memory>
 
 namespace openmsx {
 
 // DummyCassettePort
 
-void DummyCassettePort::setMotor(bool /*status*/, EmuTime::param /*time*/)
+DummyCassettePort::DummyCassettePort(MSXMotherBoard& motherBoard)
+	: cassettePlayerCommand(
+		nullptr,
+		motherBoard.getCommandController(),
+		motherBoard.getStateChangeDistributor(),
+		motherBoard.getScheduler())
+{
+}
+
+void DummyCassettePort::setMotor(bool /*status*/, EmuTime /*time*/)
 {
 	// do nothing
 }
-void DummyCassettePort::cassetteOut(bool /*output*/, EmuTime::param /*time*/)
+void DummyCassettePort::cassetteOut(bool /*output*/, EmuTime /*time*/)
 {
 	// do nothing
 }
-bool DummyCassettePort::cassetteIn(EmuTime::param /*time*/)
+bool DummyCassettePort::cassetteIn(EmuTime /*time*/)
 {
 	return false;
 }
@@ -43,7 +57,7 @@ void DummyCassettePort::setLaserdiscPlayer(LaserdiscPlayer* /* laserdisc */)
 
 // CassettePort
 
-CassettePort::CassettePort(const HardwareConfig& hwConf)
+CassettePort::CassettePort(HardwareConfig& hwConf)
 	: Connector(hwConf.getMotherBoard().getPluggingController(), "cassetteport",
 	            std::make_unique<DummyCassetteDevice>())
 	, motherBoard(hwConf.getMotherBoard())
@@ -59,14 +73,14 @@ CassettePort::~CassettePort()
 }
 
 
-void CassettePort::setMotor(bool status, EmuTime::param time)
+void CassettePort::setMotor(bool status, EmuTime time)
 {
 	// TODO make 'click' sound
 	motorControl = status;
 	getPluggedCasDev().setMotor(status, time);
 }
 
-void CassettePort::cassetteOut(bool output, EmuTime::param time)
+void CassettePort::cassetteOut(bool output, EmuTime time)
 {
 	lastOutput = output;
 	// leave everything to the pluggable
@@ -78,7 +92,7 @@ bool CassettePort::lastOut() const
 	return lastOutput;
 }
 
-bool CassettePort::cassetteIn(EmuTime::param time)
+bool CassettePort::cassetteIn(EmuTime time)
 {
 	// All analog filtering is ignored for now
 	//   only important component is DC-removal
@@ -101,12 +115,12 @@ void CassettePort::setLaserdiscPlayer(LaserdiscPlayer *laserdiscPlayer_)
 }
 #endif
 
-std::string_view CassettePort::getDescription() const
+zstring_view CassettePort::getDescription() const
 {
 	return "MSX Cassette port";
 }
 
-std::string_view CassettePort::getClass() const
+zstring_view CassettePort::getClass() const
 {
 	return "Cassette Port";
 }

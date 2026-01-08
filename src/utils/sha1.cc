@@ -26,6 +26,7 @@ A million repetitions of "a"
 #include "narrow.hh"
 #include "ranges.hh"
 
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <cstring>
@@ -130,7 +131,7 @@ Sha1Sum::Sha1Sum(std::string_view hex)
 
 #else
 
-[[nodiscard]] static /*constexpr*/ unsigned hex(char x, const char* str)
+[[nodiscard]] static constexpr unsigned hex(char x, const char* str)
 {
 	if (('0' <= x) && (x <= '9')) return x - '0';
 	if (('a' <= x) && (x <= 'f')) return x - 'a' + 10;
@@ -231,25 +232,23 @@ void Sha1Sum::parse40(std::span<const char, 40> str)
 {
 	return narrow<char>((x < 10) ? (x + '0') : (x - 10 + 'a'));
 }
-std::string Sha1Sum::toString() const
+void Sha1Sum::toBuffer(std::span<char, 40> buf) const
 {
-	std::array<char, 40> buf;
 	size_t i = 0;
 	for (const auto& ai : a) {
 		for (int j = 28; j >= 0; j -= 4) {
 			buf[i++] = digit((ai >> j) & 0xf);
 		}
 	}
-	return {buf.data(), buf.size()};
 }
 
 bool Sha1Sum::empty() const
 {
-	return ranges::all_of(a, [](auto& e) { return e == 0; });
+	return std::ranges::all_of(a, [](auto& e) { return e == 0; });
 }
 void Sha1Sum::clear()
 {
-	ranges::fill(a, 0);
+	std::ranges::fill(a, 0);
 }
 
 
@@ -325,7 +324,7 @@ void SHA1::update(std::span<const uint8_t> data)
 	size_t i;
 	if ((j + len) > 63) {
 		i = 64 - j;
-		ranges::copy(data.subspan(0, i), subspan(m_buffer, j));
+		copy_to_range(data.subspan(0, i), subspan(m_buffer, j));
 		transform(m_buffer);
 		for (/**/; i + 63 < len; i += 64) {
 			transform(subspan<64>(data, i));
@@ -334,7 +333,7 @@ void SHA1::update(std::span<const uint8_t> data)
 	} else {
 		i = 0;
 	}
-	ranges::copy(data.subspan(i, len - i), subspan(m_buffer, j));
+	copy_to_range(data.subspan(i, len - i), subspan(m_buffer, j));
 }
 
 void SHA1::finalize()
@@ -344,11 +343,11 @@ void SHA1::finalize()
 	uint32_t j = m_count & 63;
 	m_buffer[j++] = 0x80;
 	if (j > 56) {
-		ranges::fill(subspan(m_buffer, j, 64 - j), 0);
+		std::ranges::fill(subspan(m_buffer, j, 64 - j), 0);
 		transform(m_buffer);
 		j = 0;
 	}
-	ranges::fill(subspan(m_buffer, j, 56 - j), 0);
+	std::ranges::fill(subspan(m_buffer, j, 56 - j), 0);
 	Endian::B64 finalCount(8 * m_count); // convert number of bytes to bits
 	memcpy(&m_buffer[56], &finalCount, 8);
 	transform(m_buffer);

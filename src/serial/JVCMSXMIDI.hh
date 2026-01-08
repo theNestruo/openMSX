@@ -1,8 +1,9 @@
 #ifndef JVCMSXMIDI_HH
 #define JVCMSXMIDI_HH
 
-#include "MSXDevice.hh"
 #include "MC6850.hh"
+
+#include "MSXDevice.hh"
 
 namespace openmsx {
 
@@ -12,10 +13,10 @@ public:
 	explicit JVCMSXMIDI(const DeviceConfig& config);
 
 	// MSXDevice
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readIO(word port, EmuTime::param time) override;
-	[[nodiscard]] byte peekIO(word port, EmuTime::param time) const override;
-	void writeIO(word port, byte value, EmuTime::param time) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] uint8_t readIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] uint8_t peekIO(uint16_t port, EmuTime time) const override;
+	void writeIO(uint16_t port, uint8_t value, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

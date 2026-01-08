@@ -1,8 +1,11 @@
 #include "ADVram.hh"
+
 #include "VDP.hh"
 #include "VDPVRAM.hh"
+
 #include "MSXException.hh"
 #include "serialize.hh"
+
 #include <algorithm>
 
 namespace openmsx {
@@ -32,7 +35,7 @@ void ADVram::init()
 	mask = std::min(vram->getSize(), 128u * 1024) - 1;
 }
 
-void ADVram::reset(EmuTime::param /*time*/)
+void ADVram::reset(EmuTime /*time*/)
 {
 	// TODO figure out exactly what happens during reset
 	baseAddr = 0;
@@ -40,7 +43,7 @@ void ADVram::reset(EmuTime::param /*time*/)
 	enabled = !hasEnable;
 }
 
-byte ADVram::readIO(word port, EmuTime::param /*time*/)
+uint8_t ADVram::readIO(uint16_t port, EmuTime /*time*/)
 {
 	// ADVram only gets 'read's from 0x9A
 	if (hasEnable) {
@@ -52,13 +55,13 @@ byte ADVram::readIO(word port, EmuTime::param /*time*/)
 	return 0xFF;
 }
 
-void ADVram::writeIO(word /*port*/, byte value, EmuTime::param /*time*/)
+void ADVram::writeIO(uint16_t /*port*/, uint8_t value, EmuTime /*time*/)
 {
 	// set mapper register
 	baseAddr = (value & 0x07) << 14;
 }
 
-unsigned ADVram::calcAddress(word address) const
+unsigned ADVram::calcAddress(uint16_t address) const
 {
 	unsigned addr = (address & 0x3FFF) | baseAddr;
 	if (planar) {
@@ -67,12 +70,12 @@ unsigned ADVram::calcAddress(word address) const
 	return addr & mask;
 }
 
-byte ADVram::readMem(word address, EmuTime::param time)
+uint8_t ADVram::readMem(uint16_t address, EmuTime time)
 {
 	return enabled ? vram->cpuRead(calcAddress(address), time) : 0xFF;
 }
 
-void ADVram::writeMem(word address, byte value, EmuTime::param time)
+void ADVram::writeMem(uint16_t address, uint8_t value, EmuTime time)
 {
 	if (enabled) {
 		vram->cpuWrite(calcAddress(address), value, time);

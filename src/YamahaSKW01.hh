@@ -1,10 +1,11 @@
 #ifndef YAMAHASKW01_HH
 #define YAMAHASKW01_HH
 
-#include "MSXDevice.hh"
 #include "Connector.hh"
-#include "SRAM.hh"
+#include "MSXDevice.hh"
 #include "Rom.hh"
+#include "SRAM.hh"
+
 #include <array>
 #include <optional>
 
@@ -18,15 +19,15 @@ public:
 	YamahaSKW01PrinterPort(PluggingController& pluggingController, const std::string& name);
 
 	// printer port functionality
-	void reset(EmuTime::param time);
-	[[nodiscard]] bool getStatus(EmuTime::param time) const;
-	void setStrobe(bool newStrobe, EmuTime::param time);
-	void writeData(uint8_t newData, EmuTime::param time);
+	void reset(EmuTime time);
+	[[nodiscard]] bool getStatus(EmuTime time) const;
+	void setStrobe(bool newStrobe, EmuTime time);
+	void writeData(uint8_t newData, EmuTime time);
 
 	// Connector
-	[[nodiscard]] std::string_view getDescription() const override;
-	[[nodiscard]] std::string_view getClass() const override;
-	void plug(Pluggable& dev, EmuTime::param time) override;
+	[[nodiscard]] zstring_view getDescription() const override;
+	[[nodiscard]] zstring_view getClass() const override;
+	void plug(Pluggable& dev, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -43,16 +44,16 @@ private:
 class YamahaSKW01 final : public MSXDevice
 {
 public:
-	explicit YamahaSKW01(const DeviceConfig& config);
+	explicit YamahaSKW01(DeviceConfig& config);
 
 	// MSXDevice
-	void reset(EmuTime::param time) override;
+	void reset(EmuTime time) override;
 
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word start) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word start) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t start) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t start) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

@@ -1,10 +1,13 @@
 #include "I8254.hh"
+
 #include "EmuTime.hh"
+#include "serialize.hh"
+
 #include "enumerate.hh"
 #include "one_of.hh"
-#include "serialize.hh"
 #include "stl.hh"
 #include "unreachable.hh"
+
 #include <cassert>
 
 namespace openmsx {
@@ -21,7 +24,7 @@ static constexpr uint8_t RB_COUNT  = 0x20;
 
 I8254::I8254(Scheduler& scheduler, ClockPinListener* output0,
              ClockPinListener* output1, ClockPinListener* output2,
-             EmuTime::param time)
+             EmuTime time)
 	: counter(generate_array<3>([&](auto i) {
 		auto* output = (i == 0) ? output0
 		             : (i == 1) ? output1
@@ -31,14 +34,14 @@ I8254::I8254(Scheduler& scheduler, ClockPinListener* output0,
 {
 }
 
-void I8254::reset(EmuTime::param time)
+void I8254::reset(EmuTime time)
 {
 	for (auto& c : counter) {
 		c.reset(time);
 	}
 }
 
-uint8_t I8254::readIO(uint16_t port, EmuTime::param time)
+uint8_t I8254::readIO(uint16_t port, EmuTime time)
 {
 	port &= 3;
 	switch (port) {
@@ -51,7 +54,7 @@ uint8_t I8254::readIO(uint16_t port, EmuTime::param time)
 	}
 }
 
-uint8_t I8254::peekIO(uint16_t port, EmuTime::param time) const
+uint8_t I8254::peekIO(uint16_t port, EmuTime time) const
 {
 	port &= 3;
 	switch (port) {
@@ -64,7 +67,7 @@ uint8_t I8254::peekIO(uint16_t port, EmuTime::param time) const
 	}
 }
 
-void I8254::writeIO(uint16_t port, uint8_t value, EmuTime::param time)
+void I8254::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	port &= 3;
 	switch (port) {
@@ -95,7 +98,7 @@ void I8254::writeIO(uint16_t port, uint8_t value, EmuTime::param time)
 	}
 }
 
-void I8254::readBackHelper(uint8_t value, unsigned cntr, EmuTime::param time)
+void I8254::readBackHelper(uint8_t value, unsigned cntr, EmuTime time)
 {
 	assert(cntr < 3);
 	if (!(value & RB_STATUS)) {
@@ -106,7 +109,7 @@ void I8254::readBackHelper(uint8_t value, unsigned cntr, EmuTime::param time)
 	}
 }
 
-void I8254::setGate(unsigned cntr, bool status, EmuTime::param time)
+void I8254::setGate(unsigned cntr, bool status, EmuTime time)
 {
 	assert(cntr < 3);
 	counter[cntr].setGateStatus(status, time);
@@ -128,14 +131,14 @@ ClockPin& I8254::getOutputPin(unsigned cntr)
 // class Counter
 
 Counter::Counter(Scheduler& scheduler, ClockPinListener* listener,
-                 EmuTime::param time)
+                 EmuTime time)
 	: clock(scheduler), output(scheduler, listener)
 	, currentTime(time)
 {
 	reset(time);
 }
 
-void Counter::reset(EmuTime::param time)
+void Counter::reset(EmuTime time)
 {
 	currentTime = time;
 	ltchCtrl = false;
@@ -153,7 +156,7 @@ void Counter::reset(EmuTime::param time)
 	writeLatch = 0;
 }
 
-uint8_t Counter::readIO(EmuTime::param time)
+uint8_t Counter::readIO(EmuTime time)
 {
 	if (ltchCtrl) {
 		ltchCtrl = false;
@@ -163,7 +166,7 @@ uint8_t Counter::readIO(EmuTime::param time)
 	uint16_t readData = ltchCntr ? latchedCounter : narrow_cast<uint16_t>(counter);
 	switch (control & WRT_FRMT) {
 	case WF_LATCH:
-		UNREACHABLE;
+		UNREACHABLE; break;
 	case WF_LOW:
 		ltchCntr = false;
 		return narrow_cast<uint8_t>(readData & 0x00FF);
@@ -184,7 +187,7 @@ uint8_t Counter::readIO(EmuTime::param time)
 	}
 }
 
-uint8_t Counter::peekIO(EmuTime::param time) const
+uint8_t Counter::peekIO(EmuTime time) const
 {
 	if (ltchCtrl) {
 		return latchedControl;
@@ -195,7 +198,7 @@ uint8_t Counter::peekIO(EmuTime::param time) const
 	uint16_t readData = ltchCntr ? latchedCounter : narrow_cast<uint16_t>(counter);
 	switch (control & WRT_FRMT) {
 	case WF_LATCH:
-		UNREACHABLE;
+		UNREACHABLE; break;
 	case WF_LOW:
 		return narrow_cast<uint8_t>(readData & 0x00FF);
 	case WF_HIGH:
@@ -211,12 +214,12 @@ uint8_t Counter::peekIO(EmuTime::param time) const
 	}
 }
 
-void Counter::writeIO(uint8_t value, EmuTime::param time)
+void Counter::writeIO(uint8_t value, EmuTime time)
 {
 	advance(time);
 	switch (control & WRT_FRMT) {
 	case WF_LATCH:
-		UNREACHABLE;
+		UNREACHABLE; break;
 	case WF_LOW:
 		writeLoad((counterLoad & 0xFF00) | uint16_t(value << 0), time);
 		break;
@@ -240,7 +243,7 @@ void Counter::writeIO(uint8_t value, EmuTime::param time)
 		UNREACHABLE;
 	}
 }
-void Counter::writeLoad(uint16_t value, EmuTime::param time)
+void Counter::writeLoad(uint16_t value, EmuTime time)
 {
 	counterLoad = value;
 	uint8_t mode = control & CNTR_MODE;
@@ -276,7 +279,7 @@ void Counter::writeLoad(uint16_t value, EmuTime::param time)
 	active = true; // counter is (re)armed after counter is initialized
 }
 
-void Counter::writeControlWord(uint8_t value, EmuTime::param time)
+void Counter::writeControlWord(uint8_t value, EmuTime time)
 {
 	advance(time);
 	if ((value & WRT_FRMT) == 0) {
@@ -307,7 +310,7 @@ void Counter::writeControlWord(uint8_t value, EmuTime::param time)
 	}
 }
 
-void Counter::latchStatus(EmuTime::param time)
+void Counter::latchStatus(EmuTime time)
 {
 	advance(time);
 	if (!ltchCtrl) {
@@ -317,7 +320,7 @@ void Counter::latchStatus(EmuTime::param time)
 	}
 }
 
-void Counter::latchCounter(EmuTime::param time)
+void Counter::latchCounter(EmuTime time)
 {
 	advance(time);
 	if (!ltchCntr) {
@@ -327,7 +330,7 @@ void Counter::latchCounter(EmuTime::param time)
 	}
 }
 
-void Counter::setGateStatus(bool newStatus, EmuTime::param time)
+void Counter::setGateStatus(bool newStatus, EmuTime time)
 {
 	advance(time);
 	if (gate != newStatus) {
@@ -351,7 +354,7 @@ void Counter::setGateStatus(bool newStatus, EmuTime::param time)
 			if (gate) {
 				if (clock.isPeriodic()) {
 					counter = counterLoad;
-					EmuDuration::param high = clock.getTotalDuration();
+					EmuDuration high = clock.getTotalDuration();
 					EmuDuration total = high * counter;
 					output.setPeriodicState(total, high, time);
 				} else {
@@ -374,7 +377,7 @@ void Counter::setGateStatus(bool newStatus, EmuTime::param time)
 	}
 }
 
-void Counter::advance(EmuTime::param time)
+void Counter::advance(EmuTime time)
 {
 	// TODO !!!! Set SP !!!!
 	// TODO BCD counting
@@ -461,10 +464,10 @@ void Counter::advance(EmuTime::param time)
 }
 
 
-static constexpr std::initializer_list<enum_string<Counter::ByteOrder>> byteOrderInfo = {
+static constexpr auto byteOrderInfo = std::to_array<enum_string<Counter::ByteOrder>>({
 	{ "LOW",  Counter::ByteOrder::LOW  },
-	{ "HIGH", Counter::ByteOrder::HIGH }
-};
+	{ "HIGH", Counter::ByteOrder::HIGH },
+});
 SERIALIZE_ENUM(Counter::ByteOrder, byteOrderInfo);
 
 template<typename Archive>

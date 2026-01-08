@@ -1,12 +1,12 @@
 #ifndef TCLOBJECT_HH
 #define TCLOBJECT_HH
 
+#include "tcl.hh"
+
 #include "narrow.hh"
-#include "vla.hh"
+#include "small_buffer.hh"
 #include "xxhash.hh"
 #include "zstring_view.hh"
-
-#include <tcl.h>
 
 #include <algorithm>
 #include <cassert>
@@ -14,6 +14,7 @@
 #include <initializer_list>
 #include <iterator>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string_view>
 
@@ -34,7 +35,7 @@ class TclObject
 		using iterator_category = std::bidirectional_iterator_tag;
 
 		iterator() : obj(nullptr), i(0) {}
-		iterator(const TclObject& obj_, unsigned i_)
+		iterator(const TclObject& obj_, size_t i_)
 			: obj(&obj_), i(i_) {}
 
 		[[nodiscard]] bool operator==(const iterator& other) const {
@@ -44,6 +45,10 @@ class TclObject
 
 		[[nodiscard]] zstring_view operator*() const {
 			return obj->getListIndexUnchecked(i).getString();
+		}
+
+		[[nodiscard]] zstring_view operator[](int o) const {
+			return obj->getListIndexUnchecked(i + o).getString();
 		}
 
 		iterator& operator++() {
@@ -66,26 +71,26 @@ class TclObject
 		}
 	private:
 		const TclObject* obj;
-		unsigned i;
+		size_t i;
 	};
 	static_assert(std::bidirectional_iterator<iterator>);
 
 public:
-	TclObject()                                  { init(Tcl_NewObj()); }
-	explicit TclObject(Tcl_Obj* o)               { init(o); }
-	template<typename T> explicit TclObject(T t) { init(newObj(t)); }
-	TclObject(const TclObject&  o)               { init(newObj(o)); }
-	TclObject(      TclObject&& o) noexcept      { init(newObj(o)); }
+	TclObject()                                    { init(Tcl_NewObj()); }
+	explicit TclObject(Tcl_Obj* o)                 { init(o); }
+	template<typename T> explicit TclObject(T&& t) { init(newObj(std::forward<T>(t))); }
+	TclObject(const TclObject&  o)                 { init(newObj(o)); }
+	TclObject(      TclObject&& o) noexcept        { init(newObj(o)); }
 
 	struct MakeListTag {};
 	template<typename... Args>
-	TclObject(MakeListTag, Args&&... args) {
+	explicit TclObject(MakeListTag, Args&&... args) {
 		init(newList({newObj(std::forward<Args>(args))...}));
 	}
 
 	struct MakeDictTag {};
 	template<typename... Args>
-	TclObject(MakeDictTag, Args&&... args) {
+	explicit TclObject(MakeDictTag, Args&&... args) {
 		init(Tcl_NewDictObj());
 		addDictKeyValues(std::forward<Args>(args)...);
 	}
@@ -129,12 +134,13 @@ public:
 
 	// add elements to a Tcl list
 	template<typename T> void addListElement(const T& t) { addListElement(newObj(t)); }
-	template<typename ITER> void addListElements(ITER first, ITER last) {
-		addListElementsImpl(first, last,
-		                typename std::iterator_traits<ITER>::iterator_category());
+
+	template<std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
+	void addListElements(Iterator first, Sentinel last) {
+		addListElementsImpl(first, last);
 	}
-	template<typename Range> void addListElements(Range&& range) {
-		addListElements(std::begin(range), std::end(range));
+	template<std::ranges::input_range Range> void addListElements(Range&& range) {
+		addListElements(std::ranges::begin(range), std::ranges::end(range));
 	}
 	template<typename... Args> void addListElement(Args&&... args) {
 		addListElementsImpl({newObj(std::forward<Args>(args))...});
@@ -152,14 +158,15 @@ public:
 	// value getters
 	[[nodiscard]] zstring_view getString() const;
 	[[nodiscard]] int getInt      (Interpreter& interp) const;
+	[[nodiscard]] int64_t getInt64(Interpreter& interp) const;
 	[[nodiscard]] bool getBoolean (Interpreter& interp) const;
 	[[nodiscard]] float  getFloat (Interpreter& interp) const;
 	[[nodiscard]] double getDouble(Interpreter& interp) const;
 	[[nodiscard]] std::span<const uint8_t> getBinary() const;
-	[[nodiscard]] unsigned getListLength(Interpreter& interp) const;
-	[[nodiscard]] TclObject getListIndex(Interpreter& interp, unsigned index) const;
-	[[nodiscard]] TclObject getListIndexUnchecked(unsigned index) const;
-	void removeListIndex(Interpreter& interp, unsigned index);
+	[[nodiscard]] size_t getListLength(Interpreter& interp) const;
+	[[nodiscard]] TclObject getListIndex(Interpreter& interp, size_t index) const;
+	[[nodiscard]] TclObject getListIndexUnchecked(size_t index) const;
+	void removeListIndex(Interpreter& interp, size_t index);
 	void setDictValue(Interpreter& interp, const TclObject& key, const TclObject& value);
 	[[nodiscard]] TclObject getDictValue(Interpreter& interp, const TclObject& key) const;
 	template<typename Key>
@@ -168,13 +175,14 @@ public:
 	}
 	[[nodiscard]] std::optional<TclObject> getOptionalDictValue(const TclObject& key) const;
 	[[nodiscard]] std::optional<int> getOptionalInt() const;
+	[[nodiscard]] std::optional<int64_t> getOptionalInt64() const;
 	[[nodiscard]] std::optional<bool> getOptionalBool() const;
 	[[nodiscard]] std::optional<double> getOptionalDouble() const;
 	[[nodiscard]] std::optional<float> getOptionalFloat() const;
 
 	// STL-like interface when interpreting this TclObject as a list of
 	// strings. Invalid Tcl lists are silently interpreted as empty lists.
-	[[nodiscard]] unsigned size() const { return getListLengthUnchecked(); }
+	[[nodiscard]] size_t size() const { return getListLengthUnchecked(); }
 	[[nodiscard]] bool empty() const { return size() == 0; }
 	[[nodiscard]] iterator begin() const { return {*this, 0}; }
 	[[nodiscard]] iterator end()   const { return {*this, size()}; }
@@ -220,6 +228,12 @@ private:
 	[[nodiscard]] static Tcl_Obj* newObj(unsigned u) {
 		return Tcl_NewIntObj(narrow_cast<int>(u));
 	}
+	[[nodiscard]] static Tcl_Obj* newObj(int64_t i) {
+		return Tcl_NewWideIntObj(Tcl_WideInt(i));
+	}
+	[[nodiscard]] static Tcl_Obj* newObj(uint64_t u) {
+		return Tcl_NewWideIntObj(Tcl_WideInt(u));
+	}
 	[[nodiscard]] static Tcl_Obj* newObj(float f) {
 		return Tcl_NewDoubleObj(double(f));
 	}
@@ -251,6 +265,12 @@ private:
 	void assign(unsigned u) {
 		Tcl_SetIntObj(obj, narrow_cast<int>(u));
 	}
+	void assign(int64_t i) {
+		Tcl_SetWideIntObj(obj, Tcl_WideInt(i));
+	}
+	void assign(uint64_t u) {
+		Tcl_SetWideIntObj(obj, Tcl_WideInt(u));
+	}
 	void assign(float f) {
 		Tcl_SetDoubleObj(obj, double(f));
 	}
@@ -261,26 +281,24 @@ private:
 		Tcl_SetByteArrayObj(obj, b.data(), int(b.size()));
 	}
 
-	template<typename ITER>
-	void addListElementsImpl(ITER first, ITER last, std::input_iterator_tag) {
-		for (ITER it = first; it != last; ++it) {
+	template<std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
+	void addListElementsImpl(Iterator first, Sentinel last) {
+		for (auto it = first; it != last; ++it) {
 			addListElement(*it);
 		}
 	}
-	template<typename ITER>
-	void addListElementsImpl(ITER first, ITER last, std::random_access_iterator_tag) {
-		auto objc = last - first;
-		if (objc == 0) return; // because 0-length VLAs are not allowed (but gcc/clang allow it as an extension)
-		VLA(Tcl_Obj*, objv, objc);
-		std::transform(first, last, objv.data(), [](const auto& t) { return newObj(t); });
-		addListElementsImpl(narrow<int>(objc), objv.data());
+	template<std::random_access_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
+	void addListElementsImpl(Iterator first, Sentinel last) {
+		small_buffer<Tcl_Obj*, 128> objv(std::views::transform(std::ranges::subrange(first, last),
+			[](const auto& t) { return newObj(t); }));
+		addListElementsImpl(narrow<int>(objv.size()), objv.data());
 	}
 
 	void addListElement(Tcl_Obj* element);
 	void addListElementsImpl(int objc, Tcl_Obj* const* objv);
 	void addListElementsImpl(std::initializer_list<Tcl_Obj*> l);
 	void addDictKeyValues(std::initializer_list<Tcl_Obj*> keyValuePairs);
-	[[nodiscard]] unsigned getListLengthUnchecked() const;
+	[[nodiscard]] size_t getListLengthUnchecked() const;
 
 private:
 	Tcl_Obj* obj;

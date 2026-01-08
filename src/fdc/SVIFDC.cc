@@ -1,4 +1,5 @@
 #include "SVIFDC.hh"
+
 #include "serialize.hh"
 
 // Floppy disk controller FD1793
@@ -26,12 +27,12 @@
 
 namespace openmsx {
 
-SVIFDC::SVIFDC(const DeviceConfig& config)
+SVIFDC::SVIFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config, "", false) // doesn't require a <rom>
 {
 }
 
-byte SVIFDC::readIO(word port, EmuTime::param time)
+byte SVIFDC::readIO(uint16_t port, EmuTime time)
 {
 	switch (port & 0x07) {
 	case 0:
@@ -49,7 +50,7 @@ byte SVIFDC::readIO(word port, EmuTime::param time)
 	return 255;
 }
 
-byte SVIFDC::peekIO(word port, EmuTime::param time) const
+byte SVIFDC::peekIO(uint16_t port, EmuTime time) const
 {
 	switch (port & 0x07) {
 	case 0:
@@ -67,7 +68,7 @@ byte SVIFDC::peekIO(word port, EmuTime::param time) const
 	return 255;
 }
 
-void SVIFDC::writeIO(word port, byte value, EmuTime::param time)
+void SVIFDC::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	switch (port & 0x0F) {
 	case 0:
@@ -87,7 +88,7 @@ void SVIFDC::writeIO(word port, byte value, EmuTime::param time)
 		// bit 1:  drive select B
 		// bit 2:  motor on drive A
 		// bit 3:  motor on drive B
-		auto [drive, motor] = [&]() -> std::pair<DriveMultiplexer::Drive, bool> {
+		auto [drive, motor] = [&] -> std::pair<DriveMultiplexer::Drive, bool> {
 			switch (value & 0x03) {
 			case 1:
 				return {DriveMultiplexer::Drive::A, value & 0x04};

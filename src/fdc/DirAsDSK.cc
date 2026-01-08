@@ -15,12 +15,10 @@
 #include "stl.hh"
 #include "xrange.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <vector>
-
-using std::string;
-using std::vector;
 
 namespace openmsx {
 
@@ -187,7 +185,7 @@ unsigned DirAsDSK::nextMsxDirSector(unsigned sector)
 bool DirAsDSK::checkMSXFileExists(
 	std::span<const char, 11> msxFilename, unsigned msxDirSector)
 {
-	vector<bool> visited(nofSectors, false);
+	std::vector<bool> visited(nofSectors, false);
 	do {
 		if (visited[msxDirSector]) {
 			// cycle detected, invalid disk, but don't crash on it
@@ -197,7 +195,7 @@ bool DirAsDSK::checkMSXFileExists(
 
 		for (auto idx : xrange(DIR_ENTRIES_PER_SECTOR)) {
 			DirIndex dirIndex(msxDirSector, idx);
-			if (ranges::equal(msxDir(dirIndex).filename, msxFilename)) {
+			if (std::ranges::equal(msxDir(dirIndex).filename, msxFilename)) {
 				return true;
 			}
 		}
@@ -227,7 +225,7 @@ bool DirAsDSK::checkFileUsedInDSK(std::string_view hostName) const
 	return dirIndex.sector != unsigned(-1);
 }
 
-static std::array<char, 11> hostToMsxName(string hostName)
+static std::array<char, 11> hostToMsxName(std::string hostName)
 {
 	// Create an MSX filename 8.3 format. TODO use vfat-like abbreviation
 	transform_in_place(hostName, [](char a) {
@@ -237,16 +235,23 @@ static std::array<char, 11> hostToMsxName(string hostName)
 	if (file.empty()) std::swap(file, ext);
 
 	std::array<char, 8 + 3> result;
-	ranges::fill(result, ' ');
-	ranges::copy(subspan(file, 0, std::min<size_t>(8, file.size())), subspan<8>(result, 0));
-	ranges::copy(subspan(ext,  0, std::min<size_t>(3, ext .size())), subspan<3>(result, 8));
-	ranges::replace(result, '.', '_');
+	std::ranges::fill(result, ' ');
+	copy_to_range(subspan(file, 0, std::min<size_t>(8, file.size())), subspan<8>(result, 0));
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
+	copy_to_range(subspan(ext,  0, std::min<size_t>(3, ext .size())), subspan<3>(result, 8));
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+	std::ranges::replace(result, '.', '_');
 	return result;
 }
 
-static string msxToHostName(std::span<const char, 11> msxName)
+static std::string msxToHostName(std::span<const char, 11> msxName)
 {
-	string result;
+	std::string result;
 	for (unsigned i = 0; (i < 8) && (msxName[i] != ' '); ++i) {
 		result += char(tolower(msxName[i]));
 	}
@@ -288,7 +293,7 @@ DirAsDSK::DirAsDSK(DiskChanger& diskChanger_, CliComm& cliComm_,
 
 	// Initially the whole disk is filled with 0xE5 (at least on Philips
 	// NMS8250).
-	ranges::fill(std::span{sectors[0].raw.data(), sizeof(SectorBuffer) * nofSectors}, 0xE5);
+	std::ranges::fill(std::span{sectors[0].raw.data(), sizeof(SectorBuffer) * nofSectors}, 0xE5);
 
 	// Use selected boot sector, fill-in values.
 	uint8_t mediaDescriptor = (numSides == 2) ? 0xF9 : 0xF8;
@@ -308,7 +313,7 @@ DirAsDSK::DirAsDSK(DiskChanger& diskChanger_, CliComm& cliComm_,
 	bootSector.nrSides      = numSides;
 
 	// Clear FAT1 + FAT2.
-	ranges::fill(std::span{fat()[0].raw.data(), SECTOR_SIZE * nofSectorsPerFat * NUM_FATS}, 0);
+	std::ranges::fill(std::span{fat()[0].raw.data(), SECTOR_SIZE * nofSectorsPerFat * NUM_FATS}, 0);
 	// First 3 bytes are initialized specially:
 	//  'cluster 0' contains the media descriptor
 	//  'cluster 1' is marked as EOF_FAT
@@ -322,7 +327,7 @@ DirAsDSK::DirAsDSK(DiskChanger& diskChanger_, CliComm& cliComm_,
 	init(fat2());
 
 	// Assign empty directory entries.
-	ranges::fill(std::span{sectors[firstDirSector].raw.data(), SECTOR_SIZE * SECTORS_PER_DIR}, 0);
+	std::ranges::fill(std::span{sectors[firstDirSector].raw.data(), SECTOR_SIZE * SECTORS_PER_DIR}, 0);
 
 	// No host files are mapped to this disk yet.
 	assert(mapDirs.empty());
@@ -462,8 +467,8 @@ void DirAsDSK::deleteMSXFile(DirIndex dirIndex)
 		// If we're deleting a directory then also (recursively)
 		// delete the files/directories in this directory.
 		if (const auto& msxName = msxDir(dirIndex).filename;
-		    ranges::equal(msxName, std::string_view(".          ")) ||
-		    ranges::equal(msxName, std::string_view("..         "))) {
+		    std::ranges::equal(msxName, std::string_view(".          ")) ||
+		    std::ranges::equal(msxName, std::string_view("..         "))) {
 			// But skip the "." and ".." entries.
 			return;
 		}
@@ -485,7 +490,7 @@ void DirAsDSK::deleteMSXFile(DirIndex dirIndex)
 
 void DirAsDSK::deleteMSXFilesInDir(unsigned msxDirSector)
 {
-	vector<bool> visited(nofSectors, false);
+	std::vector<bool> visited(nofSectors, false);
 	do {
 		if (visited[msxDirSector]) {
 			// cycle detected, invalid disk, but don't crash on it
@@ -595,7 +600,7 @@ void DirAsDSK::importHostFile(DirIndex dirIndex, const FileOperations::Stat& fst
 				auto* buf = &sectors[sector];
 				auto sz = std::min(remainingSize, SECTOR_SIZE);
 				file.read(subspan(buf->raw, 0, sz));
-				ranges::fill(subspan(buf->raw, sz), 0); // in case (end of) file only fills partial sector
+				std::ranges::fill(subspan(buf->raw, sz), 0); // in case (end of) file only fills partial sector
 				remainingSize -= sz;
 				if (remainingSize == 0) {
 					// Don't fill next sectors in this cluster
@@ -686,13 +691,13 @@ void DirAsDSK::setMSXTimeStamp(DirIndex dirIndex, const FileOperations::Stat& fs
 // ignored. Which one is ignored depends on the order in which they are added
 // to the virtual disk. This routine/heuristic tries to add 'regular' files
 // before derived files.
-static size_t weight(const string& hostName)
+static size_t weight(const std::string& hostName)
 {
 	// TODO this weight function can most likely be improved
 	size_t result = 0;
 	auto [file, ext] = StringOp::splitOnLast(hostName, '.');
 	// too many '.' characters
-	result += ranges::count(file, '.') * 100;
+	result += std::ranges::count(file, '.') * 100;
 	// too long extension
 	result += ext.size() * 10;
 	// too long file
@@ -700,19 +705,19 @@ static size_t weight(const string& hostName)
 	return result;
 }
 
-void DirAsDSK::addNewHostFiles(const string& hostSubDir, unsigned msxDirSector)
+void DirAsDSK::addNewHostFiles(const std::string& hostSubDir, unsigned msxDirSector)
 {
 	assert(!hostSubDir.starts_with('/'));
 	assert(hostSubDir.empty() || hostSubDir.ends_with('/'));
 
-	vector<string> hostNames;
+	std::vector<std::string> hostNames;
 	{
 		ReadDir dir(tmpStrCat(hostDir, hostSubDir));
 		while (auto* d = dir.getEntry()) {
 			hostNames.emplace_back(d->d_name);
 		}
 	}
-	ranges::sort(hostNames, {}, [](const string& n) { return weight(n); });
+	std::ranges::sort(hostNames, {}, [](const std::string& n) { return weight(n); });
 
 	for (auto& hostName : hostNames) {
 		try {
@@ -739,7 +744,7 @@ void DirAsDSK::addNewHostFiles(const string& hostSubDir, unsigned msxDirSector)
 	}
 }
 
-void DirAsDSK::addNewDirectory(const string& hostSubDir, const string& hostName,
+void DirAsDSK::addNewDirectory(const std::string& hostSubDir, const std::string& hostName,
                                unsigned msxDirSector, const FileOperations::Stat& fst)
 {
 	DirIndex dirIndex = findHostFileInDSK(tmpStrCat(hostSubDir, hostName));
@@ -764,7 +769,7 @@ void DirAsDSK::addNewDirectory(const string& hostSubDir, const string& hostName,
 
 		// Initialize the new directory.
 		newMsxDirSector = clusterToSector(cluster);
-		ranges::fill(std::span{sectors[newMsxDirSector].raw.data(),
+		std::ranges::fill(std::span{sectors[newMsxDirSector].raw.data(),
 		                       SECTORS_PER_CLUSTER * SECTOR_SIZE},
 			     0);
 		DirIndex idx0(newMsxDirSector, 0); // entry for "."
@@ -773,8 +778,8 @@ void DirAsDSK::addNewDirectory(const string& hostSubDir, const string& hostName,
 		auto& e1 = msxDir(idx1);
 		auto& f0 = e0.filename;
 		auto& f1 = e1.filename;
-		f0[0] = '.';              ranges::fill(subspan(f0, 1), ' ');
-		f1[0] = '.'; f1[1] = '.'; ranges::fill(subspan(f1, 2), ' ');
+		f0[0] = '.';              std::ranges::fill(subspan(f0, 1), ' ');
+		f1[0] = '.'; f1[1] = '.'; std::ranges::fill(subspan(f1, 2), ' ');
 		e0.attrib = MSXDirEntry::Attrib::DIRECTORY;
 		e1.attrib = MSXDirEntry::Attrib::DIRECTORY;
 		setMSXTimeStamp(idx0, fst);
@@ -804,7 +809,7 @@ void DirAsDSK::addNewDirectory(const string& hostSubDir, const string& hostName,
 	addNewHostFiles(strCat(hostSubDir, hostName, '/'), newMsxDirSector);
 }
 
-void DirAsDSK::addNewHostFile(const string& hostSubDir, const string& hostName,
+void DirAsDSK::addNewHostFile(const std::string& hostSubDir, const std::string& hostName,
                               unsigned msxDirSector, const FileOperations::Stat& fst)
 {
 	if (checkFileUsedInDSK(tmpStrCat(hostSubDir, hostName))) {
@@ -824,9 +829,9 @@ void DirAsDSK::addNewHostFile(const string& hostSubDir, const string& hostName,
 }
 
 DirAsDSK::DirIndex DirAsDSK::fillMSXDirEntry(
-	const string& hostSubDir, const string& hostName, unsigned msxDirSector)
+	const std::string& hostSubDir, const std::string& hostName, unsigned msxDirSector)
 {
-	string hostPath = hostSubDir + hostName;
+	std::string hostPath = hostSubDir + hostName;
 	try {
 		// Get empty dir entry (possibly extends subdirectory).
 		DirIndex dirIndex = getFreeDirEntry(msxDirSector);
@@ -844,7 +849,7 @@ DirAsDSK::DirIndex DirAsDSK::fillMSXDirEntry(
 		assert(!hostPath.ends_with('/'));
 		mapDirs[dirIndex].hostName = hostPath;
 		memset(&msxDir(dirIndex), 0, sizeof(MSXDirEntry)); // clear entry
-		ranges::copy(msxFilename, msxDir(dirIndex).filename);
+		copy_to_range(msxFilename, msxDir(dirIndex).filename);
 		return dirIndex;
 	} catch (MSXException& e) {
 		throw MSXException("Couldn't add ", hostPath, ": ",
@@ -854,7 +859,7 @@ DirAsDSK::DirIndex DirAsDSK::fillMSXDirEntry(
 
 DirAsDSK::DirIndex DirAsDSK::getFreeDirEntry(unsigned msxDirSector)
 {
-	vector<bool> visited(nofSectors, false);
+	std::vector<bool> visited(nofSectors, false);
 	while (true) {
 		if (visited[msxDirSector]) {
 			// cycle detected, invalid disk, but don't crash on it
@@ -888,7 +893,7 @@ DirAsDSK::DirIndex DirAsDSK::getFreeDirEntry(unsigned msxDirSector)
 	unsigned cluster = sectorToCluster(msxDirSector);
 	unsigned newCluster = getFreeCluster(); // throws if disk full
 	unsigned sector = clusterToSector(newCluster);
-	ranges::fill(std::span{sectors[sector].raw.data(), SECTORS_PER_CLUSTER * SECTOR_SIZE}, 0);
+	std::ranges::fill(std::span{sectors[sector].raw.data(), SECTORS_PER_CLUSTER * SECTOR_SIZE}, 0);
 	writeFAT12(cluster, newCluster);
 	writeFAT12(newCluster, EOF_FAT);
 
@@ -943,7 +948,7 @@ void DirAsDSK::writeFATSector(unsigned sector, const SectorBuffer& buf)
 	}
 	// At this point there should be no more differences.
 	// Note: we can't use
-	//   assert(ranges::equal(fat(), oldFAT));
+	//   assert(std::ranges::equal(fat(), oldFAT));
 	// because exportFileFromFATChange() only updates the part of the FAT
 	// that actually contains FAT info. E.g. not the media ID at the
 	// beginning nor the unused part at the end. And for example the 'CALL
@@ -960,7 +965,7 @@ void DirAsDSK::exportFileFromFATChange(unsigned cluster, std::span<SectorBuffer>
 
 	// Copy this whole chain from FAT1 to FAT2 (so that the loop in
 	// writeFATSector() sees this part is already handled).
-	vector<bool> visited(maxCluster, false);
+	std::vector<bool> visited(maxCluster, false);
 	unsigned tmp = startCluster;
 	while ((FIRST_CLUSTER <= tmp) && (tmp < maxCluster)) {
 		if (visited[tmp]) {
@@ -1005,8 +1010,8 @@ std::pair<unsigned, unsigned> DirAsDSK::getChainStart(unsigned cluster)
 template<typename FUNC> bool DirAsDSK::scanMsxDirs(FUNC&& func, unsigned sector)
 {
 	size_t rdIdx = 0;
-	vector<unsigned> dirs;  // TODO make vector of struct instead of
-	vector<DirIndex> dirs2; //      2 parallel vectors.
+	std::vector<unsigned> dirs;  // TODO make vector of struct instead of
+	std::vector<DirIndex> dirs2; //      2 parallel vectors.
 	while (true) {
 		do {
 			// About to process a new directory sector.
@@ -1126,7 +1131,7 @@ std::optional<DirAsDSK::DirEntryForClusterResult> DirAsDSK::getDirEntryForCluste
 {
 	if (DirEntryForCluster scanner{cluster};
 	    scanMsxDirs(scanner, firstDirSector)) {
-		return DirEntryForClusterResult{scanner.dirIndex, scanner.dirDirIndex};
+		return DirEntryForClusterResult{.dirIndex = scanner.dirIndex, .dirDirIndex = scanner.dirDirIndex};
 	}
 	return std::nullopt;
 }
@@ -1156,7 +1161,7 @@ void DirAsDSK::exportToHost(DirIndex dirIndex, DirIndex dirDirIndex)
 		return;
 	}
 	const auto& msxName = msxDir(dirIndex).filename;
-	string hostName;
+	std::string hostName;
 	if (const auto* v = lookup(mapDirs, dirIndex)) {
 		// Hostname is already known.
 		hostName = v->hostName;
@@ -1167,7 +1172,7 @@ void DirAsDSK::exportToHost(DirIndex dirIndex, DirIndex dirDirIndex)
 			// Invalid MSX name, don't do anything.
 			return;
 		}
-		string hostSubDir;
+		std::string hostSubDir;
 		if (dirDirIndex.sector != 0) {
 			// Not the msx root directory.
 			const auto* v2 = lookup(mapDirs, dirDirIndex);
@@ -1180,8 +1185,8 @@ void DirAsDSK::exportToHost(DirIndex dirIndex, DirIndex dirDirIndex)
 		mapDirs[dirIndex].hostName = hostName;
 	}
 	if (msxDir(dirIndex).attrib & MSXDirEntry::Attrib::DIRECTORY) {
-		if (ranges::equal(msxName, std::string_view(".          ")) ||
-		    ranges::equal(msxName, std::string_view("..         "))) {
+		if (std::ranges::equal(msxName, std::string_view(".          ")) ||
+		    std::ranges::equal(msxName, std::string_view("..         "))) {
 			// Don't export "." or "..".
 			return;
 		}
@@ -1191,7 +1196,7 @@ void DirAsDSK::exportToHost(DirIndex dirIndex, DirIndex dirDirIndex)
 	}
 }
 
-void DirAsDSK::exportToHostDir(DirIndex dirIndex, const string& hostName)
+void DirAsDSK::exportToHostDir(DirIndex dirIndex, const std::string& hostName)
 {
 	try {
 		unsigned cluster = msxDir(dirIndex).startCluster;
@@ -1205,7 +1210,7 @@ void DirAsDSK::exportToHostDir(DirIndex dirIndex, const string& hostName)
 		FileOperations::mkdirp(hostDir + hostName);
 
 		// Export all the components in this directory.
-		vector<bool> visited(nofSectors, false);
+		std::vector<bool> visited(nofSectors, false);
 		do {
 			if (visited[msxDirSector]) {
 				// detected cycle, invalid disk, but don't crash on it
@@ -1230,7 +1235,7 @@ void DirAsDSK::exportToHostDir(DirIndex dirIndex, const string& hostName)
 	}
 }
 
-void DirAsDSK::exportToHostFile(DirIndex dirIndex, const string& hostName)
+void DirAsDSK::exportToHostFile(DirIndex dirIndex, const std::string& hostName)
 {
 	// We write a host file with length that is the minimum of:
 	//  - Length indicated in msx directory entry.
@@ -1242,7 +1247,7 @@ void DirAsDSK::exportToHostFile(DirIndex dirIndex, const string& hostName)
 
 		File file(hostDir + hostName, File::OpenMode::TRUNCATE);
 		unsigned offset = 0;
-		vector<bool> visited(maxCluster, false);
+		std::vector<bool> visited(maxCluster, false);
 
 		while ((FIRST_CLUSTER <= curCl) && (curCl < maxCluster)) {
 			if (visited[curCl]) {
@@ -1281,7 +1286,7 @@ void DirAsDSK::writeDIRSector(unsigned sector, DirIndex dirDirIndex,
 		}
 	}
 	// At this point sector should be updated.
-	assert(ranges::equal(sectors[sector].raw, buf.raw));
+	assert(std::ranges::equal(sectors[sector].raw, buf.raw));
 }
 
 void DirAsDSK::writeDIREntry(DirIndex dirIndex, DirIndex dirDirIndex,
@@ -1338,7 +1343,7 @@ void DirAsDSK::writeDataSector(unsigned sector, const SectorBuffer& buf)
 	if (!v) return; // sector was not mapped to a file, nothing more to do.
 
 	// Actually write data to host file.
-	string fullHostName = hostDir + v->hostName;
+	std::string fullHostName = hostDir + v->hostName;
 	try {
 		File file(fullHostName, "rb+"); // don't uncompress
 		file.seek(offset);

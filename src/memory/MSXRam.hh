@@ -1,8 +1,10 @@
 #ifndef MSXRAM_HH
 #define MSXRAM_HH
 
-#include "MSXDevice.hh"
 #include "CheckedRam.hh"
+
+#include "MSXDevice.hh"
+
 #include <optional>
 
 namespace openmsx {
@@ -12,12 +14,12 @@ class MSXRam final : public MSXDevice
 public:
 	explicit MSXRam(const DeviceConfig& config);
 
-	void powerUp(EmuTime::param time) override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word start) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word start) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
+	void powerUp(EmuTime time) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t start) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t start) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

@@ -1,14 +1,16 @@
-#if defined(__APPLE__)
+#ifdef __APPLE__
 
 #include "MidiOutCoreMIDI.hh"
+
 #include "PluggingController.hh"
 #include "PlugException.hh"
 #include "serialize.hh"
-#include "openmsx.hh"
 #include "StringOp.hh"
 
 #include <mach/mach_time.h>
+
 #include <cassert>
+#include <cstdint>
 #include <memory>
 
 
@@ -17,7 +19,7 @@ namespace openmsx {
 // MidiOutMessageBuffer ======================================================
 
 void MidiOutMessageBuffer::recvMessage(
-		const std::vector<uint8_t>& message, EmuTime::param /*time*/)
+		const std::vector<uint8_t>& message, EmuTime /*time*/)
 {
 	// TODO: It would be better to schedule events based on EmuTime.
 	MIDITimeStamp abstime = mach_absolute_time();
@@ -68,7 +70,7 @@ MidiOutCoreMIDI::MidiOutCoreMIDI(MIDIEndpointRef endpoint_)
 }
 
 void MidiOutCoreMIDI::plugHelper(Connector& /*connector*/,
-                                 EmuTime::param /*time*/)
+                                 EmuTime /*time*/)
 {
 	// Create client.
 	if (OSStatus status = MIDIClientCreate(CFSTR("openMSX"), nullptr, nullptr, &client)) {
@@ -82,7 +84,7 @@ void MidiOutCoreMIDI::plugHelper(Connector& /*connector*/,
 	}
 }
 
-void MidiOutCoreMIDI::unplugHelper(EmuTime::param /*time*/)
+void MidiOutCoreMIDI::unplugHelper(EmuTime /*time*/)
 {
 	clearBuffer();
 
@@ -94,12 +96,12 @@ void MidiOutCoreMIDI::unplugHelper(EmuTime::param /*time*/)
 	client = 0;
 }
 
-std::string_view MidiOutCoreMIDI::getName() const
+zstring_view MidiOutCoreMIDI::getName() const
 {
 	return name;
 }
 
-std::string_view MidiOutCoreMIDI::getDescription() const
+zstring_view MidiOutCoreMIDI::getDescription() const
 {
 	return "Sends MIDI events to an existing CoreMIDI destination.";
 }
@@ -126,7 +128,7 @@ MidiOutCoreMIDIVirtual:: MidiOutCoreMIDIVirtual()
 }
 
 void MidiOutCoreMIDIVirtual::plugHelper(Connector& /*connector*/,
-                                        EmuTime::param /*time*/)
+                                        EmuTime /*time*/)
 {
 	// Create client.
 	if (OSStatus status = MIDIClientCreate(CFSTR("openMSX"), nullptr, nullptr, &client)) {
@@ -139,7 +141,7 @@ void MidiOutCoreMIDIVirtual::plugHelper(Connector& /*connector*/,
 	}
 }
 
-void MidiOutCoreMIDIVirtual::unplugHelper(EmuTime::param /*time*/)
+void MidiOutCoreMIDIVirtual::unplugHelper(EmuTime /*time*/)
 {
 	clearBuffer();
 
@@ -153,12 +155,12 @@ void MidiOutCoreMIDIVirtual::unplugHelper(EmuTime::param /*time*/)
 	client = 0;
 }
 
-std::string_view MidiOutCoreMIDIVirtual::getName() const
+zstring_view MidiOutCoreMIDIVirtual::getName() const
 {
 	return "Virtual OUT";
 }
 
-std::string_view MidiOutCoreMIDIVirtual::getDescription() const
+zstring_view MidiOutCoreMIDIVirtual::getDescription() const
 {
 	return "Sends MIDI events from a newly created CoreMIDI virtual source.";
 }

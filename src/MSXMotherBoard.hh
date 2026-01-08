@@ -6,12 +6,12 @@
 #include "RecordedCommand.hh"
 #include "VideoSourceSetting.hh"
 #include "hash_map.hh"
-#include "openmsx.hh"
 #include "serialize_meta.hh"
 #include "xxhash.hh"
 
 #include <array>
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -55,18 +55,19 @@ class RealTime;
 class RemoveExtCmd;
 class RenShaTurbo;
 class ResetCmd;
+class StoreSetupCmd;
 class ReverseManager;
 class SettingObserver;
 class Scheduler;
 class StateChangeDistributor;
 
-class MediaInfoProvider
+class MediaProvider
 {
 public:
-	MediaInfoProvider(const MediaInfoProvider&) = delete;
-	MediaInfoProvider(MediaInfoProvider&&) = delete;
-	MediaInfoProvider& operator=(const MediaInfoProvider&) = delete;
-	MediaInfoProvider& operator=(MediaInfoProvider&&) = delete;
+	MediaProvider(const MediaProvider&) = delete;
+	MediaProvider(MediaProvider&&) = delete;
+	MediaProvider& operator=(const MediaProvider&) = delete;
+	MediaProvider& operator=(MediaProvider&&) = delete;
 
 	/** This method gets called when information is required on the
 	 * media inserted in the media slot of the provider. The provider
@@ -74,11 +75,24 @@ public:
 	 */
 	virtual void getMediaInfo(TclObject& result) = 0;
 
+	/** Insert media, based on the result from a previous getMediaInfo() call.
+	 */
+	virtual void setMedia(const TclObject& info, EmuTime time) = 0;
+
 protected:
-	MediaInfoProvider() = default;
-	~MediaInfoProvider() = default;
+	MediaProvider() = default;
+	~MediaProvider() = default;
 };
 
+struct MediaProviderInfo {
+	std::string_view name;
+	MediaProvider* provider;
+};
+
+// the order must be kept as it is, it's from shallow to deep
+enum class SetupDepth : uint8_t { NONE, MACHINE, EXTENSIONS,
+	CONNECTORS, MEDIA, COMPLETE_STATE,
+	NUM /* must be last, for being able to use array_from_enum_index */};
 
 class MSXMotherBoard final
 {
@@ -102,7 +116,7 @@ public:
 
 	/** Run emulation until a certain time in fast forward mode.
 	 */
-	void fastForward(EmuTime::param time, bool fast);
+	void fastForward(EmuTime time, bool fast);
 
 	/** See CPU::exitCPULoopAsync(). */
 	void exitCPULoopAsync();
@@ -115,6 +129,7 @@ public:
 	void unpause();
 
 	void powerUp();
+	void powerDown();
 	[[nodiscard]] bool isPowered() const { return powered; }
 
 	void doReset();
@@ -122,7 +137,7 @@ public:
 	[[nodiscard]] bool isActive() const { return active; }
 	[[nodiscard]] bool isFastForwarding() const { return fastForwarding; }
 
-	[[nodiscard]] byte readIRQVector() const;
+	[[nodiscard]] uint8_t readIRQVector() const;
 
 	[[nodiscard]] const HardwareConfig* getMachineConfig() const { return machineConfig; }
 	[[nodiscard]] HardwareConfig* getMachineConfig() { return machineConfig; }
@@ -132,6 +147,8 @@ public:
 	[[nodiscard]] bool hasToshibaEngine() const;
 
 	std::string loadMachine(const std::string& machine);
+
+	void storeAsSetup(const std::string& filename, SetupDepth depth);
 
 	using Extensions = std::vector<std::unique_ptr<HardwareConfig>>;
 	[[nodiscard]] const Extensions& getExtensions() const { return extensions; }
@@ -171,7 +188,7 @@ public:
 
 	/** Convenience method:
 	  * This is the same as getScheduler().getCurrentTime(). */
-	[[nodiscard]] EmuTime::param getCurrentTime() const;
+	[[nodiscard]] EmuTime getCurrentTime() const;
 
 	/** All MSXDevices should be registered by the MotherBoard.
 	 */
@@ -230,8 +247,10 @@ public:
 	/** Register and unregister providers of media info, for the media info
 	 * topic.
 	 */
-	void registerMediaInfo(std::string_view name, MediaInfoProvider& provider);
-	void unregisterMediaInfo(MediaInfoProvider& provider);
+	void registerMediaProvider(std::string_view name, MediaProvider& provider);
+	void unregisterMediaProvider(MediaProvider& provider);
+	[[nodiscard]] const auto& getMediaProviders() const { return mediaProviders; }
+	[[nodiscard]] MediaProvider* findMediaProvider(std::string_view name) const;
 
 	void registerKeyboard(Keyboard& keyboard) {
 		// Typically there's only 1 keyboard, but we shouldn't crash on
@@ -254,7 +273,6 @@ public:
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	void powerDown();
 	void deleteMachine();
 
 private:
@@ -292,6 +310,7 @@ private:
 	std::unique_ptr<Debugger> debugger;
 	std::unique_ptr<MSXMixer> msxMixer;
 	// machineMediaInfo must be BEFORE PluggingController!
+	std::vector<MediaProviderInfo> mediaProviders; // unsorted, there will only be a few
 	std::unique_ptr<MachineMediaInfo> machineMediaInfo;
 	std::unique_ptr<PluggingController> pluggingController;
 	std::unique_ptr<MSXCPU> msxCpu;
@@ -313,6 +332,7 @@ private:
 	std::unique_ptr<ListExtCmd>   listExtCommand;
 	std::unique_ptr<ExtCmd>       extCommand;
 	std::unique_ptr<RemoveExtCmd> removeExtCommand;
+	std::unique_ptr<StoreSetupCmd> storeSetupCommand;
 	std::unique_ptr<MachineNameInfo> machineNameInfo;
 	std::unique_ptr<MachineTypeInfo> machineTypeInfo;
 	std::unique_ptr<MachineExtensionInfo> machineExtensionInfo;
@@ -338,7 +358,7 @@ class ExtCmd final : public RecordedCommand
 public:
 	ExtCmd(MSXMotherBoard& motherBoard, std::string commandName);
 	void execute(std::span<const TclObject> tokens, TclObject& result,
-	             EmuTime::param time) override;
+	             EmuTime time) override;
 	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:

@@ -1,30 +1,31 @@
 #include "DummyIDEDevice.hh"
+
 #include "serialize.hh"
 
 namespace openmsx {
 
-void DummyIDEDevice::reset(EmuTime::param /*time*/)
+void DummyIDEDevice::reset(EmuTime /*time*/)
 {
 	// do nothing
 }
 
-word DummyIDEDevice::readData(EmuTime::param /*time*/)
+uint16_t DummyIDEDevice::readData(EmuTime /*time*/)
 {
 	return 0x7F7F;
 }
 
-byte DummyIDEDevice::readReg(nibble /*reg*/, EmuTime::param /*time*/)
+uint8_t DummyIDEDevice::readReg(uint4_t /*reg*/, EmuTime /*time*/)
 {
 	return 0x7F;
 }
 
-void DummyIDEDevice::writeData(word /*value*/, EmuTime::param /*time*/)
+void DummyIDEDevice::writeData(uint16_t /*value*/, EmuTime /*time*/)
 {
 	// do nothing
 }
 
-void DummyIDEDevice::writeReg(nibble /*reg*/, byte /*value*/,
-                              EmuTime::param /*time*/)
+void DummyIDEDevice::writeReg(uint4_t /*reg*/, uint8_t /*value*/,
+                              EmuTime /*time*/)
 {
 	// do nothing
 }

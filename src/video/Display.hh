@@ -2,16 +2,19 @@
 #define DISPLAY_HH
 
 #include "RenderSettings.hh"
+
 #include "Command.hh"
+#include "EventListener.hh"
 #include "InfoTopic.hh"
 #include "OSDGUI.hh"
-#include "EventListener.hh"
 #include "RTSchedulable.hh"
-#include "Observer.hh"
+
 #include "CircularBuffer.hh"
+#include "Observer.hh"
+
+#include <cstdint>
 #include <memory>
 #include <vector>
-#include <cstdint>
 
 namespace openmsx {
 
@@ -44,6 +47,7 @@ public:
 
 	[[nodiscard]] CliComm& getCliComm() const;
 	[[nodiscard]] RenderSettings& getRenderSettings() { return renderSettings; }
+	[[nodiscard]] auto getRenderer() const { return currentRenderer; }
 	[[nodiscard]] OSDGUI& getOSDGUI() { return osdGui; }
 
 	/** Redraw the display.
@@ -94,8 +98,8 @@ private:
 	void update(const Setting& setting) noexcept override;
 
 	void checkRendererSwitch();
-	void doRendererSwitch();
-	void doRendererSwitch2();
+	void doRendererSwitch(RenderSettings::RendererID newRenderer);
+	void doRendererSwitch2(RenderSettings::RendererID newRenderer);
 
 	/** Find front most opaque layer.
 	  */
@@ -117,7 +121,6 @@ private:
 		explicit ScreenShotCmd(CommandController& commandController);
 		void execute(std::span<const TclObject> tokens, TclObject& result) override;
 		[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
-		void tabCompletion(std::vector<std::string>& tokens) const override;
 	} screenShotCmd;
 
 	struct FpsInfoTopic final : InfoTopic {

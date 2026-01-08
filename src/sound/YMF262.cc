@@ -49,6 +49,7 @@
 #include "outer.hh"
 #include "xrange.hh"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <iostream>
@@ -571,9 +572,7 @@ void YMF262::Slot::advanceEnvelopeGenerator(unsigned egCnt)
 			// during sustain phase chip adds Release Rate (in percussive mode)
 			if (!(egCnt & eg_m_rr)) {
 				volume += eg_inc[eg_sel_rr + ((egCnt >> eg_sh_rr) & 7)];
-				if (volume >= MAX_ATT_INDEX) {
-					volume = MAX_ATT_INDEX;
-				}
+				volume = std::min(volume, MAX_ATT_INDEX);
 			} else {
 				// do nothing in sustain phase
 			}
@@ -618,10 +617,12 @@ void YMF262::advance()
 	unsigned lfo_pm = (lfo_pm_cnt.toInt() & 7) | lfo_pm_depth_range;
 
 	++eg_cnt;
-	for (auto& ch : channel) {
+	for (auto i : xrange(unsigned(channel.size()))) {
+		auto& ch = channel[i];
+		auto& ch2 = isExtended(i) ? getFirstOfPair(i) : ch;
 		for (auto& op : ch.slot) {
 			op.advanceEnvelopeGenerator(eg_cnt);
-			op.advancePhaseGenerator(ch, lfo_pm);
+			op.advancePhaseGenerator(ch2, lfo_pm);
 		}
 	}
 
@@ -1032,7 +1033,7 @@ uint8_t YMF262::peekReg(unsigned r) const
 	return reg[r];
 }
 
-void YMF262::writeReg(unsigned r, uint8_t v, EmuTime::param time)
+void YMF262::writeReg(unsigned r, uint8_t v, EmuTime time)
 {
 	if (!OPL3_mode && (r != 0x105)) {
 		// in OPL2 mode the only accessible in set #2 is register 0x05
@@ -1040,12 +1041,12 @@ void YMF262::writeReg(unsigned r, uint8_t v, EmuTime::param time)
 	}
 	writeReg512(r, v, time);
 }
-void YMF262::writeReg512(unsigned r, uint8_t v, EmuTime::param time)
+void YMF262::writeReg512(unsigned r, uint8_t v, EmuTime time)
 {
 	updateStream(time); // TODO optimize only for regs that directly influence sound
 	writeRegDirect(r, v, time);
 }
-void YMF262::writeRegDirect(unsigned r, uint8_t v, EmuTime::param time)
+void YMF262::writeRegDirect(unsigned r, uint8_t v, EmuTime time)
 {
 	reg[r] = v;
 
@@ -1394,7 +1395,7 @@ void YMF262::writeRegDirect(unsigned r, uint8_t v, EmuTime::param time)
 }
 
 
-void YMF262::reset(EmuTime::param time)
+void YMF262::reset(EmuTime time)
 {
 	eg_cnt = 0;
 
@@ -1486,8 +1487,8 @@ uint8_t YMF262::peekStatus() const
 bool YMF262::checkMuteHelper() const
 {
 	// TODO this doesn't always mute when possible
-	for (auto& ch : channel) {
-		for (auto& sl : ch.slot) {
+	for (const auto& ch : channel) {
+		for (const auto& sl : ch.slot) {
 			if (!((sl.state == EnvelopeState::OFF) ||
 			      ((sl.state == EnvelopeState::RELEASE) &&
 			       ((narrow<int>(sl.TLL) + sl.volume) >= ENV_QUIET)))) {
@@ -1498,7 +1499,7 @@ bool YMF262::checkMuteHelper() const
 	return true;
 }
 
-void YMF262::setMixLevel(uint8_t x, EmuTime::param time)
+void YMF262::setMixLevel(uint8_t x, EmuTime time)
 {
 	// Only present on YMF278
 	// see mix_level[] and vol_factor() in YMF278.cc
@@ -1526,7 +1527,7 @@ void YMF262::generateChannels(std::span<float*> bufs, unsigned num)
 	// TODO output rhythm on separate channels?
 	if (checkMuteHelper()) {
 		// TODO update internal state, even if muted
-		ranges::fill(bufs, nullptr);
+		std::ranges::fill(bufs, nullptr);
 		return;
 	}
 
@@ -1545,7 +1546,7 @@ void YMF262::generateChannels(std::span<float*> bufs, unsigned num)
 		unsigned lfo_am = lfo_am_depth ? tmp : tmp / 4;
 
 		// clear channel outputs
-		ranges::fill(chanOut, 0);
+		std::ranges::fill(chanOut, 0);
 
 		// channels 0,3 1,4 2,5  9,12 10,13 11,14
 		// in either 2op or 4op mode
@@ -1592,13 +1593,13 @@ void YMF262::generateChannels(std::span<float*> bufs, unsigned num)
 }
 
 
-static constexpr std::initializer_list<enum_string<YMF262::EnvelopeState>> envelopeStateInfo = {
+static constexpr auto envelopeStateInfo = std::to_array<enum_string<YMF262::EnvelopeState>>({
 	{ "ATTACK",  YMF262::EnvelopeState::ATTACK  },
 	{ "DECAY",   YMF262::EnvelopeState::DECAY   },
 	{ "SUSTAIN", YMF262::EnvelopeState::SUSTAIN },
 	{ "RELEASE", YMF262::EnvelopeState::RELEASE },
-	{ "OFF",     YMF262::EnvelopeState::OFF     }
-};
+	{ "OFF",     YMF262::EnvelopeState::OFF     },
+});
 SERIALIZE_ENUM(YMF262::EnvelopeState, envelopeStateInfo);
 
 template<typename Archive>
@@ -1689,7 +1690,7 @@ void YMF262::serialize(Archive& a, unsigned version)
 
 	// TODO restore more state by rewriting register values
 	//   this handles pan
-	EmuTime::param time = timer1->getCurrentTime();
+	EmuTime time = timer1->getCurrentTime();
 	for (auto i : xrange(0xC0, 0xC9)) {
 		writeRegDirect(i + 0x000, reg[i + 0x000], time);
 		writeRegDirect(i + 0x100, reg[i + 0x100], time);
@@ -1714,7 +1715,7 @@ uint8_t YMF262::Debuggable::read(unsigned address)
 	return ymf262.peekReg(address);
 }
 
-void YMF262::Debuggable::write(unsigned address, uint8_t value, EmuTime::param time)
+void YMF262::Debuggable::write(unsigned address, uint8_t value, EmuTime time)
 {
 	auto& ymf262 = OUTER(YMF262, debuggable);
 	ymf262.writeReg512(address, value, time);

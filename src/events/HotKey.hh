@@ -1,12 +1,12 @@
 #ifndef HOTKEY_HH
 #define HOTKEY_HH
 
-#include "Command.hh"
 #include "Event.hh"
-#include "EventListener.hh"
 #include "EventDistributor.hh"
-#include "RTSchedulable.hh"
+#include "EventListener.hh"
 
+#include "Command.hh"
+#include "RTSchedulable.hh"
 #include "TclObject.hh"
 
 #include <map>
@@ -83,13 +83,10 @@ public:
 		xml.end("bindings");
 	}
 
-	const auto& getGlobalBindings() const { return cmdMap; }
+	[[nodiscard]] const auto& getGlobalBindings() const { return cmdMap; }
 
 private:
 	struct LayerInfo {
-		LayerInfo(std::string l, bool b)
-			: layer(std::move(l)), blocking(b) {} // clang-15 workaround
-
 		std::string layer;
 		bool blocking;
 	};

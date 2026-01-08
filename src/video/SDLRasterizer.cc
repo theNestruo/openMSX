@@ -1,16 +1,19 @@
 #include "SDLRasterizer.hh"
+
+#include "Display.hh"
+#include "OutputSurface.hh"
+#include "PostProcessor.hh"
+#include "RawFrame.hh"
+#include "RenderSettings.hh"
+#include "Renderer.hh"
 #include "VDP.hh"
 #include "VDPVRAM.hh"
-#include "RawFrame.hh"
-#include "Display.hh"
-#include "Renderer.hh"
-#include "RenderSettings.hh"
-#include "PostProcessor.hh"
+
 #include "MemoryOps.hh"
-#include "OutputSurface.hh"
 #include "enumerate.hh"
 #include "one_of.hh"
 #include "xrange.hh"
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -130,6 +133,16 @@ PostProcessor* SDLRasterizer::getPostProcessor() const
 	return postProcessor.get();
 }
 
+const RawFrame* SDLRasterizer::getWorkingFrame() const
+{
+	return workFrame.get();
+}
+
+const RawFrame* SDLRasterizer::getLastFrame() const
+{
+	return postProcessor->getLastRawFrame();
+}
+
 bool SDLRasterizer::isActive()
 {
 	return postProcessor->needRender() &&
@@ -163,7 +176,7 @@ void SDLRasterizer::setSuperimposeVideoFrame(const RawFrame* videoSource)
 	                   videoSource, vdp.getBackgroundColor());
 }
 
-void SDLRasterizer::frameStart(EmuTime::param time)
+void SDLRasterizer::frameStart(EmuTime time)
 {
 	workFrame = postProcessor->rotateFrames(std::move(workFrame), time);
 	workFrame->init(
@@ -211,7 +224,7 @@ void SDLRasterizer::setPalette(unsigned index, int grb)
 	                   vdp.isSuperimposing(), vdp.getBackgroundColor());
 }
 
-void SDLRasterizer::setBackgroundColor(byte index)
+void SDLRasterizer::setBackgroundColor(uint8_t index)
 {
 	if (vdp.getDisplayMode().getByte() != DisplayMode::GRAPHIC7) {
 		precalcColorIndex0(vdp.getDisplayMode(), vdp.getTransparency(),
@@ -223,7 +236,7 @@ void SDLRasterizer::setHorizontalAdjust(int /*adjust*/)
 {
 }
 
-void SDLRasterizer::setHorizontalScrollLow(byte /*scroll*/)
+void SDLRasterizer::setHorizontalScrollLow(uint8_t /*scroll*/)
 {
 }
 
@@ -344,7 +357,7 @@ void SDLRasterizer::precalcPalette()
 }
 
 void SDLRasterizer::precalcColorIndex0(DisplayMode mode,
-		bool transparency, const RawFrame* superimposing, byte bgColorIndex)
+		bool transparency, const RawFrame* superimposing, uint8_t bgColorIndex)
 {
 	// Graphic7 mode doesn't use transparency.
 	if (mode.getByte() == DisplayMode::GRAPHIC7) {
@@ -417,10 +430,9 @@ void SDLRasterizer::drawBorder(
 		unsigned x = translateX(fromX, (lineWidth == 512));
 		unsigned num = translateX(limitX, (lineWidth == 512)) - x;
 		unsigned width = (lineWidth == 512) ? 640 : 320;
-		MemoryOps::MemSet2<Pixel> memset;
 		for (auto y : xrange(startY, endY)) {
-			memset(workFrame->getLineDirect(y).subspan(x, num),
-			       border0, border1);
+			MemoryOps::fill_2(workFrame->getLineDirect(y).subspan(x, num),
+			                  border0, border1);
 			if (limitX == VDP::TICKS_PER_LINE) {
 				// Only set line width at the end (right
 				// border) of the line. This ensures we can
@@ -477,7 +489,7 @@ void SDLRasterizer::drawDisplay(
 	// Note that it is possible for pageBorder to be to the left of displayX,
 	// in that case only the second page should be drawn.
 	int pageBorder = displayX + displayWidth;
-	auto [scrollPage1, scrollPage2] = [&]() -> std::pair<int, int> {
+	auto [scrollPage1, scrollPage2] = [&] -> std::pair<int, int> {
 		if (vdp.isMultiPageScrolling()) {
 			int p1 = vdp.getHorizontalScrollHigh() >> 5;
 			int p2 = p1 ^ 1;
@@ -488,10 +500,8 @@ void SDLRasterizer::drawDisplay(
 	}();
 	// Because SDL blits do not wrap, unlike GL textures, the pageBorder is
 	// also used if multi page is disabled.
-	if (int pageSplit = narrow<int>(lineWidth - hScroll);
-	    pageSplit < pageBorder) {
-		pageBorder = pageSplit;
-	}
+	int pageSplit = narrow<int>(lineWidth - hScroll);
+	pageBorder = std::min(pageBorder, pageSplit);
 
 	if (mode.isBitmapMode()) {
 		for (auto y : xrange(screenY, screenLimitY)) {
@@ -525,7 +535,7 @@ void SDLRasterizer::drawDisplay(
 					lineInBuf = vramLine[scrollPage1];
 					renderBitmapLine(buf, vramLine[scrollPage1]);
 					auto src = subspan(buf, displayX + hScroll, firstPageWidth);
-					ranges::copy(src, dst);
+					copy_to_range(src, dst);
 				}
 			} else {
 				firstPageWidth = 0;
@@ -536,8 +546,8 @@ void SDLRasterizer::drawDisplay(
 				}
 				unsigned x = displayX < pageBorder
 					   ? 0 : displayX + hScroll - lineWidth;
-				ranges::copy(subspan(buf, x, displayWidth - firstPageWidth),
-				             subspan(dst, firstPageWidth));
+				copy_to_range(subspan(buf, x, displayWidth - firstPageWidth),
+				              subspan(dst, firstPageWidth));
 			}
 
 			displayY = (displayY + 1) & 255;
@@ -554,7 +564,7 @@ void SDLRasterizer::drawDisplay(
 				std::array<Pixel, 512> buf;
 				characterConverter.convertLine(buf, displayY);
 				auto src = subspan(buf, displayX, displayWidth);
-				ranges::copy(src, dst);
+				copy_to_range(src, dst);
 			}
 
 			displayY = (displayY + 1) & 255;
@@ -595,7 +605,7 @@ void SDLRasterizer::drawSprites(
 			spriteConverter.drawMode1(y, displayX, displayLimitX, dst);
 		}
 	} else {
-		byte mode = vdp.getDisplayMode().getByte();
+		uint8_t mode = vdp.getDisplayMode().getByte();
 		if (mode == DisplayMode::GRAPHIC5) {
 			for (int y = fromY; y < limitY; y++, screenY++) {
 				auto dst = workFrame->getLineDirect(screenY).subspan(screenX);

@@ -54,7 +54,7 @@ public:
 	  * @return RawFrame object that can be used for building the next frame.
 	  */
 	[[nodiscard]] std::unique_ptr<RawFrame> rotateFrames(
-		std::unique_ptr<RawFrame> finishedFrame, EmuTime::param time);
+		std::unique_ptr<RawFrame> finishedFrame, EmuTime time);
 
 	/** Set the Video frame on which to superimpose the 'normal' output of
 	  * this PostProcessor. Superimpose is done (preferably) after the
@@ -93,8 +93,14 @@ public:
 	  */
 	[[nodiscard]] FrameSource* getPaintFrame() const { return paintFrame; }
 
+	/** Get the last (finished) raw frame, could be nullptr.
+	  */
+	[[nodiscard]] RawFrame* getLastRawFrame() const {
+		return lastFramesCount > 0 ? lastFrames[0].get() : nullptr;
+	}
+
 	// VideoLayer
-	void takeRawScreenShot(unsigned height, const std::string& filename) override;
+	void takeRawScreenShot(std::optional<unsigned> height, const std::string& filename) override;
 
 	[[nodiscard]] CliComm& getCliComm();
 
@@ -103,7 +109,7 @@ private:
 	void update(const Setting& setting) noexcept override;
 
 	// Schedulable
-	void executeUntil(EmuTime::param time) override;
+	void executeUntil(EmuTime time) override;
 
 	/** Returns the maximum width for lines [y..y+step).
 	  */
@@ -189,10 +195,10 @@ private:
 
 	struct TextureData {
 		gl::ColorTexture tex;
-		gl::PixelBuffer<unsigned> pbo;
 		[[nodiscard]] unsigned width() const { return tex.getWidth(); }
 	};
 	std::vector<TextureData> textures;
+	gl::PixelBuffer<unsigned> pbo;
 
 	gl::ColorTexture superImposeTex;
 
@@ -212,6 +218,7 @@ private:
 		unsigned lineWidth;
 	};
 	std::vector<Region> regions;
+	unsigned regionsDstHeight = 0; // 'regions' were calculated for this output height (relevant when changing scale_factor when paused)
 
 	unsigned frameCounter = 0;
 

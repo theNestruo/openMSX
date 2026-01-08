@@ -1,7 +1,9 @@
 #include "RomColecoMegaCart.hh"
-#include "serialize.hh"
-#include "MSXException.hh"
+
 #include "CacheLine.hh"
+#include "MSXException.hh"
+#include "serialize.hh"
+
 #include "one_of.hh"
 
 // information source:
@@ -21,7 +23,7 @@ RomColecoMegaCart::RomColecoMegaCart(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomColecoMegaCart::reset(EmuTime::param /*time*/)
+void RomColecoMegaCart::reset(EmuTime /*time*/)
 {
 	setUnmapped(0);
 	setUnmapped(1);
@@ -32,7 +34,7 @@ void RomColecoMegaCart::reset(EmuTime::param /*time*/)
 	invalidateDeviceRCache(0xFFC0 & CacheLine::HIGH, CacheLine::SIZE);
 }
 
-byte RomColecoMegaCart::readMem(word address, EmuTime::param time)
+byte RomColecoMegaCart::readMem(uint16_t address, EmuTime time)
 {
 	// The last 64 locations will switch banks (FFC0-FFFF). If you have
 	// fewer than 64 banks, then the strobe addresses simply repeat where
@@ -45,7 +47,7 @@ byte RomColecoMegaCart::readMem(word address, EmuTime::param time)
 	return Rom16kBBlocks::readMem(address, time);
 }
 
-const byte* RomColecoMegaCart::getReadCacheLine(word start) const
+const byte* RomColecoMegaCart::getReadCacheLine(uint16_t start) const
 {
 	if (start >= (0xFFC0 & CacheLine::HIGH)) {
 		return nullptr;

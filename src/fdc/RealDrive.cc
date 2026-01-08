@@ -1,20 +1,25 @@
 #include "RealDrive.hh"
+
+#include "DMKDiskImage.hh"
+#include "DirAsDSK.hh"
 #include "Disk.hh"
 #include "DummyDisk.hh"
-#include "DirAsDSK.hh"
 #include "RamDSKDiskImage.hh"
-#include "DMKDiskImage.hh"
+
+#include "GlobalSettings.hh"
+#include "LedStatus.hh"
+#include "MSXCliComm.hh"
+#include "MSXCommandController.hh"
+#include "MSXException.hh"
 #include "MSXMotherBoard.hh"
 #include "Reactor.hh"
-#include "LedStatus.hh"
-#include "MSXCommandController.hh"
-#include "MSXCliComm.hh"
-#include "GlobalSettings.hh"
-#include "MSXException.hh"
+
 #include "narrow.hh"
 #include "serialize.hh"
 #include "unreachable.hh"
+
 #include <memory>
+#include <ranges>
 
 namespace openmsx {
 
@@ -23,7 +28,7 @@ std::shared_ptr<RealDrive::DrivesInUse> RealDrive::getDrivesInUse(MSXMotherBoard
 	return motherBoard.getSharedStuff<DrivesInUse>("drivesInUse");
 }
 
-RealDrive::RealDrive(MSXMotherBoard& motherBoard_, EmuDuration::param motorTimeout_,
+RealDrive::RealDrive(MSXMotherBoard& motherBoard_, EmuDuration motorTimeout_,
                      bool signalsNeedMotorOn_, bool doubleSided,
                      DiskDrive::TrackMode trackMode_)
 	: syncLoadingTimeout(motherBoard_.getScheduler())
@@ -54,7 +59,7 @@ RealDrive::RealDrive(MSXMotherBoard& motherBoard_, EmuDuration::param motorTimeo
 	motherBoard.getMSXCliComm().update(CliComm::UpdateType::HARDWARE, driveName, "add");
 	changer.emplace(motherBoard, driveName, true, doubleSizedDrive,
 	                [this]() { invalidateTrack(); });
-	motherBoard.registerMediaInfo(changer->getDriveName(), *this);
+	motherBoard.registerMediaProvider(changer->getDriveName(), *this);
 }
 
 RealDrive::~RealDrive()
@@ -66,7 +71,7 @@ RealDrive::~RealDrive()
 	}
 	doSetMotor(false, getCurrentTime()); // to send LED event
 
-	motherBoard.unregisterMediaInfo(*this);
+	motherBoard.unregisterMediaProvider(*this);
 
 	const auto& driveName = changer->getDriveName();
 	motherBoard.getMSXCliComm().update(CliComm::UpdateType::HARDWARE, driveName, "remove");
@@ -78,7 +83,7 @@ RealDrive::~RealDrive()
 
 void RealDrive::getMediaInfo(TclObject& result)
 {
-	auto typeStr = [&]() -> std::string_view {
+	auto typeStr = [&] -> std::string_view {
 		if (dynamic_cast<DummyDisk*>(&(changer->getDisk()))) {
 			return "empty";
 		} else if (dynamic_cast<DirAsDSK*>(&(changer->getDisk()))) {
@@ -98,11 +103,33 @@ void RealDrive::getMediaInfo(TclObject& result)
 	}
 	if (const auto* disk = changer->getSectorAccessibleDisk()) {
 		TclObject patches;
-		patches.addListElements(view::transform(disk->getPatches(), [](auto& p) {
+		patches.addListElements(std::views::transform(disk->getPatches(), [](auto& p) {
 			return p.getResolved();
 		}));
 		result.addDictKeyValue("patches", patches);
 	}
+}
+
+void RealDrive::setMedia(const TclObject& info, EmuTime /*time*/)
+{
+	std::vector<TclObject> args;
+	args.emplace_back(changer->getDriveName());
+
+	auto target = info.getOptionalDictValue(TclObject("target"));
+	if (!target) return;
+	if (auto trgt = target->getString(); trgt.empty()) {
+		args.emplace_back("eject");
+	} else {
+		args.emplace_back(*target);
+	}
+
+	if (auto patches = info.getOptionalDictValue(TclObject("patches"))) {
+		for (auto i : xrange(patches->size())) {
+			args.push_back(patches->getListIndexUnchecked(i));
+		}
+	}
+
+	changer->sendChangeDiskEvent(args);
 }
 
 bool RealDrive::isDiskInserted() const
@@ -203,7 +230,7 @@ std::optional<unsigned> RealDrive::getDiskWriteTrack() const
 	}
 }
 
-void RealDrive::step(bool direction, EmuTime::param time)
+void RealDrive::step(bool direction, EmuTime time)
 {
 	invalidateTrack();
 
@@ -234,7 +261,7 @@ bool RealDrive::isTrack00() const
 	return headPos == 0;
 }
 
-void RealDrive::setMotor(bool status, EmuTime::param time)
+void RealDrive::setMotor(bool status, EmuTime time)
 {
 	// If status = true, motor is immediately turned on. If status = false,
 	// the motor is only turned off after some (configurable) amount of
@@ -272,7 +299,7 @@ void RealDrive::setMotor(bool status, EmuTime::param time)
 			// Motor was already off, we're done.
 			return;
 		}
-		if (syncMotorTimeout.pendingSyncPoint()) {
+		if (syncMotorTimeout.isPending()) {
 			// We had already scheduled an action to turn the motor
 			// off, we're done.
 			return;
@@ -297,7 +324,7 @@ bool RealDrive::getMotor() const
 	return motorStatus;
 }
 
-unsigned RealDrive::getCurrentAngle(EmuTime::param time) const
+unsigned RealDrive::getCurrentAngle(EmuTime time) const
 {
 	if (motorStatus) {
 		// rotating, take passed time into account
@@ -309,7 +336,7 @@ unsigned RealDrive::getCurrentAngle(EmuTime::param time) const
 	}
 }
 
-void RealDrive::doSetMotor(bool status, EmuTime::param time)
+void RealDrive::doSetMotor(bool status, EmuTime time)
 {
 	if (!status) {
 		invalidateTrack(); // flush and ignore further writes
@@ -325,7 +352,7 @@ void RealDrive::doSetMotor(bool status, EmuTime::param time)
 	motherBoard.getLedStatus().setLed(LedStatus::FDD, status);
 }
 
-void RealDrive::setLoading(EmuTime::param time)
+void RealDrive::setLoading(EmuTime time)
 {
 	assert(motorStatus);
 	loadingIndicator.update(true);
@@ -342,12 +369,12 @@ void RealDrive::execLoadingTimeout()
 	loadingIndicator.update(false);
 }
 
-void RealDrive::execMotorTimeout(EmuTime::param time)
+void RealDrive::execMotorTimeout(EmuTime time)
 {
 	doSetMotor(false, time);
 }
 
-bool RealDrive::indexPulse(EmuTime::param time)
+bool RealDrive::indexPulse(EmuTime time)
 {
 	// Tested on real NMS8250:
 	//  Only when there's a disk inserted and when the motor is spinning
@@ -358,7 +385,7 @@ bool RealDrive::indexPulse(EmuTime::param time)
 	return getCurrentAngle(time) < INDEX_DURATION;
 }
 
-EmuTime RealDrive::getTimeTillIndexPulse(EmuTime::param time, int count)
+EmuTime RealDrive::getTimeTillIndexPulse(EmuTime time, int count)
 {
 	if (!motorStatus || !isDiskInserted()) { // TODO is this correct?
 		return EmuTime::infinity();
@@ -424,7 +451,7 @@ static constexpr unsigned divUp(unsigned a, unsigned b)
 {
 	return (a + b - 1) / b;
 }
-EmuTime RealDrive::getNextSector(EmuTime::param time, RawTrack::Sector& sector)
+EmuTime RealDrive::getNextSector(EmuTime time, RawTrack::Sector& sector)
 {
 	getTrack();
 	unsigned currentAngle = getCurrentAngle(time);

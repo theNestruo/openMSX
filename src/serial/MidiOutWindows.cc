@@ -1,11 +1,14 @@
-#if defined(_WIN32)
+#ifdef _WIN32
+
+#include "MidiOutWindows.hh"
 
 #include "Midi_w32.hh"
-#include "MidiOutWindows.hh"
 #include "PluggingController.hh"
 #include "PlugException.hh"
 #include "serialize.hh"
+
 #include "xrange.hh"
+
 #include <memory>
 
 namespace openmsx {
@@ -30,7 +33,7 @@ MidiOutWindows::~MidiOutWindows()
 	//w32_midiOutClean(); // TODO
 }
 
-void MidiOutWindows::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
+void MidiOutWindows::plugHelper(Connector& /*connector*/, EmuTime /*time*/)
 {
 	devIdx = w32_midiOutOpen(name.c_str());
 	if (devIdx == unsigned(-1)) {
@@ -38,7 +41,7 @@ void MidiOutWindows::plugHelper(Connector& /*connector*/, EmuTime::param /*time*
 	}
 }
 
-void MidiOutWindows::unplugHelper(EmuTime::param /*time*/)
+void MidiOutWindows::unplugHelper(EmuTime /*time*/)
 {
 	if (devIdx != unsigned(-1)) {
 		w32_midiOutClose(devIdx);
@@ -46,17 +49,17 @@ void MidiOutWindows::unplugHelper(EmuTime::param /*time*/)
 	}
 }
 
-std::string_view MidiOutWindows::getName() const
+zstring_view MidiOutWindows::getName() const
 {
 	return name;
 }
 
-std::string_view MidiOutWindows::getDescription() const
+zstring_view MidiOutWindows::getDescription() const
 {
 	return desc;
 }
 
-void MidiOutWindows::recvMessage(const std::vector<uint8_t>& message, EmuTime::param /*time*/)
+void MidiOutWindows::recvMessage(const std::vector<uint8_t>& message, EmuTime /*time*/)
 {
 	if (devIdx != unsigned(-1)) {
 		w32_midiOutMsg(message.size(), message.data(), devIdx);

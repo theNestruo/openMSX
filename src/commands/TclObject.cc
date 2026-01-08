@@ -1,6 +1,8 @@
 #include "TclObject.hh"
-#include "Interpreter.hh"
+
 #include "CommandException.hh"
+#include "Interpreter.hh"
+
 #include "narrow.hh"
 
 namespace openmsx {
@@ -76,6 +78,16 @@ int TclObject::getInt(Interpreter& interp_) const
 	return result;
 }
 
+int64_t TclObject::getInt64(Interpreter& interp_) const
+{
+	auto* interp = interp_.interp;
+	Tcl_WideInt result;
+	if (Tcl_GetWideIntFromObj(interp, obj, &result) != TCL_OK) {
+		throwException(interp);
+	}
+	return int64_t(result);
+}
+
 std::optional<int> TclObject::getOptionalInt() const
 {
 	int result;
@@ -83,6 +95,15 @@ std::optional<int> TclObject::getOptionalInt() const
 		return {};
 	}
 	return result;
+}
+
+std::optional<int64_t> TclObject::getOptionalInt64() const
+{
+	Tcl_WideInt result;
+	if (Tcl_GetWideIntFromObj(nullptr, obj, &result) != TCL_OK) {
+		return {};
+	}
+	return int64_t(result);
 }
 
 bool TclObject::getBoolean(Interpreter& interp_) const
@@ -140,37 +161,37 @@ std::optional<double> TclObject::getOptionalDouble() const
 
 zstring_view TclObject::getString() const
 {
-	int length;
+	Tcl_Size length;
 	const char* buf = Tcl_GetStringFromObj(obj, &length);
 	return {buf, size_t(length)};
 }
 
 std::span<const uint8_t> TclObject::getBinary() const
 {
-	int length;
+	Tcl_Size length;
 	const auto* buf = Tcl_GetByteArrayFromObj(obj, &length);
 	return {buf, size_t(length)};
 }
 
-unsigned TclObject::getListLength(Interpreter& interp_) const
+size_t TclObject::getListLength(Interpreter& interp_) const
 {
 	auto* interp = interp_.interp;
-	int result;
+	Tcl_Size result;
 	if (Tcl_ListObjLength(interp, obj, &result) != TCL_OK) {
 		throwException(interp);
 	}
 	return result;
 }
-unsigned TclObject::getListLengthUnchecked() const
+size_t TclObject::getListLengthUnchecked() const
 {
-	int result;
+	Tcl_Size result;
 	if (Tcl_ListObjLength(nullptr, obj, &result) != TCL_OK) {
 		return 0; // error
 	}
 	return result;
 }
 
-TclObject TclObject::getListIndex(Interpreter& interp_, unsigned index) const
+TclObject TclObject::getListIndex(Interpreter& interp_, size_t index) const
 {
 	auto* interp = interp_.interp;
 	Tcl_Obj* element;
@@ -179,7 +200,7 @@ TclObject TclObject::getListIndex(Interpreter& interp_, unsigned index) const
 	}
 	return element ? TclObject(element) : TclObject();
 }
-TclObject TclObject::getListIndexUnchecked(unsigned index) const
+TclObject TclObject::getListIndexUnchecked(size_t index) const
 {
 	Tcl_Obj* element;
 	if (Tcl_ListObjIndex(nullptr, obj, narrow<int>(index), &element) != TCL_OK) {
@@ -188,7 +209,7 @@ TclObject TclObject::getListIndexUnchecked(unsigned index) const
 	return element ? TclObject(element) : TclObject();
 }
 
-void TclObject::removeListIndex(Interpreter& interp_, unsigned index)
+void TclObject::removeListIndex(Interpreter& interp_, size_t index)
 {
 	unshare(obj);
 	auto* interp = interp_.interp;

@@ -24,12 +24,16 @@
  */
 
 #include "RomHalnote.hh"
-#include "CacheLine.hh"
+
 #include "SRAM.hh"
+
+#include "CacheLine.hh"
 #include "MSXException.hh"
-#include "one_of.hh"
 #include "serialize.hh"
+
+#include "one_of.hh"
 #include "xrange.hh"
+
 #include <memory>
 
 namespace openmsx {
@@ -45,7 +49,7 @@ RomHalnote::RomHalnote(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomHalnote::reset(EmuTime::param /*time*/)
+void RomHalnote::reset(EmuTime /*time*/)
 {
 	subBanks[0] = subBanks[1] = 0;
 	sramEnabled = false;
@@ -60,7 +64,7 @@ void RomHalnote::reset(EmuTime::param /*time*/)
 	setUnmapped(7);
 }
 
-const byte* RomHalnote::getReadCacheLine(word address) const
+const byte* RomHalnote::getReadCacheLine(uint16_t address) const
 {
 	if (subMapperEnabled && (0x7000 <= address) && (address < 0x8000)) {
 		// sub-mapper
@@ -71,13 +75,13 @@ const byte* RomHalnote::getReadCacheLine(word address) const
 		return Rom8kBBlocks::getReadCacheLine(address);
 	}
 }
-byte RomHalnote::readMem(word address, EmuTime::param /*time*/)
+byte RomHalnote::readMem(uint16_t address, EmuTime /*time*/)
 {
 	// all reads are cacheable, reuse that implementation
 	return *RomHalnote::getReadCacheLine(address);
 }
 
-void RomHalnote::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomHalnote::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if (address < 0x4000) {
 		// SRAM region
@@ -125,7 +129,7 @@ void RomHalnote::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* RomHalnote::getWriteCacheLine(word address)
+byte* RomHalnote::getWriteCacheLine(uint16_t address)
 {
 	if (address < 0x4000) {
 		// SRAM region

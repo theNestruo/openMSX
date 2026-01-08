@@ -9,15 +9,19 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace openmsx {
 
 class ImGuiBitmapViewer final : public ImGuiPart
 {
 public:
-	using ImGuiPart::ImGuiPart;
+	enum ScrnMode : int { SCR5, SCR6, SCR7, SCR8, SCR11, SCR12, OTHER }; // must be in sync with VDPCmdEngine 'scrnMode'
 
-	[[nodiscard]] zstring_view iniName() const override { return "bitmap viewer"; }
+public:
+	ImGuiBitmapViewer(ImGuiManager& manager_, size_t index);
+
+	[[nodiscard]] zstring_view iniName() const override { return title; }
 	void save(ImGuiTextBuffer& buf) override;
 	void loadLine(std::string_view name, zstring_view value) override;
 	void paint(MSXMotherBoard* motherBoard) override;
@@ -27,10 +31,11 @@ private:
 	                  int mode, int lines, int page, uint32_t* output) const;
 
 public:
-	bool showBitmapViewer = false;
+	bool show = true;
 
 private:
-	enum BitmapScrnMode : int { SCR5, SCR6, SCR7, SCR8, SCR11, SCR12, OTHER };
+	std::string title;
+
 	int bitmapScrnMode = 0;
 	int bitmapPage = 0; // 0-3 or 0-1 depending on screen mode, -1 for all pages   TODO extended VRAM
 	int bitmapLines = 1; // 0->192, 1->212, 2->256
@@ -49,8 +54,14 @@ private:
 	std::optional<gl::Texture> bitmapTex; // TODO also deallocate when needed
 	std::optional<gl::Texture> bitmapGridTex;
 
+	int showCmdOverlay = 0; // 0->none, 1->in-progress, 2->also finished
+	gl::vec4 colorSrcDone{0.0f, 1.0f, 0.0f, 0.66f};
+	gl::vec4 colorSrcTodo{0.0f, 1.0f, 0.0f, 0.33f};
+	gl::vec4 colorDstDone{1.0f, 0.0f, 0.0f, 0.66f};
+	gl::vec4 colorDstTodo{1.0f, 0.0f, 0.0f, 0.33f};
+
 	static constexpr auto persistentElements = std::tuple{
-		PersistentElement   {"show",           &ImGuiBitmapViewer::showBitmapViewer},
+		PersistentElement   {"show",           &ImGuiBitmapViewer::show},
 		PersistentElement   {"overrideAll",    &ImGuiBitmapViewer::overrideAll},
 		PersistentElement   {"overrideMode",   &ImGuiBitmapViewer::overrideMode},
 		PersistentElement   {"overridePage",   &ImGuiBitmapViewer::overridePage},
@@ -64,7 +75,12 @@ private:
 		PersistentElement   {"showGrid",       &ImGuiBitmapViewer::bitmapGrid},
 		PersistentElement   {"gridColor",      &ImGuiBitmapViewer::bitmapGridColor},
 		PersistentElement   {"showRasterBeam", &ImGuiBitmapViewer::rasterBeam},
-		PersistentElement   {"rasterBeamColor",&ImGuiBitmapViewer::rasterBeamColor}
+		PersistentElement   {"rasterBeamColor",&ImGuiBitmapViewer::rasterBeamColor},
+		PersistentElementMax{"showCmdOverlay", &ImGuiBitmapViewer::showCmdOverlay, 3},
+		PersistentElement   {"colorSrcDone",   &ImGuiBitmapViewer::colorSrcDone},
+		PersistentElement   {"colorSrcTodo",   &ImGuiBitmapViewer::colorSrcTodo},
+		PersistentElement   {"colorDstDone",   &ImGuiBitmapViewer::colorDstDone},
+		PersistentElement   {"colorDstTodo",   &ImGuiBitmapViewer::colorDstTodo}
 	};
 };
 

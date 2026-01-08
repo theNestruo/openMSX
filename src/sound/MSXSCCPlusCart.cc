@@ -2,15 +2,19 @@
 // renaming, which isn't worth it right now. TODO rename this :)
 
 #include "MSXSCCPlusCart.hh"
+
+#include "CacheLine.hh"
 #include "File.hh"
 #include "FileContext.hh"
 #include "FileException.hh"
 #include "XMLElement.hh"
-#include "CacheLine.hh"
+
 #include "enumerate.hh"
 #include "narrow.hh"
 #include "ranges.hh"
 #include "serialize.hh"
+
+#include <algorithm>
 #include <bit>
 
 namespace openmsx {
@@ -81,20 +85,20 @@ MSXSCCPlusCart::MSXSCCPlusCart(const DeviceConfig& config)
 		}
 	}
 	// make valgrind happy
-	ranges::fill(isRamSegment, true);
-	ranges::fill(mapper, 0);
+	std::ranges::fill(isRamSegment, true);
+	std::ranges::fill(mapper, 0);
 
 	powerUp(getCurrentTime());
 }
 
-void MSXSCCPlusCart::powerUp(EmuTime::param time)
+void MSXSCCPlusCart::powerUp(EmuTime time)
 {
 	scc.powerUp(time);
 	ram.clear();
 	reset(time);
 }
 
-void MSXSCCPlusCart::reset(EmuTime::param time)
+void MSXSCCPlusCart::reset(EmuTime time)
 {
 	setModeRegister(0);
 	setMapper(0, 0);
@@ -105,7 +109,7 @@ void MSXSCCPlusCart::reset(EmuTime::param time)
 }
 
 
-byte MSXSCCPlusCart::readMem(word addr, EmuTime::param time)
+byte MSXSCCPlusCart::readMem(uint16_t addr, EmuTime time)
 {
 	if (((enable == EN_SCC)     && (0x9800 <= addr) && (addr < 0xA000)) ||
 	    ((enable == EN_SCCPLUS) && (0xB800 <= addr) && (addr < 0xC000))) {
@@ -115,7 +119,7 @@ byte MSXSCCPlusCart::readMem(word addr, EmuTime::param time)
 	}
 }
 
-byte MSXSCCPlusCart::peekMem(word addr, EmuTime::param time) const
+byte MSXSCCPlusCart::peekMem(uint16_t addr, EmuTime time) const
 {
 	// modeRegister can not be read!
 	if (((enable == EN_SCC)     && (0x9800 <= addr) && (addr < 0xA000)) ||
@@ -132,7 +136,7 @@ byte MSXSCCPlusCart::peekMem(word addr, EmuTime::param time) const
 	}
 }
 
-const byte* MSXSCCPlusCart::getReadCacheLine(word start) const
+const byte* MSXSCCPlusCart::getReadCacheLine(uint16_t start) const
 {
 	if (((enable == EN_SCC)     && (0x9800 <= start) && (start < 0xA000)) ||
 	    ((enable == EN_SCCPLUS) && (0xB800 <= start) && (start < 0xC000))) {
@@ -149,7 +153,7 @@ const byte* MSXSCCPlusCart::getReadCacheLine(word start) const
 }
 
 
-void MSXSCCPlusCart::writeMem(word address, byte value, EmuTime::param time)
+void MSXSCCPlusCart::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if ((address < 0x4000) || (0xC000 <= address)) {
 		// outside memory range
@@ -207,7 +211,7 @@ void MSXSCCPlusCart::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* MSXSCCPlusCart::getWriteCacheLine(word start)
+byte* MSXSCCPlusCart::getWriteCacheLine(uint16_t start)
 {
 	if ((0x4000 <= start) && (start < 0xC000)) {
 		if (start == (0xBFFF & CacheLine::HIGH)) {
@@ -284,8 +288,7 @@ void MSXSCCPlusCart::checkEnable()
 template<typename Archive>
 void MSXSCCPlusCart::serialize(Archive& ar, unsigned /*version*/)
 {
-	//ar.serialize_blob("ram", std::span{ram}); // TODO error with clang-15/libc++
-	ar.serialize_blob("ram", std::span{ram.begin(), ram.end()});
+	ar.serialize_blob("ram", std::span{ram});
 	ar.serialize("scc",    scc,
 	             "mapper", mapper,
 	             "mode",   modeRegister);

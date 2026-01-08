@@ -2,22 +2,22 @@
 
 namespace openmsx {
 
-void DummyMidiInDevice::signal(EmuTime::param /*time*/)
+void DummyMidiInDevice::signal(EmuTime /*time*/)
 {
 	// ignore
 }
 
-std::string_view DummyMidiInDevice::getDescription() const
+zstring_view DummyMidiInDevice::getDescription() const
 {
 	return {};
 }
 
 void DummyMidiInDevice::plugHelper(Connector& /*connector*/,
-                                   EmuTime::param /*time*/)
+                                   EmuTime /*time*/)
 {
 }
 
-void DummyMidiInDevice::unplugHelper(EmuTime::param /*time*/)
+void DummyMidiInDevice::unplugHelper(EmuTime /*time*/)
 {
 }
 

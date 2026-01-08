@@ -1,4 +1,5 @@
 #include "MSXYamahaSFG.hh"
+
 #include "CacheLine.hh"
 #include "serialize.hh"
 
@@ -12,7 +13,7 @@ static YM2151::Variant parseVariant(const DeviceConfig& config)
 	throw MSXException("Invalid variant '", variant, "', expected 'YM2151' or 'YM2164'.");
 }
 
-MSXYamahaSFG::MSXYamahaSFG(const DeviceConfig& config)
+MSXYamahaSFG::MSXYamahaSFG(DeviceConfig& config)
 	: MSXDevice(config)
 	, rom(getName() + " ROM", "rom", config)
 	, ym2151(getName(), "Yamaha SFG-01/05", config, getCurrentTime(), parseVariant(config))
@@ -21,7 +22,7 @@ MSXYamahaSFG::MSXYamahaSFG(const DeviceConfig& config)
 	reset(getCurrentTime());
 }
 
-void MSXYamahaSFG::reset(EmuTime::param time)
+void MSXYamahaSFG::reset(EmuTime time)
 {
 	ym2151.reset(time);
 	ym2148.reset();
@@ -30,9 +31,9 @@ void MSXYamahaSFG::reset(EmuTime::param time)
 	irqVector2148 = 255; // TODO check
 }
 
-void MSXYamahaSFG::writeMem(word address, byte value, EmuTime::param time)
+void MSXYamahaSFG::writeMem(uint16_t address, byte value, EmuTime time)
 {
-	word maskedAddress = address & 0x3FFF;
+	uint16_t maskedAddress = address & 0x3FFF;
 	switch (maskedAddress) {
 	case 0x3FF0: // OPM ADDRESS REGISTER
 		writeRegisterPort(value, time);
@@ -60,7 +61,7 @@ void MSXYamahaSFG::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* MSXYamahaSFG::getWriteCacheLine(word start)
+byte* MSXYamahaSFG::getWriteCacheLine(uint16_t start)
 {
 	if ((start & 0x3FFF & CacheLine::HIGH) == (0x3FF0 & CacheLine::HIGH)) {
 		return nullptr;
@@ -73,19 +74,19 @@ byte MSXYamahaSFG::readIRQVector()
 	return ym2148.pendingIRQ() ? irqVector2148 : irqVector;
 }
 
-void MSXYamahaSFG::writeRegisterPort(byte value, EmuTime::param /*time*/)
+void MSXYamahaSFG::writeRegisterPort(byte value, EmuTime /*time*/)
 {
 	registerLatch = value;
 }
 
-void MSXYamahaSFG::writeDataPort(byte value, EmuTime::param time)
+void MSXYamahaSFG::writeDataPort(byte value, EmuTime time)
 {
 	ym2151.writeReg(registerLatch, value, time);
 }
 
-byte MSXYamahaSFG::readMem(word address, EmuTime::param time)
+byte MSXYamahaSFG::readMem(uint16_t address, EmuTime time)
 {
-	word maskedAddress = address & 0x3FFF;
+	uint16_t maskedAddress = address & 0x3FFF;
 	if (maskedAddress < 0x3FF0 || maskedAddress >= 0x3FF8) {
 		return peekMem(address, time);
 	}
@@ -102,9 +103,9 @@ byte MSXYamahaSFG::readMem(word address, EmuTime::param time)
 	return 0xFF;
 }
 
-byte MSXYamahaSFG::peekMem(word address, EmuTime::param time) const
+byte MSXYamahaSFG::peekMem(uint16_t address, EmuTime time) const
 {
-	word maskedAddress = address & 0x3FFF;
+	uint16_t maskedAddress = address & 0x3FFF;
 	if (maskedAddress < 0x3FF0 || maskedAddress >= 0x3FF8) {
 		// size can also be 16kB for SFG-01 or 32kB for SFG-05
 		return rom[address & (rom.size() - 1)];
@@ -125,7 +126,7 @@ byte MSXYamahaSFG::peekMem(word address, EmuTime::param time) const
 	return 0xFF;
 }
 
-const byte* MSXYamahaSFG::getReadCacheLine(word start) const
+const byte* MSXYamahaSFG::getReadCacheLine(uint16_t start) const
 {
 	if ((start & 0x3FFF & CacheLine::HIGH) == (0x3FF0 & CacheLine::HIGH)) {
 		return nullptr;

@@ -33,14 +33,18 @@
 //                0x84-0x87 0x8C-0x8F  contain (same) 8kB RAM
 
 #include "RomFSA1FM.hh"
-#include "CacheLine.hh"
+
 #include "SRAM.hh"
-#include "MSXMotherBoard.hh"
+
+#include "CacheLine.hh"
 #include "MSXException.hh"
-#include "one_of.hh"
+#include "MSXMotherBoard.hh"
 #include "serialize.hh"
+
+#include "one_of.hh"
 #include "strCat.hh"
 #include "xrange.hh"
+
 #include <memory>
 
 namespace openmsx {
@@ -69,12 +73,12 @@ RomFSA1FM1::RomFSA1FM1(const DeviceConfig& config, Rom&& rom_)
 	}
 }
 
-void RomFSA1FM1::reset(EmuTime::param /*time*/)
+void RomFSA1FM1::reset(EmuTime /*time*/)
 {
 	// initial rom bank is undefined
 }
 
-byte RomFSA1FM1::peekMem(word address, EmuTime::param /*time*/) const
+byte RomFSA1FM1::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	if ((0x4000 <= address) && (address < 0x6000)) {
 		// read rom
@@ -98,12 +102,12 @@ byte RomFSA1FM1::peekMem(word address, EmuTime::param /*time*/) const
 	}
 }
 
-byte RomFSA1FM1::readMem(word address, EmuTime::param time)
+byte RomFSA1FM1::readMem(uint16_t address, EmuTime time)
 {
 	return RomFSA1FM1::peekMem(address, time);
 }
 
-const byte* RomFSA1FM1::getReadCacheLine(word address) const
+const byte* RomFSA1FM1::getReadCacheLine(uint16_t address) const
 {
 	if (address == (0x7FC0 & CacheLine::HIGH)) {
 		// don't cache IO area
@@ -120,7 +124,7 @@ const byte* RomFSA1FM1::getReadCacheLine(word address) const
 	}
 }
 
-void RomFSA1FM1::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomFSA1FM1::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	// TODO 0x7FC0 - 0x7FCF is modem IO area
 
@@ -133,7 +137,7 @@ void RomFSA1FM1::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* RomFSA1FM1::getWriteCacheLine(word address)
+byte* RomFSA1FM1::getWriteCacheLine(uint16_t address)
 {
 	if (address == (0x7FC0 & CacheLine::HIGH)) {
 		// dont't cache IO area
@@ -166,7 +170,7 @@ RomFSA1FM2::RomFSA1FM2(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomFSA1FM2::reset(EmuTime::param /*time*/)
+void RomFSA1FM2::reset(EmuTime /*time*/)
 {
 	control = 0;
 	for (auto region : xrange(6)) {
@@ -178,7 +182,7 @@ void RomFSA1FM2::reset(EmuTime::param /*time*/)
 	setUnmapped(7);
 }
 
-byte RomFSA1FM2::peekMem(word address, EmuTime::param time) const
+byte RomFSA1FM2::peekMem(uint16_t address, EmuTime time) const
 {
 	if (0xC000 <= address) {
 		return 0xFF;
@@ -194,12 +198,12 @@ byte RomFSA1FM2::peekMem(word address, EmuTime::param time) const
 	}
 }
 
-byte RomFSA1FM2::readMem(word address, EmuTime::param time)
+byte RomFSA1FM2::readMem(uint16_t address, EmuTime time)
 {
 	return RomFSA1FM2::peekMem(address, time);
 }
 
-const byte* RomFSA1FM2::getReadCacheLine(word address) const
+const byte* RomFSA1FM2::getReadCacheLine(uint16_t address) const
 {
 	if (0xC000 <= address) {
 		return unmappedRead.data();
@@ -214,8 +218,8 @@ const byte* RomFSA1FM2::getReadCacheLine(word address) const
 	}
 }
 
-void RomFSA1FM2::writeMem(word address, byte value,
-                          EmuTime::param /*time*/)
+void RomFSA1FM2::writeMem(uint16_t address, byte value,
+                          EmuTime /*time*/)
 {
 	if ((0x6000 <= address) && (address < 0x7FF0)) {
 		// set mapper state
@@ -253,7 +257,7 @@ void RomFSA1FM2::writeMem(word address, byte value,
 	}
 }
 
-byte* RomFSA1FM2::getWriteCacheLine(word address)
+byte* RomFSA1FM2::getWriteCacheLine(uint16_t address)
 {
 	if ((0x6000 <= address) && (address < 0x8000)) {
 		return nullptr;

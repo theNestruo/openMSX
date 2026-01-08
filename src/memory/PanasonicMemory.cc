@@ -1,29 +1,33 @@
 #include "PanasonicMemory.hh"
-#include "MSXMotherBoard.hh"
-#include "MSXCPU.hh"
+
 #include "Ram.hh"
 #include "Rom.hh"
+
 #include "DeviceConfig.hh"
 #include "HardwareConfig.hh"
-#include "XMLElement.hh"
+#include "MSXCPU.hh"
 #include "MSXException.hh"
+#include "MSXMotherBoard.hh"
+#include "XMLElement.hh"
+
 #include "narrow.hh"
+
 #include <memory>
 
 namespace openmsx {
 
 PanasonicMemory::PanasonicMemory(MSXMotherBoard& motherBoard)
 	: msxcpu(motherBoard.getCPU())
-	, rom([&]() -> std::optional<Rom> {
-		const auto* elem = motherBoard.getMachineConfig()->
+	, rom([&] -> std::optional<Rom> {
+		auto* elem = motherBoard.getMachineConfig()->
 				getConfig().findChild("PanasonicRom");
 		if (!elem) return std::nullopt;
 
-		const HardwareConfig* hwConf = motherBoard.getMachineConfig();
+		HardwareConfig* hwConf = motherBoard.getMachineConfig();
 		assert(hwConf);
+		DeviceConfig config(*hwConf, *elem);
 		return std::optional<Rom>(std::in_place,
-			"PanasonicRom", "Turbor-R main ROM",
-			DeviceConfig(*hwConf, *elem));
+			"PanasonicRom", "Turbor-R main ROM", config);
 	}())
 {
 }
@@ -34,7 +38,7 @@ void PanasonicMemory::registerRam(Ram& ram_)
 	ramSize = narrow<unsigned>(ram_.size());
 }
 
-std::span<const byte, 0x2000> PanasonicMemory::getRomBlock(unsigned block) const
+std::span<const uint8_t, 0x2000> PanasonicMemory::getRomBlock(unsigned block) const
 {
 	if (!rom) {
 		throw MSXException("Missing PanasonicRom.");
@@ -46,7 +50,7 @@ std::span<const byte, 0x2000> PanasonicMemory::getRomBlock(unsigned block) const
 		unsigned offset = (block & 0x03) * 0x2000;
 		unsigned ramOffset = (block < 0x30) ? ramSize - 0x10000 :
 		                                      ramSize - 0x08000;
-		return std::span<const byte, 0x2000>{ram + ramOffset + offset, 0x2000};
+		return std::span<const uint8_t, 0x2000>{ram + ramOffset + offset, 0x2000};
 	} else {
 		unsigned offset = block * 0x2000;
 		if (offset >= rom->size()) {
@@ -56,7 +60,7 @@ std::span<const byte, 0x2000> PanasonicMemory::getRomBlock(unsigned block) const
 	}
 }
 
-std::span<const byte> PanasonicMemory::getRomRange(unsigned first, unsigned last) const
+std::span<const uint8_t> PanasonicMemory::getRomRange(unsigned first, unsigned last) const
 {
 	if (!rom) {
 		throw MSXException("Missing PanasonicRom.");
@@ -78,7 +82,7 @@ std::span<const byte> PanasonicMemory::getRomRange(unsigned first, unsigned last
 	return subspan(*rom, start, stop - start);
 }
 
-byte* PanasonicMemory::getRamBlock(unsigned block)
+uint8_t* PanasonicMemory::getRamBlock(unsigned block)
 {
 	if (!ram) return nullptr;
 

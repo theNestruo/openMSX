@@ -1,42 +1,44 @@
 #include "PluggableFactory.hh"
 
-#include "PluggingController.hh"
-#include "MSXMotherBoard.hh"
-#include "Reactor.hh"
-#include "JoyMega.hh"
 #include "JoyHandle.hh"
 #include "ArkanoidPad.hh"
-#include "InputEventGenerator.hh"
-#include "JoyTap.hh"
-#include "NinjaTap.hh"
-#include "SETetrisDongle.hh"
 #include "CircuitDesignerRDDongle.hh"
-#include "MagicKey.hh"
+#include "InputEventGenerator.hh"
+#include "JoyMega.hh"
+#include "JoyTap.hh"
 #include "MSXJoystick.hh"
+#include "MSXMotherBoard.hh"
+#include "MagicKey.hh"
 #include "MidiInReader.hh"
 #include "MidiOutLogger.hh"
 #include "Mouse.hh"
+#include "NinjaTap.hh"
 #include "Paddle.hh"
-#include "Trackball.hh"
-#include "Touchpad.hh"
+#include "PluggingController.hh"
+#include "Printer.hh"
 #include "PrinterPortLogger.hh"
 #include "PrinterPortSimpl.hh"
-#include "Printer.hh"
-#include "RS232Tester.hh"
 #include "RS232Net.hh"
+#include "RS232Tester.hh"
+#include "Reactor.hh"
+#include "SETetrisDongle.hh"
+#include "Touchpad.hh"
+#include "Trackball.hh"
 #include "WavAudioInput.hh"
+
 #include "components.hh"
 #if	defined(_WIN32)
 #include "MidiInWindows.hh"
 #include "MidiOutWindows.hh"
 #endif
-#if defined(__APPLE__)
+#ifdef __APPLE__
 #include "MidiInCoreMIDI.hh"
 #include "MidiOutCoreMIDI.hh"
 #endif
 #if COMPONENT_ALSAMIDI
 #include "MidiSessionALSA.hh"
 #endif
+
 #include <memory>
 
 namespace openmsx {
@@ -114,18 +116,18 @@ void PluggableFactory::createAll(PluggingController& controller,
 		commandController));
 
 	// MIDI:
-#if !defined(_WIN32)
+#ifndef _WIN32
 	// Devices and pipes are not usable as files on Windows, and MidiInReader
 	// reads all data as soon as it becomes available, so this pluggable is
 	// not useful on Windows.
 	controller.registerPluggable(std::make_unique<MidiInReader>(
 		eventDistributor, scheduler, commandController));
 #endif
-#if defined(_WIN32)
+#ifdef _WIN32
 	MidiInWindows::registerAll(eventDistributor, scheduler, controller);
 	MidiOutWindows::registerAll(controller);
 #endif
-#if defined(__APPLE__)
+#ifdef __APPLE__
 	controller.registerPluggable(std::make_unique<MidiInCoreMIDIVirtual>(
 		eventDistributor, scheduler));
 	MidiInCoreMIDI::registerAll(eventDistributor, scheduler, controller);

@@ -1,11 +1,12 @@
 #include "MSXRS232.hh"
 
 #include "RS232Device.hh"
+
+#include "BooleanSetting.hh"
 #include "CacheLine.hh"
+#include "MSXException.hh"
 #include "Ram.hh"
 #include "Rom.hh"
-#include "BooleanSetting.hh"
-#include "MSXException.hh"
 #include "serialize.hh"
 
 #include "one_of.hh"
@@ -20,7 +21,7 @@ namespace openmsx {
 const unsigned RAM_OFFSET = 0x2000;
 const unsigned RAM_SIZE = 0x800;
 
-MSXRS232::MSXRS232(const DeviceConfig& config)
+MSXRS232::MSXRS232(DeviceConfig& config)
 	: MSXDevice(config)
 	, RS232Connector(MSXDevice::getPluggingController(), "msx-rs232")
 	, i8254(getScheduler(), &cntr0, &cntr1, nullptr, getCurrentTime())
@@ -48,9 +49,9 @@ MSXRS232::MSXRS232(const DeviceConfig& config)
 		throw MSXException("RS232C only supports 8kB or 16kB ROMs.");
 	}
 
-	EmuDuration total(1.0 / 1.8432e6); // 1.8432MHz
-	EmuDuration hi   (1.0 / 3.6864e6); //   half clock period
-	EmuTime::param time = getCurrentTime();
+	EmuDuration total = EmuDuration::hz(1.8432e6); // 1.8432MHz
+	EmuDuration hi    = EmuDuration::hz(3.6864e6); //   half clock period
+	EmuTime time = getCurrentTime();
 	i8254.getClockPin(0).setPeriodicState(total, hi, time);
 	i8254.getClockPin(1).setPeriodicState(total, hi, time);
 	i8254.getClockPin(2).setPeriodicState(total, hi, time);
@@ -60,13 +61,13 @@ MSXRS232::MSXRS232(const DeviceConfig& config)
 
 MSXRS232::~MSXRS232() = default;
 
-void MSXRS232::powerUp(EmuTime::param time)
+void MSXRS232::powerUp(EmuTime time)
 {
 	if (ram) ram->clear();
 	reset(time);
 }
 
-void MSXRS232::reset(EmuTime::param /*time*/)
+void MSXRS232::reset(EmuTime /*time*/)
 {
 	rxrdyIRQlatch = false;
 	rxrdyIRQenabled = false;
@@ -77,12 +78,12 @@ void MSXRS232::reset(EmuTime::param /*time*/)
 	if (ram) ram->clear();
 }
 
-byte MSXRS232::readMem(word address, EmuTime::param time)
+uint8_t MSXRS232::readMem(uint16_t address, EmuTime time)
 {
 	if (hasMemoryBasedIo && (0xBFF8 <= address) && (address <= 0xBFFF)) {
 		return readIOImpl(address & 0x07, time);
 	}
-	word addr = address & 0x3FFF;
+	uint16_t addr = address & 0x3FFF;
 	if (ram && ((RAM_OFFSET <= addr) && (addr < (RAM_OFFSET + RAM_SIZE)))) {
 		return (*ram)[addr - RAM_OFFSET];
 	} else if (rom && (0x4000 <= address) && (address < 0x8000)) {
@@ -92,12 +93,12 @@ byte MSXRS232::readMem(word address, EmuTime::param time)
 	}
 }
 
-const byte* MSXRS232::getReadCacheLine(word start) const
+const uint8_t* MSXRS232::getReadCacheLine(uint16_t start) const
 {
 	if (hasMemoryBasedIo && (start == (0xBFF8 & CacheLine::HIGH))) {
 		return nullptr;
 	}
-	word addr = start & 0x3FFF;
+	uint16_t addr = start & 0x3FFF;
 	if (ram && ((RAM_OFFSET <= addr) && (addr < (RAM_OFFSET + RAM_SIZE)))) {
 		return &(*ram)[addr - RAM_OFFSET];
 	} else if (rom && (0x4000 <= start) && (start < 0x8000)) {
@@ -107,7 +108,7 @@ const byte* MSXRS232::getReadCacheLine(word start) const
 	}
 }
 
-void MSXRS232::writeMem(word address, byte value, EmuTime::param time)
+void MSXRS232::writeMem(uint16_t address, uint8_t value, EmuTime time)
 {
 
 	if (hasMemoryBasedIo && (0xBFF8 <= address) && (address <= 0xBFFF)) {
@@ -119,20 +120,21 @@ void MSXRS232::writeMem(word address, byte value, EmuTime::param time)
 		if (address == 0xBFFA) {
 			ioAccessEnabled = (value & (1 << 4))!=0;
 		}
-		return writeIOImpl(address & 0x07, value, time);
+		writeIOImpl(address & 0x07, value, time);
+		return;
 	}
-	word addr = address & 0x3FFF;
+	uint16_t addr = address & 0x3FFF;
 	if (ram && ((RAM_OFFSET <= addr) && (addr < (RAM_OFFSET + RAM_SIZE)))) {
 		(*ram)[addr - RAM_OFFSET] = value;
 	}
 }
 
-byte* MSXRS232::getWriteCacheLine(word start)
+uint8_t* MSXRS232::getWriteCacheLine(uint16_t start)
 {
 	if (hasMemoryBasedIo && (start == (0xBFF8 & CacheLine::HIGH))) {
 		return nullptr;
 	}
-	word addr = start & 0x3FFF;
+	uint16_t addr = start & 0x3FFF;
 	if (ram && ((RAM_OFFSET <= addr) && (addr < (RAM_OFFSET + RAM_SIZE)))) {
 		return &(*ram)[addr - RAM_OFFSET];
 	} else {
@@ -146,7 +148,7 @@ bool MSXRS232::allowUnaligned() const
 	return true;
 }
 
-byte MSXRS232::readIO(word port, EmuTime::param time)
+uint8_t MSXRS232::readIO(uint16_t port, EmuTime time)
 {
 	if (ioAccessEnabled) {
 		return readIOImpl(port & 0x07, time);
@@ -154,7 +156,7 @@ byte MSXRS232::readIO(word port, EmuTime::param time)
 	return 0xFF;
 }
 
-byte MSXRS232::readIOImpl(word port, EmuTime::param time)
+uint8_t MSXRS232::readIOImpl(uint16_t port, EmuTime time)
 {
 	switch (port) {
 		case 0: // UART data register
@@ -174,7 +176,7 @@ byte MSXRS232::readIOImpl(word port, EmuTime::param time)
 	}
 }
 
-byte MSXRS232::peekIO(word port, EmuTime::param time) const
+uint8_t MSXRS232::peekIO(uint16_t port, EmuTime time) const
 {
 	if (hasMemoryBasedIo && !ioAccessEnabled) return 0xFF;
 	port &= 0x07;
@@ -196,12 +198,12 @@ byte MSXRS232::peekIO(word port, EmuTime::param time) const
 	}
 }
 
-void MSXRS232::writeIO(word port, byte value, EmuTime::param time)
+void MSXRS232::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	if (ioAccessEnabled) writeIOImpl(port & 0x07, value, time);
 }
 
-void MSXRS232::writeIOImpl(word port, byte value, EmuTime::param time)
+void MSXRS232::writeIOImpl(uint16_t port, uint8_t value, EmuTime time)
 {
 	switch (port) {
 		case 0: // UART data register
@@ -222,7 +224,7 @@ void MSXRS232::writeIOImpl(word port, byte value, EmuTime::param time)
 	}
 }
 
-byte MSXRS232::readStatus(EmuTime::param time)
+uint8_t MSXRS232::readStatus(EmuTime time)
 {
 
 	// Info from http://nocash.emubase.de/portar.htm
@@ -241,7 +243,7 @@ byte MSXRS232::readStatus(EmuTime::param time)
 	//   on this I/O port, if CN1 is open. If CN1 is closed, it always
 	//   reads back as "0". ...
 
-	byte result = 0xFF; // Start with 0xFF, open lines on the data bus pull to 1
+	uint8_t result = 0xFF; // Start with 0xFF, open lines on the data bus pull to 1
 	const auto& dev = getPluggedRS232Dev();
 
 	// Mask out (active low) bits
@@ -254,7 +256,7 @@ byte MSXRS232::readStatus(EmuTime::param time)
 	return result;
 }
 
-void MSXRS232::setIRQMask(byte value)
+void MSXRS232::setIRQMask(uint8_t value)
 {
 	enableRxRDYIRQ(!(value & 1));
 }
@@ -286,31 +288,31 @@ void MSXRS232::enableRxRDYIRQ(bool enabled)
 
 // I8251Interface  (pass calls from I8251 to outConnector)
 
-void MSXRS232::Interface::setRxRDY(bool status, EmuTime::param /*time*/)
+void MSXRS232::Interface::setRxRDY(bool status, EmuTime /*time*/)
 {
 	auto& rs232 = OUTER(MSXRS232, interface);
 	rs232.setRxRDYIRQ(status);
 }
 
-void MSXRS232::Interface::setDTR(bool status, EmuTime::param time)
+void MSXRS232::Interface::setDTR(bool status, EmuTime time)
 {
 	const auto& rs232 = OUTER(MSXRS232, interface);
 	rs232.getPluggedRS232Dev().setDTR(status, time);
 }
 
-void MSXRS232::Interface::setRTS(bool status, EmuTime::param time)
+void MSXRS232::Interface::setRTS(bool status, EmuTime time)
 {
 	const auto& rs232 = OUTER(MSXRS232, interface);
 	rs232.getPluggedRS232Dev().setRTS(status, time);
 }
 
-bool MSXRS232::Interface::getDSR(EmuTime::param time)
+bool MSXRS232::Interface::getDSR(EmuTime time)
 {
 	const auto& rs232 = OUTER(MSXRS232, interface);
 	return rs232.getPluggedRS232Dev().getDSR(time).value_or(rs232.inputsPullup);
 }
 
-bool MSXRS232::Interface::getCTS(EmuTime::param time)
+bool MSXRS232::Interface::getCTS(EmuTime time)
 {
 	const auto& rs232 = OUTER(MSXRS232, interface);
 	return rs232.getPluggedRS232Dev().getCTS(time).value_or(rs232.inputsPullup);
@@ -334,13 +336,13 @@ void MSXRS232::Interface::setParityBit(bool enable, Parity parity)
 	rs232.getPluggedRS232Dev().setParityBit(enable, parity);
 }
 
-void MSXRS232::Interface::recvByte(byte value, EmuTime::param time)
+void MSXRS232::Interface::recvByte(uint8_t value, EmuTime time)
 {
 	const auto& rs232 = OUTER(MSXRS232, interface);
 	rs232.getPluggedRS232Dev().recvByte(value, time);
 }
 
-void MSXRS232::Interface::signal(EmuTime::param time)
+void MSXRS232::Interface::signal(EmuTime time)
 {
 	const auto& rs232 = OUTER(MSXRS232, interface);
 	rs232.getPluggedRS232Dev().signal(time); // for input
@@ -349,7 +351,7 @@ void MSXRS232::Interface::signal(EmuTime::param time)
 
 // Counter 0 output
 
-void MSXRS232::Counter0::signal(ClockPin& pin, EmuTime::param time)
+void MSXRS232::Counter0::signal(ClockPin& pin, EmuTime time)
 {
 	auto& rs232 = OUTER(MSXRS232, cntr0);
 	ClockPin& clk = rs232.i8251.getClockPin();
@@ -361,7 +363,7 @@ void MSXRS232::Counter0::signal(ClockPin& pin, EmuTime::param time)
 	}
 }
 
-void MSXRS232::Counter0::signalPosEdge(ClockPin& /*pin*/, EmuTime::param /*time*/)
+void MSXRS232::Counter0::signalPosEdge(ClockPin& /*pin*/, EmuTime /*time*/)
 {
 	UNREACHABLE;
 }
@@ -369,7 +371,7 @@ void MSXRS232::Counter0::signalPosEdge(ClockPin& /*pin*/, EmuTime::param /*time*
 
 // Counter 1 output // TODO split rx tx
 
-void MSXRS232::Counter1::signal(ClockPin& pin, EmuTime::param time)
+void MSXRS232::Counter1::signal(ClockPin& pin, EmuTime time)
 {
 	auto& rs232 = OUTER(MSXRS232, cntr1);
 	ClockPin& clk = rs232.i8251.getClockPin();
@@ -381,7 +383,7 @@ void MSXRS232::Counter1::signal(ClockPin& pin, EmuTime::param time)
 	}
 }
 
-void MSXRS232::Counter1::signalPosEdge(ClockPin& /*pin*/, EmuTime::param /*time*/)
+void MSXRS232::Counter1::signalPosEdge(ClockPin& /*pin*/, EmuTime /*time*/)
 {
 	UNREACHABLE;
 }
@@ -414,7 +416,7 @@ void MSXRS232::setParityBit(bool enable, Parity parity)
 	i8251.setParityBit(enable, parity);
 }
 
-void MSXRS232::recvByte(byte value, EmuTime::param time)
+void MSXRS232::recvByte(uint8_t value, EmuTime time)
 {
 	i8251.recvByte(value, time);
 }

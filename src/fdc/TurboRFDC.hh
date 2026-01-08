@@ -4,6 +4,8 @@
 #include "MSXFDC.hh"
 #include "RomBlockDebuggable.hh"
 #include "TC8566AF.hh"
+
+#include <cstdint>
 #include <span>
 
 namespace openmsx {
@@ -11,16 +13,16 @@ namespace openmsx {
 class TurboRFDC final : public MSXFDC
 {
 public:
-	enum class Type { BOTH, R7FF2, R7FF8 };
+	enum class Type : uint8_t { BOTH, R7FF2, R7FF8 };
 
-	explicit TurboRFDC(const DeviceConfig& config);
+	explicit TurboRFDC(DeviceConfig& config);
 
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word start) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t start) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

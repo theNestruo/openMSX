@@ -1,19 +1,23 @@
 #include "OSDImageBasedWidget.hh"
-#include "OSDTopWidget.hh"
+
 #include "OSDGUI.hh"
+#include "OSDTopWidget.hh"
+
+#include "CommandException.hh"
 #include "Display.hh"
 #include "GLImage.hh"
 #include "TclObject.hh"
-#include "CommandException.hh"
 #include "Timer.hh"
+
 #include "narrow.hh"
 #include "ranges.hh"
 #include "stl.hh"
-#include "view.hh"
 #include "xrange.hh"
+
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <ranges>
 
 using namespace gl;
 
@@ -22,7 +26,7 @@ namespace openmsx {
 OSDImageBasedWidget::OSDImageBasedWidget(Display& display_, const TclObject& name_)
 	: OSDWidget(display_, name_)
 {
-	ranges::fill(rgba, 0x000000ff); // black, opaque
+	std::ranges::fill(rgba, 0x000000ff); // black, opaque
 }
 
 OSDImageBasedWidget::~OSDImageBasedWidget() = default;
@@ -36,7 +40,7 @@ OSDImageBasedWidget::~OSDImageBasedWidget() = default;
 			result[i] = value.getListIndex(interp, i).getInt(interp);
 		}
 	} else if (len == 1) {
-		ranges::fill(result, value.getInt(interp));
+		std::ranges::fill(result, value.getInt(interp));
 	} else {
 		throw CommandException("Expected either 1 or 4 values.");
 	}
@@ -89,11 +93,11 @@ void OSDImageBasedWidget::setProperty(
 
 void OSDImageBasedWidget::setRGBA(std::span<const uint32_t, 4> newRGBA)
 {
-	if (ranges::equal(rgba, newRGBA)) {
+	if (std::ranges::equal(rgba, newRGBA)) {
 		return; // not changed
 	}
 	invalidateLocal();
-	ranges::copy(newRGBA, rgba);
+	copy_to_range(newRGBA, rgba);
 }
 
 static void set4(std::span<const uint32_t, 4> rgba, uint32_t mask, unsigned shift, TclObject& result)
@@ -101,7 +105,7 @@ static void set4(std::span<const uint32_t, 4> rgba, uint32_t mask, unsigned shif
 	if (ranges::all_equal(rgba)) {
 		result = (rgba[0] & mask) >> shift;
 	} else {
-		result.addListElements(view::transform(xrange(4), [&](auto i) {
+		result.addListElements(std::views::transform(xrange(4), [&](auto i) {
 			return int((rgba[i] & mask) >> shift);
 		}));
 	}

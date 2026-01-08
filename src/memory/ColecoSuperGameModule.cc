@@ -1,4 +1,5 @@
 #include "ColecoSuperGameModule.hh"
+
 #include "DummyAY8910Periphery.hh"
 #include "MSXCPUInterface.hh"
 #include "MSXException.hh"
@@ -15,13 +16,17 @@ static constexpr unsigned MAIN_RAM_SIZE = 0x400; // 1kB
 static constexpr unsigned SGM_RAM_SIZE = 0x8000; // 32kB
 static constexpr unsigned BIOS_ROM_SIZE = 0x2000; // 8kB
 
-ColecoSuperGameModule::ColecoSuperGameModule(const DeviceConfig& config)
+ColecoSuperGameModule::ColecoSuperGameModule(DeviceConfig& config)
 	: MSXDevice(config)
 	, psg(getName() + " PSG", DummyAY8910Periphery::instance(), config, getCurrentTime())
 	, sgmRam(config, getName() + " RAM", "SGM RAM", SGM_RAM_SIZE)
 	, mainRam(config, "Main RAM", "Main RAM", MAIN_RAM_SIZE)
 	, biosRom(getName(), "BIOS ROM", config)
 {
+	// adjust PSG volume, see details in https://github.com/openMSX/openMSX/issues/1934
+	// note: this is a theoretical value. The actual relative volume should be measured!
+	psg.setSoftwareVolume(21000.0f/9000.0f, getCurrentTime());
+
 	if (biosRom.size() != BIOS_ROM_SIZE) {
 		throw MSXException("ColecoVision BIOS ROM must be exactly 8kB in size.");
 	}
@@ -47,7 +52,7 @@ static constexpr unsigned translateMainRamAddress(unsigned address)
 	return address & (MAIN_RAM_SIZE - 1);
 }
 
-void ColecoSuperGameModule::reset(EmuTime::param time)
+void ColecoSuperGameModule::reset(EmuTime time)
 {
 	ramEnabled = false;
 	ramAtBiosEnabled = false;
@@ -56,7 +61,7 @@ void ColecoSuperGameModule::reset(EmuTime::param time)
 	invalidateDeviceRWCache(); // flush all to be sure
 }
 
-byte ColecoSuperGameModule::readIO(word port, EmuTime::param time)
+byte ColecoSuperGameModule::readIO(uint16_t port, EmuTime time)
 {
 	if ((port & 0xFF) == 0x52) {
 		return psg.readRegister(psgLatch, time);
@@ -64,7 +69,7 @@ byte ColecoSuperGameModule::readIO(word port, EmuTime::param time)
 	return 0xFF;
 }
 
-byte ColecoSuperGameModule::peekIO(word port, EmuTime::param time) const
+byte ColecoSuperGameModule::peekIO(uint16_t port, EmuTime time) const
 {
 	if ((port & 0xFF) == 0x52) {
 		return psg.peekRegister(psgLatch, time);
@@ -72,7 +77,7 @@ byte ColecoSuperGameModule::peekIO(word port, EmuTime::param time) const
 	return 0xFF;
 }
 
-void ColecoSuperGameModule::writeIO(word port, byte value, EmuTime::param time)
+void ColecoSuperGameModule::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	switch (port & 0xFF) {
 		case 0x50: // PSG address (latch?)
@@ -95,7 +100,7 @@ void ColecoSuperGameModule::writeIO(word port, byte value, EmuTime::param time)
 	}
 }
 
-byte ColecoSuperGameModule::peekMem(word address, EmuTime::param /*time*/) const
+byte ColecoSuperGameModule::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	if (address < BIOS_ROM_SIZE) {
 		return ramAtBiosEnabled ? sgmRam.peek(address) : biosRom[address];
@@ -109,7 +114,7 @@ byte ColecoSuperGameModule::peekMem(word address, EmuTime::param /*time*/) const
 	return 0xFF;
 }
 
-byte ColecoSuperGameModule::readMem(word address, EmuTime::param /*time*/)
+byte ColecoSuperGameModule::readMem(uint16_t address, EmuTime /*time*/)
 {
 	if (address < BIOS_ROM_SIZE) {
 		return ramAtBiosEnabled ? sgmRam.read(address) : biosRom[address];
@@ -123,7 +128,7 @@ byte ColecoSuperGameModule::readMem(word address, EmuTime::param /*time*/)
 	return 0xFF;
 }
 
-void ColecoSuperGameModule::writeMem(word address, byte value, EmuTime::param /*time*/)
+void ColecoSuperGameModule::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if (address < BIOS_ROM_SIZE) {
 		if (ramAtBiosEnabled) {
@@ -138,7 +143,7 @@ void ColecoSuperGameModule::writeMem(word address, byte value, EmuTime::param /*
 	}
 }
 
-const byte* ColecoSuperGameModule::getReadCacheLine(word start) const
+const byte* ColecoSuperGameModule::getReadCacheLine(uint16_t start) const
 {
 	if (start < BIOS_ROM_SIZE) {
 		return ramAtBiosEnabled ? sgmRam.getReadCacheLine(start) : &biosRom[start];
@@ -152,7 +157,7 @@ const byte* ColecoSuperGameModule::getReadCacheLine(word start) const
 	return unmappedRead.data();
 }
 
-byte* ColecoSuperGameModule::getWriteCacheLine(word start)
+byte* ColecoSuperGameModule::getWriteCacheLine(uint16_t start)
 {
 	if (start < BIOS_ROM_SIZE) {
 		if (ramAtBiosEnabled) {

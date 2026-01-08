@@ -1,8 +1,12 @@
 #include "CompressedFileAdapter.hh"
+
 #include "FileException.hh"
+#include "MappedFile.hh"
+
 #include "hash_set.hh"
 #include "ranges.hh"
 #include "xxhash.hh"
+
 #include <cstring>
 
 namespace openmsx {
@@ -58,11 +62,10 @@ void CompressedFileAdapter::decompress()
 void CompressedFileAdapter::read(std::span<uint8_t> buffer)
 {
 	decompress();
-	if (decompressed->size < (pos + buffer.size())) {
+	if (decompressed->buf.size() < (pos + buffer.size())) {
 		throw FileException("Read beyond end of file");
 	}
-	const auto& buf = decompressed->buf;
-	ranges::copy(std::span{&buf[pos], buffer.size()}, buffer);
+	copy_to_range(decompressed->buf.subspan(pos, buffer.size()), buffer);
 	pos += buffer.size();
 }
 
@@ -71,21 +74,16 @@ void CompressedFileAdapter::write(std::span<const uint8_t> /*buffer*/)
 	throw FileException("Writing to compressed files not yet supported");
 }
 
-std::span<const uint8_t> CompressedFileAdapter::mmap()
+MappedFileImpl CompressedFileAdapter::mmap(size_t extra, bool is_const)
 {
 	decompress();
-	return { decompressed->buf.data(), decompressed->size };
-}
-
-void CompressedFileAdapter::munmap()
-{
-	// nothing
+	return {std::span{decompressed->buf}, extra, is_const};
 }
 
 size_t CompressedFileAdapter::getSize()
 {
 	decompress();
-	return decompressed->size;
+	return decompressed->buf.size();
 }
 
 void CompressedFileAdapter::seek(size_t newPos)

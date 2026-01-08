@@ -1,10 +1,12 @@
 #ifndef MEGASCSI_HH
 #define MEGASCSI_HH
 
-#include "MSXDevice.hh"
 #include "MB89352.hh"
-#include "SRAM.hh"
+
+#include "MSXDevice.hh"
 #include "RomBlockDebuggable.hh"
+#include "SRAM.hh"
+
 #include <array>
 
 namespace openmsx {
@@ -12,15 +14,15 @@ namespace openmsx {
 class MegaSCSI final : public MSXDevice
 {
 public:
-	explicit MegaSCSI(const DeviceConfig& config);
+	explicit MegaSCSI(DeviceConfig& config);
 
-	void reset(EmuTime::param time) override;
+	void reset(EmuTime time) override;
 
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]]byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]]const byte* getReadCacheLine(word address) const override;
-	[[nodiscard]]byte* getWriteCacheLine(word address) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]]byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]]const byte* getReadCacheLine(uint16_t address) const override;
+	[[nodiscard]]byte* getWriteCacheLine(uint16_t address) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

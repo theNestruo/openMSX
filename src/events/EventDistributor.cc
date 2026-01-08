@@ -1,14 +1,17 @@
 #include "EventDistributor.hh"
+
 #include "EventListener.hh"
-#include "Reactor.hh"
-#include "RTScheduler.hh"
-#include "Interpreter.hh"
 #include "InputEventGenerator.hh"
+
+#include "Interpreter.hh"
+#include "RTScheduler.hh"
+#include "Reactor.hh"
 #include "Thread.hh"
-#include "ranges.hh"
+
 #include "stl.hh"
+
+#include <algorithm>
 #include <cassert>
-#include <chrono>
 
 namespace openmsx {
 
@@ -25,8 +28,8 @@ void EventDistributor::registerEventListener(
 	// a listener may only be registered once for each type
 	assert(!contains(priorityMap, &listener, &Entry::listener));
 	// insert at highest position that keeps listeners sorted on priority
-	auto it = ranges::upper_bound(priorityMap, priority, {}, &Entry::priority);
-	priorityMap.emplace(it, Entry{priority, &listener});
+	auto it = std::ranges::upper_bound(priorityMap, priority, {}, &Entry::priority);
+	priorityMap.emplace(it, Entry{.priority = priority, .listener = &listener});
 }
 
 void EventDistributor::unregisterEventListener(
@@ -53,7 +56,6 @@ void EventDistributor::distributeEvent(Event&& event)
 		//             EventDistributor::unregisterEventListener()
 		//   thread 2: EventDistributor::distributeEvent()
 		//             Reactor::enterMainLoop()
-		condition.notify_all();
 		lock.unlock();
 		reactor.enterMainLoop();
 	}
@@ -64,14 +66,14 @@ bool EventDistributor::isRegistered(EventType type, EventListener* listener) con
 	return contains(listeners[size_t(type)], listener, &Entry::listener);
 }
 
-void EventDistributor::deliverEvents()
+void EventDistributor::deliverEvents(std::optional<int> timeoutMs)
 {
 	static PriorityMap priorityMapCopy; // static to preserve capacity
 	static EventQueue eventsCopy;       // static to preserve capacity
 
 	assert(Thread::isMainThread());
 
-	reactor.getInputEventGenerator().poll();
+	reactor.getInputEventGenerator().poll(timeoutMs);
 	reactor.getInterpreter().poll();
 	reactor.getRTScheduler().execute();
 
@@ -107,13 +109,6 @@ void EventDistributor::deliverEvents()
 		}
 		eventsCopy.clear();
 	}
-}
-
-bool EventDistributor::sleep(unsigned us)
-{
-	std::chrono::microseconds duration(us);
-	std::unique_lock lock(cvMutex);
-	return condition.wait_for(lock, duration) == std::cv_status::timeout;
 }
 
 } // namespace openmsx

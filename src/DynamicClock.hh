@@ -2,8 +2,10 @@
 #define DYNAMICCLOCK_HH
 
 #include "EmuTime.hh"
+
 #include "DivModBySame.hh"
 #include "narrow.hh"
+
 #include <cassert>
 
 namespace openmsx {
@@ -22,12 +24,12 @@ public:
 	  * The initial frequency is infinite;
 	  * in other words, the clock stands still.
 	  */
-	explicit DynamicClock(EmuTime::param time) : lastTick(time) {}
+	explicit DynamicClock(EmuTime time) : lastTick(time) {}
 
 	/** Create a new clock, which starts ticking at given time with
 	  * given frequency.
 	  */
-	DynamicClock(EmuTime::param time, unsigned freq)
+	DynamicClock(EmuTime time, unsigned freq)
 		: lastTick(time)
 	{
 		setFreq(freq);
@@ -35,21 +37,21 @@ public:
 
 	/** Gets the time at which the last clock tick occurred.
 	  */
-	[[nodiscard]] EmuTime::param getTime() const {
+	[[nodiscard]] EmuTime getTime() const {
 		return lastTick;
 	}
 
 	/** Checks whether this clock's last tick is or is not before the
 	  * given time stamp.
 	  */
-	[[nodiscard]] bool before(EmuTime::param e) const {
+	[[nodiscard]] bool before(EmuTime e) const {
 		return lastTick.time < e.time;
 	}
 
 	/** Calculate the number of ticks for this clock until the given time.
 	  * It is not allowed to call this method for a time in the past.
 	  */
-	[[nodiscard]] unsigned getTicksTill(EmuTime::param e) const {
+	[[nodiscard]] unsigned getTicksTill(EmuTime e) const {
 		assert(e.time >= lastTick.time);
 		return divMod.div(e.time - lastTick.time);
 	}
@@ -65,17 +67,17 @@ public:
 		unsigned integral;
 		float fractional;
 	};
-	[[nodiscard]] IntegralFractional getTicksTillAsIntFloat(EmuTime::param e) const {
+	[[nodiscard]] IntegralFractional getTicksTillAsIntFloat(EmuTime e) const {
 		assert(e.time >= lastTick.time);
 		auto dur = e.time - lastTick.time;
 		auto [q, r] = divMod.divMod(dur);
 		auto f = float(r) / float(getStep());
 		assert(0.0f <= f); assert(f < 1.0f);
-		return {q, f};
+		return {.integral = q, .fractional = f};
 	}
 
 	template<typename FIXED>
-	void getTicksTill(EmuTime::param e, FIXED& result) const {
+	void getTicksTill(EmuTime e, FIXED& result) const {
 		assert(e.time >= lastTick.time);
 		uint64_t tmp = (e.time - lastTick.time) << FIXED::FRACTION_BITS;
 		result = FIXED::create(divMod.div(tmp + (getStep() / 2)));
@@ -85,12 +87,12 @@ public:
 	  * or go past the given time.
 	  * It is not allowed to call this method for a time in the past.
 	  */
-	[[nodiscard]] unsigned getTicksTillUp(EmuTime::param e) const {
+	[[nodiscard]] unsigned getTicksTillUp(EmuTime e) const {
 		assert(e.time >= lastTick.time);
 		return divMod.div(e.time - lastTick.time + (getStep() - 1));
 	}
 
-	[[nodiscard]] double getTicksTillDouble(EmuTime::param e) const {
+	[[nodiscard]] double getTicksTillDouble(EmuTime e) const {
 		assert(e.time >= lastTick.time);
 		return double(e.time - lastTick.time) / getStep();
 	}
@@ -138,13 +140,13 @@ public:
 
 	/** Set the duration of a clock tick. See also setFreq(). */
 	void setPeriod(EmuDuration period) {
-		assert(period.length() < (1ULL << 32));
-		divMod.setDivisor(uint32_t(period.length()));
+		assert(period.toUint64() < (1ULL << 32));
+		divMod.setDivisor(uint32_t(period.toUint64()));
 	}
 
 	/** Reset the clock to start ticking at the given time.
 	  */
-	void reset(EmuTime::param e) {
+	void reset(EmuTime e) {
 		lastTick.time = e.time;
 	}
 
@@ -152,7 +154,7 @@ public:
 	  * the given time.
 	  * It is not allowed to advance a clock to a time in the past.
 	  */
-	void advance(EmuTime::param e) {
+	void advance(EmuTime e) {
 		assert(lastTick.time <= e.time);
 		lastTick.time = e.time - divMod.mod(e.time - lastTick.time);
 	}
@@ -166,6 +168,7 @@ public:
 	/** Calculate the time at which this clock will have ticked the given
 	  * number of times (counted from its last tick).
 	  */
+	// TODO should be friend, workaround for pre-gcc-13 bug
 	[[nodiscard]] EmuTime operator+(uint64_t n) const {
 		return EmuTime(lastTick.time + n * getStep());
 	}
@@ -186,7 +189,7 @@ public:
 	[[nodiscard]] EmuTime getFastAdd(unsigned n) const {
 		return add(lastTick, n);
 	}
-	[[nodiscard]] EmuTime add(EmuTime::param time, unsigned n) const {
+	[[nodiscard]] EmuTime add(EmuTime time, unsigned n) const {
 		#ifdef DEBUG
 		assert((uint64_t(n) * getStep()) < (1ULL << 32));
 		#endif

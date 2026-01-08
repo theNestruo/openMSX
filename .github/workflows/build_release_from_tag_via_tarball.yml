@@ -36,14 +36,14 @@ jobs:
             cpu: x86_64
             os: mingw-w64
             flavour: opt
-          - image: macos-14
-            xcode_version: 15.4
+          - image: macos-15
+            xcode_version: 16.4
             name: MacOS
             cpu: x86_64
             os: darwin
             flavour: opt
-          - image: macos-14
-            xcode_version: 15.4
+          - image: macos-15
+            xcode_version: 16.4
             name: MacOS
             cpu: aarch64
             os: darwin
@@ -107,9 +107,20 @@ jobs:
         KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
       with:
         os: ${{ matrix.os }}
+    - name: Preparations for notarizing binaries on Darwin builds
+      if: matrix.os == 'darwin'
+      uses: ./.github/actions/prepare-notarize
+      env:
+        NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
+        NOTARY_API_KEY_ID: ${{ vars.NOTARY_API_KEY_ID }}
+        NOTARY_API_ISSUER: ${{ vars.NOTARY_API_ISSUER }}
+        NOTARY_PROFILE: ${{ vars.NOTARY_PROFILE }}
+      with:
+        os: ${{ matrix.os }}
     - name: Perform build on extracted tarball
-      env: 
-        CODE_SIGN_IDENTITY: 748867M822
+      env:
+        CODE_SIGN_IDENTITY: ${{ vars.CODE_SIGN_IDENTITY }}
+        NOTARY_PROFILE: ${{ vars.NOTARY_PROFILE }}
       # Directory name only
       uses: ./.github/actions/build
       with:

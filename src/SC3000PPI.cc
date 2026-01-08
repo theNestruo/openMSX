@@ -1,12 +1,14 @@
 #include "SC3000PPI.hh"
+
+#include "CassettePort.hh"
+#include "GlobalSettings.hh"
+#include "JoystickPort.hh"
 #include "MSXMotherBoard.hh"
 #include "Reactor.hh"
-#include "CassettePort.hh"
-#include "JoystickPort.hh"
 #include "XMLElement.hh"
-#include "GlobalSettings.hh"
-#include "narrow.hh"
 #include "serialize.hh"
+
+#include "narrow.hh"
 
 namespace openmsx {
 
@@ -37,22 +39,22 @@ SC3000PPI::SC3000PPI(const DeviceConfig& config)
 	reset(time);
 }
 
-void SC3000PPI::reset(EmuTime::param time)
+void SC3000PPI::reset(EmuTime time)
 {
 	i8255.reset(time);
 }
 
-byte SC3000PPI::readIO(word port, EmuTime::param time)
+uint8_t SC3000PPI::readIO(uint16_t port, EmuTime time)
 {
 	return i8255.read(port & 0x03, time);
 }
 
-byte SC3000PPI::peekIO(word port, EmuTime::param time) const
+uint8_t SC3000PPI::peekIO(uint16_t port, EmuTime time) const
 {
 	return i8255.peek(port & 0x03, time);
 }
 
-void SC3000PPI::writeIO(word port, byte value, EmuTime::param time)
+void SC3000PPI::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	i8255.write(port & 0x03, value, time);
 }
@@ -60,38 +62,38 @@ void SC3000PPI::writeIO(word port, byte value, EmuTime::param time)
 
 // I8255Interface
 
-byte SC3000PPI::readA(EmuTime::param time)
+uint8_t SC3000PPI::readA(EmuTime time)
 {
 	return peekA(time);
 }
-byte SC3000PPI::peekA(EmuTime::param time) const
+uint8_t SC3000PPI::peekA(EmuTime time) const
 {
 	if (selectedRow == 7) {
 		// Joystick hardware cannot detect when it's being read, so using the
 		// read method for peeking should be safe.
-		byte joy1 = ports[0]->read(time) & 0x3F;
-		byte joy2 = ports[1]->read(time) & 0x3F;
-		return narrow_cast<byte>(joy1 | (joy2 << 6));
+		uint8_t joy1 = ports[0]->read(time) & 0x3F;
+		uint8_t joy2 = ports[1]->read(time) & 0x3F;
+		return narrow_cast<uint8_t>(joy1 | (joy2 << 6));
 	} else {
 		return keyboard.getKeys()[selectedRow];
 	}
 }
-void SC3000PPI::writeA(byte /*value*/, EmuTime::param /*time*/)
+void SC3000PPI::writeA(uint8_t /*value*/, EmuTime /*time*/)
 {
 }
 
-byte SC3000PPI::readB(EmuTime::param time)
+uint8_t SC3000PPI::readB(EmuTime time)
 {
 	return peekB(time);
 }
-byte SC3000PPI::peekB(EmuTime::param time) const
+uint8_t SC3000PPI::peekB(EmuTime time) const
 {
 	// TODO: Are bits 4-7 available regardless of which keyboard row is selected?
 	//       That would make sense, but check the schematics.
 	if (selectedRow == 7) {
 		// Joystick hardware cannot detect when it's being read, so using the
 		// read method for peeking should be safe.
-		byte joy2 = ports[1]->read(time) & 0x3F;
+		uint8_t joy2 = ports[1]->read(time) & 0x3F;
 		return 0xF0 | (joy2 >> 2);
 	} else {
 		/*
@@ -110,30 +112,30 @@ byte SC3000PPI::peekB(EmuTime::param time) const
 		return 0xF0 | keys;
 	}
 }
-void SC3000PPI::writeB(byte /*value*/, EmuTime::param /*time*/)
+void SC3000PPI::writeB(uint8_t /*value*/, EmuTime /*time*/)
 {
 }
 
-nibble SC3000PPI::readC1(EmuTime::param time)
+uint4_t SC3000PPI::readC1(EmuTime time)
 {
 	return peekC1(time);
 }
-nibble SC3000PPI::peekC1(EmuTime::param /*time*/) const
+uint4_t SC3000PPI::peekC1(EmuTime /*time*/) const
 {
 	// TODO: Check.
 	return 15;
 }
-nibble SC3000PPI::readC0(EmuTime::param time)
+uint4_t SC3000PPI::readC0(EmuTime time)
 {
 	return peekC0(time);
 }
-nibble SC3000PPI::peekC0(EmuTime::param /*time*/) const
+uint4_t SC3000PPI::peekC0(EmuTime /*time*/) const
 {
 	// TODO: Is this selection readable at all? And if so, what is the value
 	//       of bit 3?
 	return selectedRow;
 }
-void SC3000PPI::writeC1(nibble value, EmuTime::param time)
+void SC3000PPI::writeC1(uint4_t value, EmuTime time)
 {
 	if ((prevBits ^ value) & 1) {
 		cassettePort.setMotor((value & 1) == 0, time); // 0=0n, 1=Off
@@ -149,7 +151,7 @@ void SC3000PPI::writeC1(nibble value, EmuTime::param time)
 	//}
 	prevBits = value;
 }
-void SC3000PPI::writeC0(nibble value, EmuTime::param /*time*/)
+void SC3000PPI::writeC0(uint4_t value, EmuTime /*time*/)
 {
 	selectedRow = value & 7;
 	//fprintf(stderr, "SC3000PPI: selected row %d\n", selectedRow);
@@ -162,11 +164,11 @@ void SC3000PPI::serialize(Archive& ar, unsigned /*version*/)
 	ar.serialize("i8255", i8255);
 
 	// merge prevBits and selectedRow into one byte
-	auto portC = byte((prevBits << 4) | (selectedRow << 0));
+	auto portC = uint8_t((prevBits << 4) | (selectedRow << 0));
 	ar.serialize("portC", portC);
 	if constexpr (Archive::IS_LOADER) {
 		selectedRow = (portC >> 0) & 0xF;
-		nibble bits = (portC >> 4) & 0xF;
+		uint4_t bits = (portC >> 4) & 0xF;
 		writeC1(bits, getCurrentTime());
 	}
 	ar.serialize("keyboard", keyboard);

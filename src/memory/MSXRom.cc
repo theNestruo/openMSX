@@ -1,7 +1,9 @@
 #include "MSXRom.hh"
+
 #include "RomInfo.hh"
-#include "XMLElement.hh"
+
 #include "TclObject.hh"
+#include "XMLElement.hh"
 
 namespace openmsx {
 
@@ -11,12 +13,12 @@ MSXRom::MSXRom(const DeviceConfig& config, Rom&& rom_)
 {
 }
 
-void MSXRom::writeMem(word /*address*/, byte /*value*/, EmuTime::param /*time*/)
+void MSXRom::writeMem(uint16_t /*address*/, byte /*value*/, EmuTime /*time*/)
 {
 	// nothing
 }
 
-byte* MSXRom::getWriteCacheLine(word /*address*/)
+byte* MSXRom::getWriteCacheLine(uint16_t /*address*/)
 {
 	return unmappedWrite.data();
 }

@@ -4,9 +4,9 @@
 #include "PixelOperations.hh"
 #include "gl_vec.hh"
 
-#include <string>
 #include <cassert>
 #include <cstdint>
+#include <string>
 
 namespace openmsx {
 
@@ -57,7 +57,7 @@ public:
 
 	/** Returns the color key for this output surface.
 	  */
-	[[nodiscard]] inline Pixel getKeyColor() const
+	[[nodiscard]] Pixel getKeyColor() const
 	{
 		return 0x00000000; // alpha = 0
 	}

@@ -1,9 +1,10 @@
 #ifndef MSXPRINTERPORT_HH
 #define MSXPRINTERPORT_HH
 
-#include "MSXDevice.hh"
 #include "Connector.hh"
+#include "MSXDevice.hh"
 #include "SimpleDebuggable.hh"
+
 #include <cstdint>
 
 namespace openmsx {
@@ -16,23 +17,23 @@ public:
 	explicit MSXPrinterPort(const DeviceConfig& config);
 
 	// MSXDevice
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] uint8_t readIO(uint16_t port, EmuTime::param time) override;
-	[[nodiscard]] uint8_t peekIO(uint16_t port, EmuTime::param time) const override;
-	void writeIO(uint16_t port, uint8_t value, EmuTime::param time) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] uint8_t readIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] uint8_t peekIO(uint16_t port, EmuTime time) const override;
+	void writeIO(uint16_t port, uint8_t value, EmuTime time) override;
 
 	// Connector
-	[[nodiscard]] std::string_view getDescription() const override;
-	[[nodiscard]] std::string_view getClass() const override;
-	void plug(Pluggable& dev, EmuTime::param time) override;
+	[[nodiscard]] zstring_view getDescription() const override;
+	[[nodiscard]] zstring_view getClass() const override;
+	void plug(Pluggable& dev, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
 	[[nodiscard]] PrinterPortDevice& getPluggedPrintDev() const;
-	void setStrobe(bool newStrobe, EmuTime::param time);
-	void writeData(uint8_t newData, EmuTime::param time);
+	void setStrobe(bool newStrobe, EmuTime time);
+	void writeData(uint8_t newData, EmuTime time);
 
 private:
 	struct Debuggable final : SimpleDebuggable {

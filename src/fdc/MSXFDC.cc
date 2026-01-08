@@ -1,15 +1,22 @@
 #include "MSXFDC.hh"
+
 #include "RealDrive.hh"
-#include "XMLElement.hh"
+
+#include "CacheLine.hh"
+#include "ConfigException.hh"
 #include "MSXException.hh"
-#include "enumerate.hh"
+#include "XMLElement.hh"
 #include "serialize.hh"
+
+#include "enumerate.hh"
+#include "narrow.hh"
+
 #include <array>
 #include <memory>
 
 namespace openmsx {
 
-MSXFDC::MSXFDC(const DeviceConfig& config, const std::string& romId, bool needROM,
+MSXFDC::MSXFDC(DeviceConfig& config, const std::string& romId, bool needROM,
                DiskDrive::TrackMode trackMode)
 	: MSXDevice(config)
 	, rom(needROM
@@ -40,26 +47,30 @@ MSXFDC::MSXFDC(const DeviceConfig& config, const std::string& romId, bool needRO
 	}
 }
 
-void MSXFDC::powerDown(EmuTime::param time)
+void MSXFDC::powerDown(EmuTime time)
 {
 	for (const auto& drive : drives) {
 		drive->setMotor(false, time);
 	}
 }
 
-byte MSXFDC::readMem(word address, EmuTime::param /*time*/)
+byte MSXFDC::readMem(uint16_t address, EmuTime /*time*/)
 {
 	return *MSXFDC::getReadCacheLine(address);
 }
 
-byte MSXFDC::peekMem(word address, EmuTime::param /*time*/) const
+byte MSXFDC::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	return *MSXFDC::getReadCacheLine(address);
 }
 
-const byte* MSXFDC::getReadCacheLine(word start) const
+const byte* MSXFDC::getReadCacheLine(uint16_t start) const
 {
-	return &(*rom)[start & 0x3FFF];
+	assert(rom);
+	if (romVisibilityStart <= start && start <= romVisibilityLast) {
+		return &(*rom)[start & 0x3FFF];
+	}
+	return unmappedRead.data();
 }
 
 void MSXFDC::getExtraDeviceInfo(TclObject& result) const
@@ -67,6 +78,25 @@ void MSXFDC::getExtraDeviceInfo(TclObject& result) const
 	if (rom) {
 		rom->getInfo(result);
 	}
+}
+
+void MSXFDC::parseRomVisibility(DeviceConfig& config, unsigned defaultBase, unsigned defaultSize)
+{
+	auto base = defaultBase;
+	auto size = defaultSize;
+	if (const auto* visibility = config.findChild("rom_visibility")) {
+		base = visibility->getAttributeValueAsInt("base", base);
+		size = visibility->getAttributeValueAsInt("size", size);
+	}
+
+	if (base & CacheLine::LOW) throw ConfigException("rom_visibility base must be a multiple of 0x100.");
+	if (size & CacheLine::LOW) throw ConfigException("rom_visibility size must be a multiple of 0x100.");
+	if (base >= 0x10000) throw ConfigException("rom_visibility base must be between 0 and 0xFFFF.");
+	if (size < 1 || size > 0x10000) throw ConfigException("rom_visibility size must be between 1 and 0x10000.");
+	if (base + size > 0x10000) throw ConfigException("rom_visibility base + size must be between 1 and 0x10000.");
+
+	romVisibilityStart = narrow_cast<uint16_t>(base);
+	romVisibilityLast = narrow_cast<uint16_t>(base + size - 1);
 }
 
 

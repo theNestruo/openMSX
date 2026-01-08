@@ -1,7 +1,8 @@
 #ifndef MIDIOUTWINDOWS_HH
 #define MIDIOUTWINDOWS_HH
 
-#if defined(_WIN32)
+#ifdef _WIN32
+
 #include "MidiOutDevice.hh"
 #include "serialize_meta.hh"
 
@@ -18,13 +19,13 @@ public:
 	~MidiOutWindows() override;
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// SerialDataInterface (part)
-	void recvMessage(const std::vector<uint8_t>& message, EmuTime::param time) override;
+	void recvMessage(const std::vector<uint8_t>& message, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

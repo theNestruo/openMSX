@@ -3,6 +3,7 @@
 
 #include "narrow.hh"
 #include "serialize.hh"
+
 #include <cassert>
 #include <concepts>
 #include <cstdint>
@@ -21,68 +22,73 @@ inline constexpr double RECIP_MAIN_FREQ = 1.0 / MAIN_FREQ;
 class EmuDuration
 {
 public:
-	// This is only a very small class (one 64-bit member). On 64-bit CPUs
-	// it's cheaper to pass this by value. On 32-bit CPUs pass-by-reference
-	// is cheaper.
-#ifdef __x86_64
-	using param = EmuDuration;
-#else
-	using param = const EmuDuration&;
-#endif
-
 	// friends
 	friend class EmuTime;
 
 	// constructors
 	constexpr EmuDuration() = default;
-	constexpr explicit EmuDuration(uint64_t n) : time(n) {}
-	constexpr explicit EmuDuration(double duration)
-		: time(uint64_t(duration * MAIN_FREQ + 0.5)) {}
+	constexpr explicit EmuDuration(std::unsigned_integral auto n) : time(n) {}
 
-	static constexpr EmuDuration sec(unsigned x)
-		{ return EmuDuration(x * MAIN_FREQ); }
-	static constexpr EmuDuration msec(unsigned x)
-		{ return EmuDuration(x * MAIN_FREQ / 1000); }
-	static constexpr EmuDuration usec(unsigned x)
-		{ return EmuDuration(x * MAIN_FREQ / 1000000); }
-	static constexpr EmuDuration hz(unsigned x)
-		{ return EmuDuration(MAIN_FREQ / x); }
+	static constexpr EmuDuration sec(std::integral auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ)); }
+	static constexpr EmuDuration sec(std::floating_point auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ + 0.5)); }
+	static constexpr EmuDuration msec(std::integral auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ / 1000)); }
+	static constexpr EmuDuration msec(std::floating_point auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ / 1e3 + 0.5)); }
+	static constexpr EmuDuration usec(std::integral auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ / 1000000)); }
+	static constexpr EmuDuration usec(std::floating_point auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ / 1e6 + 0.5)); }
+	static constexpr EmuDuration nsec(std::integral auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ / 1000000000)); }
+	static constexpr EmuDuration nsec(std::floating_point auto x)
+		{ return EmuDuration(uint64_t(x * MAIN_FREQ / 1e9 + 0.5)); }
+	static constexpr EmuDuration hz(std::integral auto x)
+		{ return EmuDuration(uint64_t(MAIN_FREQ / x)); }
+	static constexpr EmuDuration hz(std::floating_point auto x)
+		{ return EmuDuration(uint64_t(MAIN_FREQ / x + 0.5)); }
 
 	// conversions
 	[[nodiscard]] constexpr double toDouble() const { return double(time) * RECIP_MAIN_FREQ; }
-	[[nodiscard]] constexpr uint64_t length() const { return time; }
+	[[nodiscard]] constexpr uint64_t toUint64() const { return time; }
 
 	// comparison operators
 	[[nodiscard]] constexpr auto operator<=>(const EmuDuration&) const = default;
 
 	// arithmetic operators
-	[[nodiscard]] constexpr EmuDuration operator%(EmuDuration::param d) const
-		{ return EmuDuration(time % d.time); }
-	[[nodiscard]] constexpr EmuDuration operator+(EmuDuration::param d) const
-		{ return EmuDuration(time + d.time); }
-	[[nodiscard]] constexpr EmuDuration operator*(uint64_t fact) const
-		{ return EmuDuration(time * fact); }
-	[[nodiscard]] constexpr EmuDuration operator/(unsigned fact) const
-		{ return EmuDuration(time / fact); }
+	[[nodiscard]] constexpr friend EmuDuration operator%(EmuDuration l, EmuDuration r)
+		{ return EmuDuration(l.time % r.time); }
+	[[nodiscard]] constexpr friend EmuDuration operator+(EmuDuration l, EmuDuration r)
+		{ return EmuDuration(l.time + r.time); }
+	[[nodiscard]] constexpr friend EmuDuration operator-(EmuDuration l, EmuDuration r)
+		{ assert(l.time >= r.time); return EmuDuration(l.time - r.time); }
+	[[nodiscard]] constexpr friend EmuDuration operator*(EmuDuration l, std::integral auto fact)
+		{ return EmuDuration(l.time * fact); }
+	[[nodiscard]] constexpr friend EmuDuration operator*(EmuDuration l, double fact)
+		{ return EmuDuration(narrow_cast<uint64_t>(narrow_cast<double>(l.time) * fact)); }
+	[[nodiscard]] constexpr friend EmuDuration operator/(EmuDuration l, unsigned fact)
+		{ return EmuDuration(l.time / fact); }
 	[[nodiscard]] constexpr EmuDuration divRoundUp(unsigned fact) const
 		{ return EmuDuration((time + fact - 1) / fact); }
-	[[nodiscard]] constexpr unsigned operator/(EmuDuration::param d) const
+	[[nodiscard]] constexpr friend unsigned operator/(EmuDuration l, EmuDuration r)
 	{
-		uint64_t result = time / d.time;
+		uint64_t result = l.time / r.time;
 #ifdef DEBUG
 		// we don't even want this overhead in devel builds
 		assert(result == unsigned(result));
 #endif
 		return unsigned(result);
 	}
-	[[nodiscard]] constexpr unsigned divUp(EmuDuration::param d) const {
+	[[nodiscard]] constexpr unsigned divUp(EmuDuration d) const {
 		uint64_t result = (time + d.time - 1) / d.time;
 #ifdef DEBUG
 		assert(result == unsigned(result));
 #endif
 		return unsigned(result);
 	}
-	[[nodiscard]] constexpr double div(EmuDuration::param d) const
+	[[nodiscard]] constexpr double div(EmuDuration d) const
 		{ return narrow_cast<double>(time) / narrow_cast<double>(d.time); }
 
 	constexpr EmuDuration& operator*=(unsigned fact)
@@ -136,9 +142,9 @@ template<std::unsigned_integral T> class EmuDurationCompactStorage
 {
 public:
 	explicit constexpr EmuDurationCompactStorage(EmuDuration e)
-		: time(T(e.length()))
+		: time(T(e.toUint64()))
 	{
-		assert(e.length() <= std::numeric_limits<T>::max());
+		assert(e.toUint64() <= std::numeric_limits<T>::max());
 	}
 
 	[[nodiscard]] explicit constexpr operator EmuDuration() const

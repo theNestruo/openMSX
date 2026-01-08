@@ -1,8 +1,8 @@
 #ifndef MSXHIRESTIMER_HH
 #define MSXHIRESTIMER_HH
 
-#include "MSXDevice.hh"
 #include "Clock.hh"
+#include "MSXDevice.hh"
 
 namespace openmsx {
 
@@ -11,11 +11,11 @@ class MSXHiResTimer final : public MSXDevice
 public:
 	explicit MSXHiResTimer(const DeviceConfig& config);
 
-	void reset(EmuTime::param time) override;
+	void reset(EmuTime time) override;
 
-	void writeIO(word port, byte value, EmuTime::param time) override;
-	[[nodiscard]] byte readIO(word port, EmuTime::param time) override;
-	[[nodiscard]] byte peekIO(word port, EmuTime::param time) const override;
+	void writeIO(uint16_t port, byte value, EmuTime time) override;
+	[[nodiscard]] byte readIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] byte peekIO(uint16_t port, EmuTime time) const override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

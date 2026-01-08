@@ -1,25 +1,26 @@
 #include "HD.hh"
+
+#include "DeviceConfig.hh"
+#include "Display.hh"
 #include "FileContext.hh"
 #include "FilePool.hh"
-#include "DeviceConfig.hh"
-#include "MSXCliComm.hh"
+#include "GlobalSettings.hh"
 #include "HDImageCLI.hh"
+#include "MSXCliComm.hh"
+#include "MSXException.hh"
 #include "MSXMotherBoard.hh"
 #include "Reactor.hh"
-#include "Display.hh"
-#include "GlobalSettings.hh"
-#include "MSXException.hh"
 #include "Timer.hh"
+
 #include "narrow.hh"
 #include "serialize.hh"
 #include "tiger.hh"
+
 #include <array>
 #include <cassert>
 #include <memory>
 
 namespace openmsx {
-
-using std::string;
 
 std::shared_ptr<HD::HDInUse> HD::getDrivesInUse(MSXMotherBoard& motherBoard)
 {
@@ -46,7 +47,7 @@ HD::HD(const DeviceConfig& config)
 	// (resolved) filename. For user-specified hd images (command line or
 	// via hda command) savestate will try to re-resolve the filename.
 	auto mode = File::OpenMode::NORMAL;
-	if (string cliImage = HDImageCLI::getImageForId(id);
+	if (std::string cliImage = HDImageCLI::getImageForId(id);
 	    cliImage.empty()) {
 		const auto& original = config.getChildData("filename");
 		filename = Filename(config.getFileContext().resolveCreate(original));
@@ -73,13 +74,13 @@ HD::HD(const DeviceConfig& config)
 		*this,
 		motherBoard.getReactor().getGlobalSettings().getPowerSetting());
 
-	motherBoard.registerMediaInfo(name, *this);
+	motherBoard.registerMediaProvider(name, *this);
 	motherBoard.getMSXCliComm().update(CliComm::UpdateType::HARDWARE, name, "add");
 }
 
 HD::~HD()
 {
-	motherBoard.unregisterMediaInfo(*this);
+	motherBoard.unregisterMediaProvider(*this);
 	motherBoard.getMSXCliComm().update(CliComm::UpdateType::HARDWARE, name, "remove");
 
 	unsigned id = name[2] - 'a';
@@ -93,6 +94,14 @@ void HD::getMediaInfo(TclObject& result)
 	                        "readonly", isWriteProtected());
 }
 
+void HD::setMedia(const TclObject& info, EmuTime /*time*/)
+{
+	auto target = info.getOptionalDictValue(TclObject("target"));
+	if (!target) return;
+
+	switchImage(Filename(target->getString()));
+}
+
 void HD::switchImage(const Filename& newFilename)
 {
 	file = File(newFilename);
@@ -103,7 +112,7 @@ void HD::switchImage(const Filename& newFilename)
 	                                   filename.getResolved());
 }
 
-size_t HD::getNbSectorsImpl() const
+size_t HD::getNbSectorsImpl()
 {
 	return filesize / sizeof(SectorBuffer);
 }
@@ -254,13 +263,13 @@ void HD::serialize(Archive& ar, unsigned version)
 
 		if (ar.versionAtLeast(version, 2)) {
 			// use tiger-tree-hash
-			string oldTiger;
+			std::string oldTiger;
 			if constexpr (!Archive::IS_LOADER) {
 				oldTiger = getTigerTreeHash();
 			}
 			ar.serialize("tthsum", oldTiger);
 			if constexpr (Archive::IS_LOADER) {
-				string newTiger = getTigerTreeHash();
+				std::string newTiger = getTigerTreeHash();
 				mismatch = oldTiger != newTiger;
 			}
 		} else {
@@ -270,8 +279,8 @@ void HD::serialize(Archive& ar, unsigned version)
 			if constexpr (!Archive::IS_LOADER) {
 				oldChecksum = getSha1Sum(filePool);
 			}
-			string oldChecksumStr = oldChecksum.empty()
-					      ? string{}
+			std::string oldChecksumStr = oldChecksum.empty()
+					      ? std::string{}
 					      : oldChecksum.toString();
 			ar.serialize("checksum", oldChecksumStr);
 			oldChecksum = oldChecksumStr.empty()
@@ -285,7 +294,7 @@ void HD::serialize(Archive& ar, unsigned version)
 		}
 
 		if constexpr (Archive::IS_LOADER) {
-			if (mismatch) {
+			if (mismatch && motherBoard.getCurrentTime() != EmuTime::zero()) {
 				motherBoard.getMSXCliComm().printWarning(
 					"The content of the hard disk ",
 					tmp.getResolved(),

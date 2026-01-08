@@ -1,24 +1,33 @@
 #include "Mouse.hh"
-#include "MSXEventDistributor.hh"
-#include "StateChangeDistributor.hh"
+
 #include "Event.hh"
+#include "MSXEventDistributor.hh"
 #include "StateChange.hh"
+#include "StateChangeDistributor.hh"
+
 #include "Clock.hh"
 #include "serialize.hh"
 #include "serialize_meta.hh"
-#include "unreachable.hh"
+
 #include "Math.hh"
+#include "unreachable.hh"
+
 #include <SDL.h>
+
 #include <algorithm>
 
 namespace openmsx {
 
 static constexpr int THRESHOLD = 2;
 static constexpr int SCALE = 2;
-static constexpr int PHASE_XHIGH = 0;
-static constexpr int PHASE_XLOW  = 1;
-static constexpr int PHASE_YHIGH = 2;
-static constexpr int PHASE_YLOW  = 3;
+static constexpr int PHASE_XHIGH1 = 0;
+static constexpr int PHASE_XLOW1  = 1;
+static constexpr int PHASE_YHIGH1 = 2;
+static constexpr int PHASE_YLOW1  = 3;
+static constexpr int PHASE_XHIGH2 = 4;
+static constexpr int PHASE_XLOW2  = 5;
+static constexpr int PHASE_YHIGH2 = 6;
+static constexpr int PHASE_YLOW2  = 7;
 static constexpr int STROBE = 0x04;
 
 
@@ -26,7 +35,7 @@ class MouseState final : public StateChange
 {
 public:
 	MouseState() = default; // for serialize
-	MouseState(EmuTime::param time_, int deltaX_, int deltaY_,
+	MouseState(EmuTime time_, int deltaX_, int deltaY_,
 	           uint8_t press_, uint8_t release_)
 		: StateChange(time_)
 		, deltaX(deltaX_), deltaY(deltaY_)
@@ -74,7 +83,7 @@ Mouse::Mouse(MSXEventDistributor& eventDistributor_,
              StateChangeDistributor& stateChangeDistributor_)
 	: eventDistributor(eventDistributor_)
 	, stateChangeDistributor(stateChangeDistributor_)
-	, phase(PHASE_YLOW)
+	, phase(PHASE_YLOW2)
 {
 }
 
@@ -87,17 +96,17 @@ Mouse::~Mouse()
 
 
 // Pluggable
-std::string_view Mouse::getName() const
+zstring_view Mouse::getName() const
 {
 	return "mouse";
 }
 
-std::string_view Mouse::getDescription() const
+zstring_view Mouse::getDescription() const
 {
 	return "MSX mouse";
 }
 
-void Mouse::plugHelper(Connector& /*connector*/, EmuTime::param time)
+void Mouse::plugHelper(Connector& /*connector*/, EmuTime time)
 {
 	if (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(SDL_BUTTON_LEFT)) {
 		// left mouse button pressed, joystick emulation mode
@@ -116,7 +125,7 @@ void Mouse::plugHelper2()
 	stateChangeDistributor.registerListener(*this);
 }
 
-void Mouse::unplugHelper(EmuTime::param /*time*/)
+void Mouse::unplugHelper(EmuTime /*time*/)
 {
 	stateChangeDistributor.unregisterListener(*this);
 	eventDistributor.unregisterEventListener(*this);
@@ -124,17 +133,17 @@ void Mouse::unplugHelper(EmuTime::param /*time*/)
 
 
 // JoystickDevice
-uint8_t Mouse::read(EmuTime::param /*time*/)
+uint8_t Mouse::read(EmuTime /*time*/)
 {
 	if (mouseMode) {
 		switch (phase) {
-		case PHASE_XHIGH:
+		case PHASE_XHIGH1: case PHASE_XHIGH2:
 			return ((xRel >> 4) & 0x0F) | status;
-		case PHASE_XLOW:
+		case PHASE_XLOW1: case PHASE_XLOW2:
 			return  (xRel       & 0x0F) | status;
-		case PHASE_YHIGH:
+		case PHASE_YHIGH1: case PHASE_YHIGH2:
 			return ((yRel >> 4) & 0x0F) | status;
-		case PHASE_YLOW:
+		case PHASE_YLOW1: case PHASE_YLOW2:
 			return  (yRel       & 0x0F) | status;
 		default:
 			UNREACHABLE;
@@ -194,7 +203,7 @@ void Mouse::emulateJoystick()
 	}
 }
 
-void Mouse::write(uint8_t value, EmuTime::param time)
+void Mouse::write(uint8_t value, EmuTime time)
 {
 	if (mouseMode) {
 		// TODO figure out the exact timeout value. Is there even such
@@ -212,23 +221,34 @@ void Mouse::write(uint8_t value, EmuTime::param time)
 		// uses, but 1.5ms is also the timeout value that is used for
 		// JoyMega, so it seems like a reasonable value.
 		if ((time - lastTime) > EmuDuration::usec(1500)) {
-			phase = PHASE_YLOW;
+			// Timeout to YLOW2 so that MSX software bypassing the BIOS
+			// and potentially not performing the alternate cycle
+			// (which normally is used for trackball detection)
+			// still gets continuous delta updates in each scan round
+			phase = PHASE_YLOW2;
 		}
 		lastTime = time;
 
 		switch (phase) {
-		case PHASE_XHIGH:
-			if ((value & STROBE) == 0) phase = PHASE_XLOW;
+		case PHASE_XHIGH1: case PHASE_XHIGH2:
+		case PHASE_YHIGH1: case PHASE_YHIGH2:
+			if ((value & STROBE) == 0) ++phase;
 			break;
-		case PHASE_XLOW:
-			if ((value & STROBE) != 0) phase = PHASE_YHIGH;
+		case PHASE_XLOW1: case PHASE_XLOW2:
+			if ((value & STROBE) != 0) ++phase;
 			break;
-		case PHASE_YHIGH:
-			if ((value & STROBE) == 0) phase = PHASE_YLOW;
-			break;
-		case PHASE_YLOW:
+		case PHASE_YLOW1:
 			if ((value & STROBE) != 0) {
-				phase = PHASE_XHIGH;
+				phase = PHASE_XHIGH2;
+				// Keep the delta zero in the alternate cycle of the scan round
+				// to avoid trackball detection for large (absolute) values
+				// Timeout resets the state to YLOW2 so that each scan round syncs to XHIGH1
+				xRel = yRel = 0;
+			}
+			break;
+		case PHASE_YLOW2:
+			if ((value & STROBE) != 0) {
+				phase = PHASE_XHIGH1;
 #if 0
 				// Real MSX mice don't have overflow protection,
 				// verified on a Philips SBC3810 MSX mouse.
@@ -239,6 +259,9 @@ void Mouse::write(uint8_t value, EmuTime::param time)
 				// sdsnatcher's post of 30 aug 2018 for a
 				// motivation for this difference:
 				//   https://github.com/openMSX/openMSX/issues/892
+				// Only introduce the next delta when we are about to enter the main cycle
+				// to avoid trackball detection in the alternate cycle
+				// See https://github.com/openMSX/openMSX/pull/1791#discussion_r1860252195
 				xRel = std::clamp(curXRel, -127, 127);
 				yRel = std::clamp(curYRel, -127, 127);
 				curXRel -= xRel;
@@ -254,7 +277,7 @@ void Mouse::write(uint8_t value, EmuTime::param time)
 
 
 // MSXEventListener
-void Mouse::signalMSXEvent(const Event& event, EmuTime::param time) noexcept
+void Mouse::signalMSXEvent(const Event& event, EmuTime time) noexcept
 {
 	visit(overloaded{
 		[&](const MouseMotionEvent& e) {
@@ -303,7 +326,7 @@ void Mouse::signalMSXEvent(const Event& event, EmuTime::param time) noexcept
 }
 
 void Mouse::createMouseStateChange(
-	EmuTime::param time, int deltaX, int deltaY, uint8_t press, uint8_t release)
+	EmuTime time, int deltaX, int deltaY, uint8_t press, uint8_t release)
 {
 	stateChangeDistributor.distributeNew<MouseState>(
 		time, deltaX, deltaY, press, release);
@@ -321,7 +344,7 @@ void Mouse::signalStateChange(const StateChange& event)
 	status = (status & ~ms->getPress()) | ms->getRelease();
 }
 
-void Mouse::stopReplay(EmuTime::param time) noexcept
+void Mouse::stopReplay(EmuTime time) noexcept
 {
 	// TODO read actual host mouse button state
 	int dx = 0 - curXRel;

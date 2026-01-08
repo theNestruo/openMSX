@@ -20,15 +20,19 @@
  */
 
 #include "YM2413Burczynski.hh"
+
 #include "Math.hh"
 #include "cstd.hh"
 #include "narrow.hh"
 #include "ranges.hh"
 #include "serialize.hh"
 #include "xrange.hh"
+
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <utility>
 
 namespace openmsx {
 namespace YM2413Burczynski {
@@ -448,9 +452,7 @@ inline int Slot::calc_envelope(const Channel& channel, unsigned eg_cnt, bool car
 			// percussive mode)
 			if (!(eg_cnt & eg_mask_rr)) {
 				egOut += eg_sel_rr[(eg_cnt >> eg_sh_rr) & 7];
-				if (egOut >= MAX_ATT_INDEX) {
-					egOut = MAX_ATT_INDEX;
-				}
+				egOut = std::min(egOut, MAX_ATT_INDEX);
 			}
 			// else do nothing in sustain phase
 		}
@@ -656,13 +658,13 @@ void Slot::setKeyOn(KeyPart part)
 		// do NOT restart Phase Generator (verified on real YM2413)
 		setEnvelopeState(EnvelopeState::DUMP);
 	}
-	key |= to_underlying(part);
+	key |= std::to_underlying(part);
 }
 
 void Slot::setKeyOff(KeyPart part)
 {
 	if (key) {
-		key &= ~to_underlying(part);
+		key &= ~std::to_underlying(part);
 		if (!key && isActive()) {
 			setEnvelopeState(EnvelopeState::RELEASE);
 		}
@@ -916,7 +918,7 @@ YM2413::YM2413()
 		}
 	}
 
-	ranges::fill(reg, 0); // avoid UMR
+	std::ranges::fill(reg, 0); // avoid UMR
 	eg_cnt = 0;
 	noise_rng = 0;
 
@@ -1049,7 +1051,7 @@ void YM2413::generateChannels(std::span<float*, 9 + 5> bufs, unsigned num)
 		}
 	}
 	if (isRhythm()) {
-		ranges::fill(subspan<3>(bufs, 6), nullptr);
+		std::ranges::fill(subspan<3>(bufs, 6), nullptr);
 		for (auto ch : xrange(6, 9)) {
 			if (channels[ch].car.isActive()) {
 				channelActiveBits |= 1 << ch;
@@ -1068,7 +1070,7 @@ void YM2413::generateChannels(std::span<float*, 9 + 5> bufs, unsigned num)
 			bufs[13] = nullptr;
 		}
 	} else {
-		ranges::fill(subspan<5>(bufs, 9), nullptr);
+		std::ranges::fill(subspan<5>(bufs, 9), nullptr);
 	}
 
 	if (channelActiveBits) {
@@ -1268,21 +1270,21 @@ void YM2413::writeReg(uint8_t r, uint8_t v)
 	}
 }
 
-uint8_t YM2413::peekReg(uint8_t r) const
+std::span<const uint8_t, 64> YM2413::peekRegs() const
 {
-	return reg[r];
+	return reg;
 }
 
 } // namespace YM2413Burczynski
 
-static constexpr std::initializer_list<enum_string<YM2413Burczynski::Slot::EnvelopeState>> envelopeStateInfo = {
+static constexpr auto envelopeStateInfo = std::to_array<enum_string<YM2413Burczynski::Slot::EnvelopeState>>({
 	{ "DUMP",    YM2413Burczynski::Slot::EnvelopeState::DUMP    },
 	{ "ATTACK",  YM2413Burczynski::Slot::EnvelopeState::ATTACK  },
 	{ "DECAY",   YM2413Burczynski::Slot::EnvelopeState::DECAY   },
 	{ "SUSTAIN", YM2413Burczynski::Slot::EnvelopeState::SUSTAIN },
 	{ "RELEASE", YM2413Burczynski::Slot::EnvelopeState::RELEASE },
-	{ "OFF",     YM2413Burczynski::Slot::EnvelopeState::OFF     }
-};
+	{ "OFF",     YM2413Burczynski::Slot::EnvelopeState::OFF     },
+});
 SERIALIZE_ENUM(YM2413Burczynski::Slot::EnvelopeState, envelopeStateInfo);
 
 namespace YM2413Burczynski {

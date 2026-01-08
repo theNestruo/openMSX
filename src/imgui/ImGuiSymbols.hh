@@ -5,8 +5,6 @@
 
 #include "SymbolManager.hh"
 
-#include "hash_map.hh"
-
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -18,7 +16,7 @@ struct SymbolRef {
 	unsigned symbolIdx;
 
 	[[nodiscard]] std::string_view           file(const SymbolManager& m) const { return m.getFiles()[fileIdx].filename; }
-	[[nodiscard]] std::string_view           name(const SymbolManager& m) const { return m.getFiles()[fileIdx].symbols[symbolIdx].name; }
+	[[nodiscard]] const std::string&         name(const SymbolManager& m) const { return m.getFiles()[fileIdx].symbols[symbolIdx].name; }
 	[[nodiscard]] uint16_t                  value(const SymbolManager& m) const { return m.getFiles()[fileIdx].symbols[symbolIdx].value; }
 	[[nodiscard]] std::optional<uint8_t>     slot(const SymbolManager& m) const { return m.getFiles()[fileIdx].symbols[symbolIdx].slot; }
 	[[nodiscard]] std::optional<uint16_t> segment(const SymbolManager& m) const { return m.getFiles()[fileIdx].symbols[symbolIdx].segment; }
@@ -28,13 +26,11 @@ class ImGuiSymbols final : public ImGuiPart, private SymbolObserver
 {
 public:
 	struct FileInfo {
-		FileInfo(std::string f, std::string e, SymbolFile::Type t, std::optional<int> s)
-			: filename(std::move(f)), error(std::move(e)), type(t), slot(s) {} // clang-15 workaround
-
 		std::string filename;
 		std::string error;
 		SymbolFile::Type type;
-		std::optional<int> slot;
+		std::optional<uint8_t> slot;
+		std::optional<uint16_t> segment;
 	};
 
 	explicit ImGuiSymbols(ImGuiManager& manager);
@@ -51,7 +47,8 @@ public:
 	bool show = false;
 
 private:
-	void loadFile(const std::string& filename, SymbolManager::LoadEmpty loadEmpty, SymbolFile::Type type, std::optional<uint8_t> slot = {});
+	void loadFile(const std::string& filename, SymbolManager::LoadEmpty loadEmpty, SymbolFile::Type type,
+	              std::optional<uint8_t> slot, std::optional<uint16_t> segment);
 
 	template<bool FILTER_FILE>
 	void drawTable(MSXMotherBoard* motherBoard, const std::string& file = {});

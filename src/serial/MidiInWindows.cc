@@ -1,16 +1,20 @@
-#if defined(_WIN32)
+#ifdef _WIN32
+
 #include "MidiInWindows.hh"
+
+#include "EventDistributor.hh"
 #include "MidiInConnector.hh"
+#include "Midi_w32.hh"
 #include "PluggingController.hh"
 #include "PlugException.hh"
-#include "EventDistributor.hh"
 #include "Scheduler.hh"
+
 #include "one_of.hh"
 #include "serialize.hh"
 #include "xrange.hh"
+
 #include <cstring>
 #include <cerrno>
-#include "Midi_w32.hh"
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -52,7 +56,7 @@ MidiInWindows::~MidiInWindows()
 }
 
 // Pluggable
-void MidiInWindows::plugHelper(Connector& connector_, EmuTime::param /*time*/)
+void MidiInWindows::plugHelper(Connector& connector_, EmuTime /*time*/)
 {
 	auto& midiConnector = static_cast<MidiInConnector&>(connector_);
 	midiConnector.setDataBits(SerialDataInterface::DataBits::D8); // 8 data bits
@@ -62,35 +66,33 @@ void MidiInWindows::plugHelper(Connector& connector_, EmuTime::param /*time*/)
 	setConnector(&connector_); // base class will do this in a moment,
 	                           // but thread already needs it
 
-	{
-		std::unique_lock threadIdLock(threadIdMutex);
-		thread = std::thread([this]() { run(); });
-		threadIdCond.wait(threadIdLock);
-	}
-	{
-		std::scoped_lock devIdxLock(devIdxMutex);
-		devIdx = w32_midiInOpen(name.c_str(), threadId);
-	}
-	devIdxCond.notify_all();
+	threadIdLatch.emplace(1); // (re)initialize latches
+	devIdxLatch.emplace(1);
+	thread = std::thread([this]() { run(); });
+
+	threadIdLatch->wait(); // wait till helper thread has set threadId
+	devIdx = w32_midiInOpen(name.c_str(), threadId);
+	devIdxLatch->count_down(); // unblock helper thread waiting for devIdx
+
 	if (devIdx == unsigned(-1)) {
 		throw PlugException("Failed to open " + name);
 	}
 }
 
-void MidiInWindows::unplugHelper(EmuTime::param /*time*/)
+void MidiInWindows::unplugHelper(EmuTime /*time*/)
 {
 	assert(devIdx != unsigned(-1));
 	w32_midiInClose(devIdx);
-	devIdx = unsigned(-1);
 	thread.join();
+	devIdx = unsigned(-1);
 }
 
-std::string_view MidiInWindows::getName() const
+zstring_view MidiInWindows::getName() const
 {
 	return name;
 }
 
-std::string_view MidiInWindows::getDescription() const
+zstring_view MidiInWindows::getDescription() const
 {
 	return desc;
 }
@@ -131,16 +133,9 @@ void MidiInWindows::run()
 {
 	assert(isPluggedIn());
 
-	{
-		std::scoped_lock threadIdLock(threadIdMutex);
-		threadId = GetCurrentThreadId();
-	}
-
-	{
-		std::unique_lock devIdxLock(devIdxMutex);
-		threadIdCond.notify_all();
-		devIdxCond.wait(devIdxLock);
-	}
+	threadId = GetCurrentThreadId();
+	threadIdLatch->count_down(); // unblock plugHelper waiting for threadId
+	devIdxLatch->wait(); // wait for plugHelper to set devIdx
 
 	bool fexit = devIdx == unsigned(-1);
 	while (!fexit) {
@@ -171,7 +166,7 @@ void MidiInWindows::run()
 }
 
 // MidiInDevice
-void MidiInWindows::signal(EmuTime::param time)
+void MidiInWindows::signal(EmuTime time)
 {
 	auto* conn = static_cast<MidiInConnector*>(getConnector());
 	if (!conn->acceptsData()) {
@@ -181,7 +176,7 @@ void MidiInWindows::signal(EmuTime::param time)
 	}
 	if (!conn->ready()) return;
 
-	byte data;
+	uint8_t data;
 	{
 		std::scoped_lock lock(queueMutex);
 		if (queue.empty()) return;

@@ -1,31 +1,33 @@
 #ifndef CHAKKARICOPY_HH
 #define CHAKKARICOPY_HH
 
-#include "MSXDevice.hh"
-#include "EnumSetting.hh"
 #include "BooleanSetting.hh"
+#include "EnumSetting.hh"
+#include "MSXDevice.hh"
 #include "Ram.hh"
 #include "Rom.hh"
+
+#include <cstdint>
 
 namespace openmsx {
 
 class ChakkariCopy final : public MSXDevice, private Observer<Setting>
 {
 public:
-	enum Mode { COPY, RAM };
+	enum class Mode : uint8_t { COPY, RAM };
 
-	explicit ChakkariCopy(const DeviceConfig& config);
+	explicit ChakkariCopy(DeviceConfig& config);
 	~ChakkariCopy() override;
 
-	void reset(EmuTime::param time) override;
-	void writeIO(word port, byte value, EmuTime::param time) override;
-	[[nodiscard]] byte readIO(word port, EmuTime::param time) override;
-	[[nodiscard]] byte peekIO(word port, EmuTime::param time) const override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	[[nodiscard]] const byte* getReadCacheLine(word address) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	void reset(EmuTime time) override;
+	void writeIO(uint16_t port, byte value, EmuTime time) override;
+	[[nodiscard]] byte readIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] byte peekIO(uint16_t port, EmuTime time) const override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t address) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

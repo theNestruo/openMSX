@@ -1,6 +1,9 @@
 #include "SimpleDebuggable.hh"
-#include "MSXMotherBoard.hh"
+
 #include "Debugger.hh"
+
+#include "MSXMotherBoard.hh"
+
 #include "unreachable.hh"
 
 namespace openmsx {
@@ -36,7 +39,7 @@ byte SimpleDebuggable::read(unsigned address)
 	return read(address, motherBoard.getCurrentTime());
 }
 
-byte SimpleDebuggable::read(unsigned /*address*/, EmuTime::param /*time*/)
+byte SimpleDebuggable::read(unsigned /*address*/, EmuTime /*time*/)
 {
 	UNREACHABLE;
 }
@@ -47,7 +50,7 @@ void SimpleDebuggable::write(unsigned address, byte value)
 }
 
 void SimpleDebuggable::write(unsigned /*address*/, byte /*value*/,
-                             EmuTime::param /*time*/)
+                             EmuTime /*time*/)
 {
 	// does nothing
 }

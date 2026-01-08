@@ -1,24 +1,27 @@
 #ifndef HD_HH
 #define HD_HH
 
+#include "HDCommand.hh"
+
 #include "DiskContainer.hh"
 #include "File.hh"
 #include "Filename.hh"
-#include "HDCommand.hh"
-#include "SectorAccessibleDisk.hh"
 #include "MSXMotherBoard.hh"
-#include "TigerTree.hh"
+#include "SectorAccessibleDisk.hh"
 #include "serialize_meta.hh"
+
+#include "TigerTree.hh"
+
 #include <bitset>
-#include <string>
 #include <optional>
+#include <string>
 
 namespace openmsx {
 
 class DeviceConfig;
 
 class HD : public SectorAccessibleDisk, public DiskContainer
-         , public TTData, public MediaInfoProvider
+         , public TTData, public MediaProvider
 {
 public:
 	static constexpr unsigned MAX_HD = 26;
@@ -37,6 +40,7 @@ public:
 
 	// MediaInfoProvider
 	void getMediaInfo(TclObject& result) override;
+	void setMedia(const TclObject& info, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -48,7 +52,7 @@ private:
 	void readSectorsImpl(
 		std::span<SectorBuffer> buffers, size_t startSector) override;
 	void writeSectorImpl(size_t sector, const SectorBuffer& buf) override;
-	[[nodiscard]] size_t getNbSectorsImpl() const override;
+	[[nodiscard]] size_t getNbSectorsImpl() override;
 	[[nodiscard]] bool isWriteProtectedImpl() const override;
 	[[nodiscard]] Sha1Sum getSha1SumImpl(FilePool& filePool) override;
 

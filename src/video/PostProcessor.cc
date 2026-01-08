@@ -24,11 +24,11 @@
 
 #include "MemBuffer.hh"
 #include "aligned.hh"
+#include "inplace_buffer.hh"
 #include "narrow.hh"
 #include "random.hh"
 #include "ranges.hh"
 #include "stl.hh"
-#include "vla.hh"
 #include "xrange.hh"
 
 #include <algorithm>
@@ -82,6 +82,8 @@ PostProcessor::PostProcessor(
 	monitor3DProg.link();
 	preCalcMonitor3D(renderSettings.getHorizontalStretch());
 
+	pbo.allocate(maxWidth * height * 2); // *2 for interlace    TODO only when 'canDoInterlace'
+
 	renderSettings.getNoiseSetting().attach(*this);
 	renderSettings.getHorizontalStretchSetting().attach(*this);
 }
@@ -123,7 +125,7 @@ unsigned PostProcessor::getLineWidth(
 	return max_value(xrange(step), [&](auto i) { return frame->getLineWidth(y + i); });
 }
 
-void PostProcessor::executeUntil(EmuTime::param /*time*/)
+void PostProcessor::executeUntil(EmuTime /*time*/)
 {
 	// insert fake end of frame event
 	eventDistributor.distributeEvent(FinishFrameEvent(
@@ -157,16 +159,23 @@ static void getScaledFrame(const FrameSource& paintFrame,
 	}
 }
 
-void PostProcessor::takeRawScreenShot(unsigned height2, const std::string& filename)
+void PostProcessor::takeRawScreenShot(std::optional<unsigned> desiredHeight, const std::string& filename)
 {
 	if (!paintFrame) {
 		throw CommandException("TODO");
 	}
 
-	VLA(const FrameSource::Pixel*, lines, height2);
+	const unsigned targetHeight = desiredHeight ? *desiredHeight : [this] {
+		auto maxLineWidth = getLineWidth(paintFrame, 0, paintFrame->getHeight());
+		if (maxLineWidth == 320) return 240;
+		// in all other cases (there could be other than 640), we go for 640x480
+		return 480;
+	}();
+
+	inplace_buffer<const FrameSource::Pixel*, 480> lines(uninitialized_tag{}, targetHeight);
 	WorkBuffer workBuffer;
 	getScaledFrame(*paintFrame, lines, workBuffer);
-	unsigned width = (height2 == 240) ? 320 : 640;
+	unsigned width = (targetHeight == 240) ? 320 : 640;
 	PNG::saveRGBA(width, lines, filename);
 }
 
@@ -176,6 +185,7 @@ void PostProcessor::createRegions()
 
 	const unsigned srcHeight = paintFrame->getHeight();
 	const unsigned dstHeight = screen.getLogicalHeight();
+	regionsDstHeight = dstHeight;
 
 	unsigned g = std::gcd(srcHeight, dstHeight);
 	unsigned srcStep = srcHeight / g;
@@ -234,12 +244,18 @@ void PostProcessor::paint(OutputSurface& /*output*/)
 		}
 	}
 
+	auto size = screen.getLogicalSize();
+	bool needReUpload = size.y != int(regionsDstHeight);
+
 	// New scaler algorithm selected?
 	if (auto algo = renderSettings.getScaleAlgorithm();
 	    scaleAlgorithm != algo) {
 		scaleAlgorithm = algo;
-		currScaler = GLScalerFactory::createScaler(renderSettings);
+		currScaler = GLScalerFactory::createScaler(renderSettings, maxWidth, height * 2); // *2 for interlace   TODO only when canDoInterlace
+		needReUpload = true;
+	}
 
+	if (needReUpload) {
 		// Re-upload frame data, this is both
 		//  - Chunks of RawFrame with a specific line width, possibly
 		//    with some extra lines above and below each chunk that are
@@ -252,7 +268,6 @@ void PostProcessor::paint(OutputSurface& /*output*/)
 		uploadFrame();
 	}
 
-	auto size = screen.getLogicalSize();
 	glViewport(0, 0, size.x, size.y);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	auto& renderedFrame = renderedFrames[frameCounter & 1];
@@ -288,14 +303,20 @@ void PostProcessor::paint(OutputSurface& /*output*/)
 
 	renderedFrame.fbo.pop();
 	renderedFrame.tex.bind();
-	auto [x, y] = screen.getViewOffset();
-	auto [w, h] = screen.getViewSize();
-	glViewport(x, y, w, h);
+
+	if (renderSettings.getFullStretch()) {
+		auto [w, h] = screen.getPhysicalSize();
+		glViewport(0, 0, w, h);
+	} else {
+		auto [x, y] = screen.getViewOffset();
+		auto [w, h] = screen.getViewSize();
+		glViewport(x, y, w, h);
+	}
 
 	if (deform == RenderSettings::DisplayDeform::_3D) {
 		drawMonitor3D();
 	} else {
-		float x1 = (320.0f - float(horStretch)) * (1.0f / (2.0f * 320.0f));
+		float x1 = (320.0f - horStretch) * (1.0f / (2.0f * 320.0f));
 		float x2 = 1.0f - x1;
 		std::array tex = {
 			vec2(x1, 1), vec2(x1, 0), vec2(x2, 0), vec2(x2, 1)
@@ -328,7 +349,7 @@ void PostProcessor::paint(OutputSurface& /*output*/)
 }
 
 std::unique_ptr<RawFrame> PostProcessor::rotateFrames(
-	std::unique_ptr<RawFrame> finishedFrame, EmuTime::param time)
+	std::unique_ptr<RawFrame> finishedFrame, EmuTime time)
 {
 	if (renderSettings.getInterleaveBlackFrame()) {
 		auto delta = time - lastRotate; // time between last two calls
@@ -492,42 +513,40 @@ void PostProcessor::uploadFrame()
 			h,                 // height
 			GL_RGBA,           // format
 			GL_UNSIGNED_BYTE,  // type
-			const_cast<RawFrame*>(superImposeVideoFrame)->getLineDirect(0).data()); // data
+			superImposeVideoFrame->getLineDirect(0).data()); // data
 	}
 }
 
 void PostProcessor::uploadBlock(
 	unsigned srcStartY, unsigned srcEndY, unsigned lineWidth)
 {
-	// create texture/pbo if needed
-	auto it = ranges::find(textures, lineWidth, &TextureData::width);
+	// create texture on demand
+	auto it = std::ranges::find(textures, lineWidth, &TextureData::width);
 	if (it == end(textures)) {
 		TextureData textureData;
-
 		textureData.tex.resize(narrow<GLsizei>(lineWidth),
-		                       narrow<GLsizei>(height * 2)); // *2 for interlace
-		textureData.pbo.setImage(lineWidth, height * 2);
+		                       narrow<GLsizei>(height * 2)); // *2 for interlace   TODO only when canDoInterlace
 		textures.push_back(std::move(textureData));
 		it = end(textures) - 1;
 	}
 	auto& tex = it->tex;
-	auto& pbo = it->pbo;
 
 	// bind texture
 	tex.bind();
 
 	// upload data
 	pbo.bind();
-	uint32_t* mapped = pbo.mapWrite();
-	for (auto y : xrange(srcStartY, srcEndY)) {
-		auto* dest = mapped + y * size_t(lineWidth);
-		auto line = paintFrame->getLine(narrow<int>(y), std::span{dest, lineWidth});
-		if (line.data() != dest) {
-			ranges::copy(line, dest);
+	auto mapped = pbo.mapWrite();
+	auto numLines = srcEndY - srcStartY;
+	for (auto yy : xrange(numLines)) {
+		auto dest = mapped.subspan(yy * size_t(lineWidth), lineWidth);
+		auto line = paintFrame->getLine(narrow<int>(yy + srcStartY), dest);
+		if (line.data() != dest.data()) {
+			copy_to_range(line, dest);
 		}
 	}
 	pbo.unmap();
-#if defined(__APPLE__)
+#ifdef __APPLE__
 	// The nVidia GL driver for the GeForce 8000/9000 series seems to hang
 	// on texture data replacements that are 1 pixel wide and start on a
 	// line number that is a non-zero multiple of 16.
@@ -536,15 +555,15 @@ void PostProcessor::uploadBlock(
 	}
 #endif
 	glTexSubImage2D(
-		GL_TEXTURE_2D,                      // target
-		0,                                  // level
-		0,                                  // offset x
-		narrow<GLint>(srcStartY),           // offset y
-		narrow<GLint>(lineWidth),           // width
-		narrow<GLint>(srcEndY - srcStartY), // height
-		GL_RGBA,                            // format
-		GL_UNSIGNED_BYTE,                   // type
-		pbo.getOffset(0, srcStartY));       // data
+		GL_TEXTURE_2D,            // target
+		0,                        // level
+		0,                        // offset x
+		narrow<GLint>(srcStartY), // offset y
+		narrow<GLint>(lineWidth), // width
+		narrow<GLint>(numLines),  // height
+		GL_RGBA,                  // format
+		GL_UNSIGNED_BYTE,         // type
+		mapped.data());           // data
 	pbo.unbind();
 
 	// possibly upload scaler specific data

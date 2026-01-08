@@ -7,6 +7,7 @@
 #include "stl.hh"
 
 #include <array>
+#include <cstdint>
 #include <memory>
 
 namespace openmsx {
@@ -19,7 +20,7 @@ private:
 		return concatArray(
 			imageBasedProperties,
 			std::array{
-				"-text"sv, "-font"sv, "-size"sv,
+				"-text"sv, "-font"sv, "-fontfaceindex"sv, "-size"sv,
 				"-wrap"sv, "-wrapw"sv, "-wraprelw"sv,
 			});
 	}();
@@ -51,12 +52,13 @@ private:
 	[[nodiscard]] std::string getWordWrappedText(const std::string& txt, unsigned maxWidth) const;
 
 private:
-	enum WrapMode { NONE, WORD, CHAR };
+	enum WrapMode : uint8_t { NONE, WORD, CHAR };
 
 	std::string text;
 	std::string fontFile;
 	TTFFont font;
 	int size = 12;
+	int fontFaceIndex = 0;
 	WrapMode wrapMode = NONE;
 	float wrapw = 0.0f, wraprelw = 1.0f;
 

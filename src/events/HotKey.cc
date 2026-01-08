@@ -1,23 +1,25 @@
 #include "HotKey.hh"
-#include "InputEventFactory.hh"
-#include "GlobalCommandController.hh"
-#include "CommandException.hh"
-#include "EventDistributor.hh"
+
 #include "CliComm.hh"
 #include "Event.hh"
+#include "EventDistributor.hh"
+#include "InputEventFactory.hh"
+
+#include "CommandException.hh"
+#include "GlobalCommandController.hh"
+#include "SettingsConfig.hh"
 #include "TclArgParser.hh"
 #include "TclObject.hh"
-#include "SettingsConfig.hh"
+
 #include "one_of.hh"
 #include "outer.hh"
-#include "ranges.hh"
-#include "view.hh"
+
 #include "build-info.hh"
+
+#include <algorithm>
 #include <array>
 #include <cassert>
-#include <memory>
-
-using std::string;
+#include <ranges>
 
 // This file implements all Tcl key bindings. These are the 'classical' hotkeys
 // (e.g. F12 to (un)mute sound) and the more recent input layers. The idea
@@ -27,6 +29,8 @@ using std::string;
 // However the classical hotkeys or the openMSX console still receive input.
 
 namespace openmsx {
+
+using namespace std::literals;
 
 static constexpr bool META_HOT_KEYS =
 #ifdef __APPLE__
@@ -170,20 +174,20 @@ struct EqualEvent {
 
 static bool contains(auto&& range, const Event& event)
 {
-	return ranges::any_of(range, EqualEvent(event));
+	return std::ranges::any_of(range, EqualEvent(event));
 }
 
 template<typename T>
 static void erase(std::vector<T>& v, const Event& event)
 {
-	if (auto it = ranges::find_if(v, EqualEvent(event)); it != end(v)) {
+	if (auto it = std::ranges::find_if(v, EqualEvent(event)); it != end(v)) {
 		move_pop_back(v, it);
 	}
 }
 
 static void insert(HotKey::KeySet& set, const Event& event)
 {
-	if (auto it = ranges::find_if(set, EqualEvent(event)); it != end(set)) {
+	if (auto it = std::ranges::find_if(set, EqualEvent(event)); it != end(set)) {
 		*it = event;
 	} else {
 		set.push_back(event);
@@ -193,7 +197,7 @@ static void insert(HotKey::KeySet& set, const Event& event)
 template<typename HotKeyInfo>
 static void insert(HotKey::BindMap& map, HotKeyInfo&& info)
 {
-	if (auto it = ranges::find_if(map, EqualEvent(info.event)); it != end(map)) {
+	if (auto it = std::ranges::find_if(map, EqualEvent(info.event)); it != end(map)) {
 		*it = std::forward<HotKeyInfo>(info);
 	} else {
 		map.push_back(std::forward<HotKeyInfo>(info));
@@ -210,7 +214,7 @@ void HotKey::bind(HotKeyInfo&& info)
 
 void HotKey::unbind(const Event& event)
 {
-	if (auto it1 = ranges::find_if(boundKeys, EqualEvent(event));
+	if (auto it1 = std::ranges::find_if(boundKeys, EqualEvent(event));
 	    it1 == end(boundKeys)) {
 		// only when not a regular bound event
 		insert(unboundKeys, event);
@@ -243,17 +247,17 @@ void HotKey::unbindDefault(const Event& event)
 	erase(defaultMap, event);
 }
 
-void HotKey::bindLayer(HotKeyInfo&& info, const string& layer)
+void HotKey::bindLayer(HotKeyInfo&& info, const std::string& layer)
 {
 	insert(layerMap[layer], std::move(info));
 }
 
-void HotKey::unbindLayer(const Event& event, const string& layer)
+void HotKey::unbindLayer(const Event& event, const std::string& layer)
 {
 	erase(layerMap[layer], event);
 }
 
-void HotKey::unbindFullLayer(const string& layer)
+void HotKey::unbindFullLayer(const std::string& layer)
 {
 	layerMap.erase(layer);
 }
@@ -271,7 +275,7 @@ void HotKey::deactivateLayer(std::string_view layer)
 {
 	// remove the first matching activation record from the end
 	// (it's not an error if there is no match at all)
-	if (auto it = ranges::find(view::reverse(activeLayers), layer, &LayerInfo::layer);
+	if (auto it = std::ranges::find(std::views::reverse(activeLayers), layer, &LayerInfo::layer);
 	    it != activeLayers.rend()) {
 		// 'reverse_iterator' -> 'iterator' conversion is a bit tricky
 		activeLayers.erase((it + 1).base());
@@ -281,7 +285,7 @@ void HotKey::deactivateLayer(std::string_view layer)
 static HotKey::BindMap::const_iterator findMatch(
 	const HotKey::BindMap& map, const Event& event, bool msx)
 {
-	return ranges::find_if(map, [&](auto& p) {
+	return std::ranges::find_if(map, [&](auto& p) {
 		return (p.msx == msx) && matches(p.event, event);
 	});
 }
@@ -321,7 +325,7 @@ bool HotKey::executeEvent(const Event& event, EventDistributor::Priority priorit
 
 	// First search in active layers (from back to front)
 	bool blocking = false;
-	for (const auto& info : view::reverse(activeLayers)) {
+	for (const auto& info : std::views::reverse(activeLayers)) {
 		auto& cmap = layerMap[info.layer]; // ok, if this entry doesn't exist yet
 		if (auto it = findMatch(cmap, event, msx); it != end(cmap)) {
 			executeBinding(event, *it);
@@ -406,7 +410,7 @@ void HotKey::stopRepeat()
 
 static constexpr std::string_view getBindCmdName(bool defaultCmd)
 {
-	return defaultCmd ? "bind_default" : "bind";
+	return defaultCmd ? "bind_default"sv : "bind"sv;
 }
 
 HotKey::BindCmd::BindCmd(CommandController& commandController_, HotKey& hotKey_,
@@ -417,18 +421,18 @@ HotKey::BindCmd::BindCmd(CommandController& commandController_, HotKey& hotKey_,
 {
 }
 
-static string formatBinding(const HotKey::HotKeyInfo& info)
+static std::string formatBinding(const HotKey::HotKeyInfo& info)
 {
 	return strCat(toString(info.event),
-	              (info.msx ? " [msx]" : ""),
-	              (info.repeat ? " [repeat]" : ""),
-	              (info.passEvent ? " [event]" : ""),
+	              (info.msx ? " [msx]"sv : ""sv),
+	              (info.repeat ? " [repeat]"sv : ""sv),
+	              (info.passEvent ? " [event]"sv : ""sv),
 	              ":  ", info.command, '\n');
 }
 
 void HotKey::BindCmd::execute(std::span<const TclObject> tokens, TclObject& result)
 {
-	string layer;
+	std::string layer;
 	bool layers = false;
 	bool repeat = false;
 	bool passEvent = false;
@@ -464,7 +468,7 @@ void HotKey::BindCmd::execute(std::span<const TclObject> tokens, TclObject& resu
 	switch (arguments.size()) {
 	case 0: {
 		// show all bounded keys (for this layer)
-		string r;
+		std::string r;
 		for (const auto& p : cMap) {
 			r += formatBinding(p);
 		}
@@ -473,7 +477,7 @@ void HotKey::BindCmd::execute(std::span<const TclObject> tokens, TclObject& resu
 	}
 	case 1: {
 		// show bindings for this key (in this layer)
-		auto it = ranges::find_if(cMap,
+		auto it = std::ranges::find_if(cMap,
 		                          EqualEvent(createEvent(arguments[0], getInterpreter())));
 		if (it == end(cMap)) {
 			throw CommandException("Key not bound");
@@ -483,8 +487,8 @@ void HotKey::BindCmd::execute(std::span<const TclObject> tokens, TclObject& resu
 	}
 	default: {
 		// make a new binding
-		string command(arguments[1].getString());
-		for (const auto& arg : view::drop(arguments, 2)) {
+		std::string command(arguments[1].getString());
+		for (const auto& arg : std::views::drop(arguments, 2)) {
 			strAppend(command, ' ', arg.getString());
 		}
 		HotKey::HotKeyInfo info(
@@ -501,7 +505,7 @@ void HotKey::BindCmd::execute(std::span<const TclObject> tokens, TclObject& resu
 	}
 	}
 }
-string HotKey::BindCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string HotKey::BindCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	auto cmd = getBindCmdName(defaultCmd);
 	return strCat(
@@ -522,7 +526,7 @@ string HotKey::BindCmd::help(std::span<const TclObject> /*tokens*/) const
 
 static constexpr std::string_view getUnbindCmdName(bool defaultCmd)
 {
-	return defaultCmd ? "unbind_default" : "unbind";
+	return defaultCmd ? "unbind_default"sv : "unbind"sv;
 }
 
 HotKey::UnbindCmd::UnbindCmd(CommandController& commandController_,
@@ -535,7 +539,7 @@ HotKey::UnbindCmd::UnbindCmd(CommandController& commandController_,
 
 void HotKey::UnbindCmd::execute(std::span<const TclObject> tokens, TclObject& /*result*/)
 {
-	string layer;
+	std::string layer;
 	std::array info = {valueArg("-layer", layer)};
 	auto arguments = parseTclArgs(getInterpreter(), tokens.subspan<1>(), info);
 	if (defaultCmd && !layer.empty()) {
@@ -565,7 +569,7 @@ void HotKey::UnbindCmd::execute(std::span<const TclObject> tokens, TclObject& /*
 		}
 	}
 }
-string HotKey::UnbindCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string HotKey::UnbindCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	auto cmd = getUnbindCmdName(defaultCmd);
 	return strCat(
@@ -591,8 +595,8 @@ void HotKey::ActivateCmd::execute(std::span<const TclObject> tokens, TclObject& 
 	auto& hotKey = OUTER(HotKey, activateCmd);
 	switch (args.size()) {
 	case 0: {
-		string r;
-		for (const auto& layerInfo : view::reverse(hotKey.activeLayers)) {
+		std::string r;
+		for (const auto& layerInfo : std::views::reverse(hotKey.activeLayers)) {
 			r += layerInfo.layer;
 			if (layerInfo.blocking) {
 				r += " -blocking";
@@ -604,7 +608,7 @@ void HotKey::ActivateCmd::execute(std::span<const TclObject> tokens, TclObject& 
 	}
 	case 1: {
 		std::string_view layer = args[0].getString();
-		hotKey.activateLayer(string(layer), blocking);
+		hotKey.activateLayer(std::string(layer), blocking);
 		break;
 	}
 	default:
@@ -612,7 +616,7 @@ void HotKey::ActivateCmd::execute(std::span<const TclObject> tokens, TclObject& 
 	}
 }
 
-string HotKey::ActivateCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string HotKey::ActivateCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "activate_input_layer                         "
 	       ": show list of active layers (most recent on top)\n"
@@ -635,7 +639,7 @@ void HotKey::DeactivateCmd::execute(std::span<const TclObject> tokens, TclObject
 	hotKey.deactivateLayer(tokens[1].getString());
 }
 
-string HotKey::DeactivateCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string HotKey::DeactivateCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "deactivate_input_layer <layername> : deactivate the given input layer";
 }

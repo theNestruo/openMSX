@@ -2,27 +2,27 @@
 
 namespace openmsx {
 
-void DummyY8950KeyboardDevice::write(byte /*data*/, EmuTime::param /*time*/)
+void DummyY8950KeyboardDevice::write(uint8_t /*data*/, EmuTime /*time*/)
 {
 	// ignore data
 }
 
-byte DummyY8950KeyboardDevice::read(EmuTime::param /*time*/)
+uint8_t DummyY8950KeyboardDevice::read(EmuTime /*time*/)
 {
 	return 255;
 }
 
-std::string_view DummyY8950KeyboardDevice::getDescription() const
+zstring_view DummyY8950KeyboardDevice::getDescription() const
 {
 	return {};
 }
 
 void DummyY8950KeyboardDevice::plugHelper(Connector& /*connector*/,
-                                          EmuTime::param /*time*/)
+                                          EmuTime /*time*/)
 {
 }
 
-void DummyY8950KeyboardDevice::unplugHelper(EmuTime::param /*time*/)
+void DummyY8950KeyboardDevice::unplugHelper(EmuTime /*time*/)
 {
 }
 

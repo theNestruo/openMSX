@@ -9,9 +9,9 @@ class MidiInDevice : public Pluggable
 {
 public:
 	// Pluggable (part)
-	[[nodiscard]] std::string_view getClass() const final;
+	[[nodiscard]] zstring_view getClass() const final;
 
-	virtual void signal(EmuTime::param time) = 0;
+	virtual void signal(EmuTime time) = 0;
 };
 
 } // namespace openmsx

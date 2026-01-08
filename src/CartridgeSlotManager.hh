@@ -1,15 +1,15 @@
 #ifndef CARTRIDGESLOTMANAGER_HH
 #define CARTRIDGESLOTMANAGER_HH
 
-#include "RecordedCommand.hh"
-#include "MSXMotherBoard.hh"
 #include "InfoTopic.hh"
-
+#include "MSXMotherBoard.hh"
+#include "RecordedCommand.hh"
 #include "TclObject.hh"
+
 #include "narrow.hh"
-#include "ranges.hh"
 #include "strCat.hh"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <optional>
@@ -56,7 +56,7 @@ public:
 		return slots[slot].exists();
 	}
 	[[nodiscard]] int getNumberOfSlots() const {
-		return narrow<int>(ranges::count_if(slots, &Slot::exists));
+		return narrow<int>(std::ranges::count_if(slots, &Slot::exists));
 	}
 	[[nodiscard]] const HardwareConfig* getConfigForSlot(unsigned slot) const {
 		assert(slot < MAX_SLOTS);
@@ -80,7 +80,10 @@ public:
 	}
 
 private:
+	[[nodiscard]] const HardwareConfig* getExtensionConfig(std::string_view cartName) const;
 	[[nodiscard]] unsigned getSlot(int ps, int ss) const;
+	std::string insertCartridge(std::string_view cartName, std::string_view romName, std::span<const TclObject> options);
+	void removeCartridge(std::string_view cartName);
 
 private:
 	MSXMotherBoard& motherBoard;
@@ -90,14 +93,13 @@ private:
 		CartCmd(CartridgeSlotManager& manager, MSXMotherBoard& motherBoard,
 			std::string_view commandName);
 		void execute(std::span<const TclObject> tokens, TclObject& result,
-			     EmuTime::param time) override;
+			     EmuTime time) override;
 		[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 		void tabCompletion(std::vector<std::string>& tokens) const override;
 		[[nodiscard]] bool needRecord(std::span<const TclObject> tokens) const override;
+		[[nodiscard]] CartridgeSlotManager& getManager() { return manager; }
 	private:
-		[[nodiscard]] const HardwareConfig* getExtensionConfig(std::string_view cartName) const;
 		CartridgeSlotManager& manager;
-		CliComm& cliComm;
 	} cartCmd;
 
 	struct CartridgeSlotInfo final : InfoTopic {
@@ -107,14 +109,16 @@ private:
 		[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 	} extSlotInfo;
 
-	struct Slot : public MediaInfoProvider {
+	struct Slot : public MediaProvider {
 		~Slot();
 
 		// MediaInfoProvider
 		void getMediaInfo(TclObject& result) override;
+		void setMedia(const TclObject& info, EmuTime time) override;
 
 		[[nodiscard]] bool exists() const;
 		[[nodiscard]] bool used(const HardwareConfig* allowed = nullptr) const;
+		void setConfig(const HardwareConfig* cfg);
 
 		std::optional<CartCmd> cartCommand;
 		std::optional<ExtCmd> extCommand;

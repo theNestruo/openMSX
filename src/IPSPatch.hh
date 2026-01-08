@@ -2,9 +2,13 @@
 #define IPSPATCH_HH
 
 #include "PatchInterface.hh"
+
 #include "Filename.hh"
-#include <vector>
+
+#include "MemBuffer.hh"
+
 #include <memory>
+#include <vector>
 
 namespace openmsx {
 
@@ -20,11 +24,8 @@ public:
 
 private:
 	struct Chunk {
-		Chunk(size_t s, std::vector<uint8_t>&& c)
-			: startAddress(s), content(std::move(c)) {} // clang-15 workaround
-
 		size_t startAddress;
-		std::vector<uint8_t> content;
+		MemBuffer<uint8_t> content;
 
 		[[nodiscard]] size_t size() const { return content.size(); }
 		[[nodiscard]] size_t stopAddress() const { return startAddress + size(); }

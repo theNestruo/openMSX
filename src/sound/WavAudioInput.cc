@@ -28,18 +28,18 @@ void WavAudioInput::loadWave()
 		audioInputFilenameSetting.getString())));
 }
 
-std::string_view WavAudioInput::getName() const
+zstring_view WavAudioInput::getName() const
 {
 	return "wavinput";
 }
 
-std::string_view WavAudioInput::getDescription() const
+zstring_view WavAudioInput::getDescription() const
 {
 	return "Read .wav files. Can for example be used as input for "
 	       "samplers.";
 }
 
-void WavAudioInput::plugHelper(Connector& /*connector*/, EmuTime::param time)
+void WavAudioInput::plugHelper(Connector& /*connector*/, EmuTime time)
 {
 	try {
 		if (wav.getSize() == 0) {
@@ -51,7 +51,7 @@ void WavAudioInput::plugHelper(Connector& /*connector*/, EmuTime::param time)
 	reference = time;
 }
 
-void WavAudioInput::unplugHelper(EmuTime::param /*time*/)
+void WavAudioInput::unplugHelper(EmuTime /*time*/)
 {
 }
 
@@ -70,7 +70,7 @@ void WavAudioInput::update(const Setting& setting) noexcept
 	}
 }
 
-int16_t WavAudioInput::readSample(EmuTime::param time)
+int16_t WavAudioInput::readSample(EmuTime time)
 {
 	if (wav.getSize()) {
 		unsigned pos = (time - reference).getTicksAt(wav.getFreq());

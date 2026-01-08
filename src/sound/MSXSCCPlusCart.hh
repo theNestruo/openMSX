@@ -4,11 +4,14 @@
 #ifndef MSXSCCPLUSCART_HH
 #define MSXSCCPLUSCART_HH
 
-#include "MSXDevice.hh"
 #include "SCC.hh"
+
+#include "MSXDevice.hh"
 #include "Ram.hh"
 #include "RomBlockDebuggable.hh"
+
 #include <array>
+#include <cstdint>
 
 namespace openmsx {
 
@@ -24,13 +27,13 @@ public:
 public:
 	explicit MSXSCCPlusCart(const DeviceConfig& config);
 
-	void powerUp(EmuTime::param time) override;
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word start) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word start) override;
+	void powerUp(EmuTime time) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t start) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t start) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -46,7 +49,7 @@ private:
 	SCC scc;
 	RomBlockDebuggable romBlockDebug;
 	std::array<byte*, 4> internalMemoryBank; // 4 blocks of 8kB starting at #4000
-	enum SCCEnable {EN_NONE, EN_SCC, EN_SCCPLUS} enable;
+	enum SCCEnable : uint8_t {EN_NONE, EN_SCC, EN_SCCPLUS} enable;
 	byte modeRegister;
 	std::array<bool, 4> isRamSegment;
 	std::array<bool, 4> isMapped;

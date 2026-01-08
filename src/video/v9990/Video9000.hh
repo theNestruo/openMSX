@@ -1,10 +1,11 @@
 #ifndef VIDEO9000_HH
 #define VIDEO9000_HH
 
-#include "MSXDevice.hh"
-#include "VideoSystemChangeListener.hh"
 #include "VideoLayer.hh"
+#include "VideoSystemChangeListener.hh"
+
 #include "EventListener.hh"
+#include "MSXDevice.hh"
 
 namespace openmsx {
 
@@ -23,8 +24,8 @@ public:
 
 	// MSXDevice
 	void init() override;
-	void reset(EmuTime::param time) override;
-	void writeIO(word port, byte value, EmuTime::param time) override;
+	void reset(EmuTime time) override;
+	void writeIO(uint16_t port, uint8_t value, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -39,7 +40,7 @@ private:
 
 	// VideoLayer
 	void paint(OutputSurface& output) override;
-	void takeRawScreenShot(unsigned height, const std::string& filename) override;
+	void takeRawScreenShot(std::optional<unsigned> height, const std::string& filename) override;
 
 	// EventListener
 	bool signalEvent(const Event& event) override;
@@ -54,7 +55,7 @@ private:
 	Layer* activeLayer = nullptr;
 	PostProcessor* v99x8Layer = nullptr;
 	PostProcessor* v9990Layer = nullptr;
-	byte value = 0x10;
+	uint8_t value = 0x10;
 };
 
 } // namespace openmsx

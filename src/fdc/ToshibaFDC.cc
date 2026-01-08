@@ -1,7 +1,9 @@
 #include "ToshibaFDC.hh"
-#include "CacheLine.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
+#include "CacheLine.hh"
 #include "serialize.hh"
 
 // Based on studying the code in the Toshiba disk ROM.
@@ -11,12 +13,15 @@
 
 namespace openmsx {
 
-ToshibaFDC::ToshibaFDC(const DeviceConfig& config)
+ToshibaFDC::ToshibaFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config)
 {
+	// ROM only visible in 0x4000-0x7FFF by default
+	parseRomVisibility(config, 0x4000, 0x4000);
+
 }
 
-byte ToshibaFDC::readMem(word address, EmuTime::param time)
+byte ToshibaFDC::readMem(uint16_t address, EmuTime time)
 {
 	switch (address) {
 	case 0x7FF0:
@@ -40,7 +45,7 @@ byte ToshibaFDC::readMem(word address, EmuTime::param time)
 	}
 }
 
-byte ToshibaFDC::peekMem(word address, EmuTime::param time) const
+byte ToshibaFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	switch (address) { // checked on real HW: no mirroring
 	case 0x7FF0:
@@ -69,29 +74,21 @@ byte ToshibaFDC::peekMem(word address, EmuTime::param time) const
 		return value;
 	}
 	default:
-		if (0x4000 <= address && address < 0x8000) {
-			// ROM only visible in 0x4000-0x7FFF.
-			return MSXFDC::peekMem(address, time);
-		} else {
-			return 0xFF;
-		}
+		return MSXFDC::peekMem(address, time);
 	}
 }
 
-const byte* ToshibaFDC::getReadCacheLine(word start) const
+const byte* ToshibaFDC::getReadCacheLine(uint16_t start) const
 {
 	if ((start & CacheLine::HIGH) == (0x7FF0 & CacheLine::HIGH)) {
 		// FDC at 0x7FF0-0x7FF7
 		return nullptr;
-	} else if (0x4000 <= start && start < 0x8000) {
-		// ROM at 0x4000-0x7FFF
-		return MSXFDC::getReadCacheLine(start);
 	} else {
-		return unmappedRead.data();
+		return MSXFDC::getReadCacheLine(start);
 	}
 }
 
-void ToshibaFDC::writeMem(word address, byte value, EmuTime::param time)
+void ToshibaFDC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	switch (address) {
 	case 0x7FF0:
@@ -127,7 +124,7 @@ void ToshibaFDC::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* ToshibaFDC::getWriteCacheLine(word address)
+byte* ToshibaFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address & CacheLine::HIGH) == (0x7FF0 & CacheLine::HIGH)) {
 		return nullptr;

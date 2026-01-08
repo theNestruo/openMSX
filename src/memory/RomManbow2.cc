@@ -1,14 +1,16 @@
 #include "RomManbow2.hh"
+
 #include "AY8910.hh"
 #include "DummyAY8910Periphery.hh"
-#include "SCC.hh"
 #include "MSXCPUInterface.hh"
+#include "SCC.hh"
+
 #include "narrow.hh"
 #include "one_of.hh"
-#include "ranges.hh"
 #include "serialize.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
+
 #include <array>
 #include <cassert>
 #include <memory>
@@ -23,9 +25,9 @@ namespace openmsx {
 	case MANBOW2_2:
 	case HAMARAJANIGHT:
 	case MEGAFLASHROMSCC:
-		return AmdFlashChip::AM29F040;
+		return AmdFlashChip::AM29F040B;
 	case RBSC_FLASH_KONAMI_SCC:
-		return AmdFlashChip::AM29F016;
+		return AmdFlashChip::AM29F016D;
 	default:
 		UNREACHABLE;
 	}
@@ -49,7 +51,6 @@ namespace openmsx {
 			return writeProtectSectors;  // only 128kB writable
 		}
 	case MEGAFLASHROMSCC:
-		return {};  // fully writeable
 	case RBSC_FLASH_KONAMI_SCC:
 		return {};  // fully writeable
 	default:
@@ -57,8 +58,7 @@ namespace openmsx {
 	}
 }
 
-RomManbow2::RomManbow2(const DeviceConfig& config, Rom&& rom_,
-                       RomType type)
+RomManbow2::RomManbow2(DeviceConfig& config, Rom&& rom_, RomType type)
 	: MSXRom(config, std::move(rom_))
 	, scc((type != RomType::RBSC_FLASH_KONAMI_SCC)
 		? std::make_unique<SCC>(
@@ -76,10 +76,20 @@ RomManbow2::RomManbow2(const DeviceConfig& config, Rom&& rom_,
 
 	if (psg) {
 		auto& cpuInterface = getCPUInterface();
-		for (auto port : {0x10, 0x11}) {
-			cpuInterface.register_IO_Out(narrow_cast<byte>(port), this);
-		}
+		cpuInterface.register_IO_Out_range(0x10, 2, this);
 		cpuInterface.register_IO_In(0x12, this);
+
+		if (type == RomType::HAMARAJANIGHT) {
+			// this cartridge seems to have a much louder PSG than normal
+			// TODO: find out if it's the same for Manbow 2 2nd release
+			psg->setSoftwareVolume(5.0f, getCurrentTime());
+		} else {
+			// adjust PSG volume, see details in
+			// https://github.com/openMSX/openMSX/issues/1934
+			// note: this is a theoretical value. The actual
+			// relative volume should be measured!
+			psg->setSoftwareVolume(21000.0f/9000.0f, getCurrentTime());
+		}
 	}
 }
 
@@ -87,14 +97,12 @@ RomManbow2::~RomManbow2()
 {
 	if (psg) {
 		auto& cpuInterface = getCPUInterface();
-		for (auto port : {0x10, 0x11}) {
-			cpuInterface.unregister_IO_Out(narrow_cast<byte>(port), this);
-		}
+		cpuInterface.unregister_IO_Out_range(0x10, 2, this);
 		cpuInterface.unregister_IO_In(0x12, this);
 	}
 }
 
-void RomManbow2::powerUp(EmuTime::param time)
+void RomManbow2::powerUp(EmuTime time)
 {
 	if (scc) {
 		scc->powerUp(time);
@@ -102,7 +110,7 @@ void RomManbow2::powerUp(EmuTime::param time)
 	reset(time);
 }
 
-void RomManbow2::reset(EmuTime::param time)
+void RomManbow2::reset(EmuTime time)
 {
 	for (auto i : xrange(4)) {
 		setRom(i, byte(i));
@@ -129,33 +137,33 @@ void RomManbow2::setRom(unsigned region, byte block)
 	invalidateDeviceRCache(0x4000 + region * 0x2000, 0x2000);
 }
 
-byte RomManbow2::peekMem(word address, EmuTime::param time) const
+byte RomManbow2::peekMem(uint16_t address, EmuTime time) const
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		return scc->peekMem(narrow_cast<uint8_t>(address & 0xFF), time);
 	} else if ((0x4000 <= address) && (address < 0xC000)) {
 		unsigned page = (address - 0x4000) / 0x2000;
 		unsigned addr = (address & 0x1FFF) + 0x2000 * bank[page];
-		return flash.peek(addr);
+		return flash.peek(addr, time);
 	} else {
 		return 0xFF;
 	}
 }
 
-byte RomManbow2::readMem(word address, EmuTime::param time)
+byte RomManbow2::readMem(uint16_t address, EmuTime time)
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		return scc->readMem(narrow_cast<uint8_t>(address & 0xFF), time);
 	} else if ((0x4000 <= address) && (address < 0xC000)) {
 		unsigned page = (address - 0x4000) / 0x2000;
 		unsigned addr = (address & 0x1FFF) + 0x2000 * bank[page];
-		return flash.read(addr);
+		return flash.read(addr, time);
 	} else {
 		return 0xFF;
 	}
 }
 
-const byte* RomManbow2::getReadCacheLine(word address) const
+const byte* RomManbow2::getReadCacheLine(uint16_t address) const
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		return nullptr;
@@ -168,7 +176,7 @@ const byte* RomManbow2::getReadCacheLine(word address) const
 	}
 }
 
-void RomManbow2::writeMem(word address, byte value, EmuTime::param time)
+void RomManbow2::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		// write to SCC
@@ -179,7 +187,7 @@ void RomManbow2::writeMem(word address, byte value, EmuTime::param time)
 	if ((0x4000 <= address) && (address < 0xC000)) {
 		unsigned page = (address - 0x4000) / 0x2000;
 		unsigned addr = (address & 0x1FFF) + 0x2000 * bank[page];
-		flash.write(addr, value);
+		flash.write(addr, value, time);
 
 		if (scc && ((address & 0xF800) == 0x9000)) {
 			// SCC enable/disable
@@ -193,7 +201,7 @@ void RomManbow2::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* RomManbow2::getWriteCacheLine(word address)
+byte* RomManbow2::getWriteCacheLine(uint16_t address)
 {
 	if ((0x4000 <= address) && (address < 0xC000)) {
 		return nullptr;
@@ -202,19 +210,19 @@ byte* RomManbow2::getWriteCacheLine(word address)
 	}
 }
 
-byte RomManbow2::readIO(word port, EmuTime::param time)
+byte RomManbow2::readIO(uint16_t port, EmuTime time)
 {
 	assert((port & 0xFF) == 0x12); (void)port;
 	return psg->readRegister(psgLatch, time);
 }
 
-byte RomManbow2::peekIO(word port, EmuTime::param time) const
+byte RomManbow2::peekIO(uint16_t port, EmuTime time) const
 {
 	assert((port & 0xFF) == 0x12); (void)port;
 	return psg->peekRegister(psgLatch, time);
 }
 
-void RomManbow2::writeIO(word port, byte value, EmuTime::param time)
+void RomManbow2::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	if ((port & 0xFF) == 0x10) {
 		psgLatch = value & 0x0F;

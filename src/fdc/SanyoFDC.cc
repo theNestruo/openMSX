@@ -1,7 +1,9 @@
 #include "SanyoFDC.hh"
-#include "CacheLine.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
+#include "CacheLine.hh"
 #include "serialize.hh"
 
 // Note: although this implementation seems to work (e.g. for the Sanyo
@@ -12,12 +14,14 @@
 
 namespace openmsx {
 
-SanyoFDC::SanyoFDC(const DeviceConfig& config)
+SanyoFDC::SanyoFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config)
 {
+	// ROM only visible in 0x0000-0x7FFF by default (not verified!)
+	parseRomVisibility(config, 0x0000, 0x8000);
 }
 
-byte SanyoFDC::readMem(word address, EmuTime::param time)
+byte SanyoFDC::readMem(uint16_t address, EmuTime time)
 {
 	switch (address) {
 	case 0x7FF8:
@@ -42,21 +46,17 @@ byte SanyoFDC::readMem(word address, EmuTime::param time)
 	}
 }
 
-byte SanyoFDC::peekMem(word address, EmuTime::param time) const
+byte SanyoFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	switch (address) {
 	case 0x7FF8:
 		return controller.peekStatusReg(time);
-		break;
 	case 0x7FF9:
 		return controller.peekTrackReg(time);
-		break;
 	case 0x7FFA:
 		return controller.peekSectorReg(time);
-		break;
 	case 0x7FFB:
 		return controller.peekDataReg(time);
-		break;
 	case 0x7FFC:
 	case 0x7FFD:
 	case 0x7FFE:
@@ -71,30 +71,21 @@ byte SanyoFDC::peekMem(word address, EmuTime::param time) const
 		return value;
 	}
 	default:
-		if (address < 0x8000) {
-			// ROM only visible in 0x0000-0x7FFF (not verified!)
-			return MSXFDC::peekMem(address, time);
-		} else {
-			return 255;
-		}
-		break;
+		return MSXFDC::peekMem(address, time);
 	}
 }
 
-const byte* SanyoFDC::getReadCacheLine(word start) const
+const byte* SanyoFDC::getReadCacheLine(uint16_t start) const
 {
 	if ((start & CacheLine::HIGH) == (0x7FF8 & CacheLine::HIGH)) {
 		// FDC at 0x7FF8-0x7FFC - mirroring behaviour unknown
 		return nullptr;
-	} else if (start < 0x8000) {
-		// ROM at 0x0000-0x7FFF (this is a guess, not checked!)
-		return MSXFDC::getReadCacheLine(start);
 	} else {
-		return unmappedRead.data();
+		return MSXFDC::getReadCacheLine(start);
 	}
 }
 
-void SanyoFDC::writeMem(word address, byte value, EmuTime::param time)
+void SanyoFDC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	switch (address) {
 	case 0x7FF8:
@@ -131,7 +122,7 @@ void SanyoFDC::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* SanyoFDC::getWriteCacheLine(word address)
+byte* SanyoFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address & CacheLine::HIGH) == (0x7FF8 & CacheLine::HIGH)) {
 		// FDC at 0x7FF8-0x7FFC - mirroring behaviour unknown

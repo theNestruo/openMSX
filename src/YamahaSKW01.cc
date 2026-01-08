@@ -1,9 +1,11 @@
 #include "YamahaSKW01.hh"
-#include "DummyPrinterPortDevice.hh"
+
 #include "CacheLine.hh"
+#include "DummyPrinterPortDevice.hh"
 #include "MSXException.hh"
-#include "checked_cast.hh"
 #include "serialize.hh"
+
+#include "checked_cast.hh"
 
 // Implementation based on reverse-engineering of 'acet'/'uniabis', see:
 //   https://www.msx.org/forum/msx-talk/hardware/trying-to-dump-yamaha-skw-01
@@ -28,18 +30,18 @@ YamahaSKW01PrinterPort::YamahaSKW01PrinterPort(PluggingController& pluggingContr
 	reset(EmuTime::dummy());
 }
 
-void YamahaSKW01PrinterPort::reset(EmuTime::param time)
+void YamahaSKW01PrinterPort::reset(EmuTime time)
 {
 	writeData(0, time);    // TODO check this, see MSXPrinterPort
 	setStrobe(true, time); // TODO check this, see MSXPrinterPort
 }
 
-bool YamahaSKW01PrinterPort::getStatus(EmuTime::param time) const
+bool YamahaSKW01PrinterPort::getStatus(EmuTime time) const
 {
 	return getPluggedPrintDev().getStatus(time);
 }
 
-void YamahaSKW01PrinterPort::setStrobe(bool newStrobe, EmuTime::param time)
+void YamahaSKW01PrinterPort::setStrobe(bool newStrobe, EmuTime time)
 {
 	if (newStrobe != strobe) {
 		strobe = newStrobe;
@@ -47,7 +49,7 @@ void YamahaSKW01PrinterPort::setStrobe(bool newStrobe, EmuTime::param time)
 	}
 }
 
-void YamahaSKW01PrinterPort::writeData(uint8_t newData, EmuTime::param time)
+void YamahaSKW01PrinterPort::writeData(uint8_t newData, EmuTime time)
 {
 	if (newData != data) {
 		data = newData;
@@ -55,17 +57,17 @@ void YamahaSKW01PrinterPort::writeData(uint8_t newData, EmuTime::param time)
 	}
 }
 
-std::string_view YamahaSKW01PrinterPort::getDescription() const
+zstring_view YamahaSKW01PrinterPort::getDescription() const
 {
 	return "Yamaha SKW-01 printer port";
 }
 
-std::string_view YamahaSKW01PrinterPort::getClass() const
+zstring_view YamahaSKW01PrinterPort::getClass() const
 {
 	return "Printer Port";
 }
 
-void YamahaSKW01PrinterPort::plug(Pluggable& dev, EmuTime::param time)
+void YamahaSKW01PrinterPort::plug(Pluggable& dev, EmuTime time)
 {
 	Connector::plug(dev, time);
 	getPluggedPrintDev().writeData(data, time);
@@ -86,7 +88,7 @@ void YamahaSKW01PrinterPort::serialize(Archive& ar, unsigned /*version*/)
 	// TODO force writing data to port?? (See MSXPrinterPort)
 }
 
-YamahaSKW01::YamahaSKW01(const DeviceConfig& config)
+YamahaSKW01::YamahaSKW01(DeviceConfig& config)
 	: MSXDevice(config)
 	, mainRom(MSXDevice::getName() + " main"     , "rom", config, "main")
 	, fontRom(MSXDevice::getName() + " kanjifont", "rom", config, "kanjifont")
@@ -109,7 +111,7 @@ YamahaSKW01::YamahaSKW01(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void YamahaSKW01::reset(EmuTime::param time)
+void YamahaSKW01::reset(EmuTime time)
 {
 	fontAddress = {0, 0, 0, 0};
 	dataAddress = 0;
@@ -117,12 +119,12 @@ void YamahaSKW01::reset(EmuTime::param time)
 	if (printerPort) printerPort->reset(time);
 }
 
-byte YamahaSKW01::readMem(word address, EmuTime::param time)
+byte YamahaSKW01::readMem(uint16_t address, EmuTime time)
 {
 	return peekMem(address, time);
 }
 
-byte YamahaSKW01::peekMem(word address, EmuTime::param time) const
+byte YamahaSKW01::peekMem(uint16_t address, EmuTime time) const
 {
 	if (address == one_of(0x7FC0, 0x7FC2, 0x7FC4, 0x7FC6)) {
 		return 0x01; // for now, always READY to read
@@ -150,7 +152,7 @@ byte YamahaSKW01::peekMem(word address, EmuTime::param time) const
 	}
 }
 
-void YamahaSKW01::writeMem(word address, byte value, EmuTime::param time)
+void YamahaSKW01::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if (0x7FC0 <= address && address <= 0x7FC7) {
 		unsigned group = (address - 0x7FC0) / 2;
@@ -176,7 +178,7 @@ void YamahaSKW01::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-const byte* YamahaSKW01::getReadCacheLine(word start) const
+const byte* YamahaSKW01::getReadCacheLine(uint16_t start) const
 {
 	if ((start & CacheLine::HIGH) == (0x7FC0 & CacheLine::HIGH)) {
 		// 0x7FC0-0x7FCF memory mapped registers
@@ -188,7 +190,7 @@ const byte* YamahaSKW01::getReadCacheLine(word start) const
 	}
 }
 
-byte* YamahaSKW01::getWriteCacheLine(word start)
+byte* YamahaSKW01::getWriteCacheLine(uint16_t start)
 {
 	if ((start & CacheLine::HIGH) == (0x7FC0 & CacheLine::HIGH)) {
 		// 0x7FC0-0x7FCF memory mapped registers

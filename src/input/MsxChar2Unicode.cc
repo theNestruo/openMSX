@@ -10,15 +10,15 @@
 #include "ranges.hh"
 #include "strCat.hh"
 #include "utf8_unchecked.hh"
-#include "xrange.hh"
 
+#include <algorithm>
 #include <bit>
 
 namespace openmsx {
 
 MsxChar2Unicode::MsxChar2Unicode(std::string_view mappingName)
 {
-	ranges::fill(msx2unicode, uint32_t(-1));
+	std::ranges::fill(msx2unicode, uint32_t(-1));
 
 	std::string filename;
 	try {
@@ -28,9 +28,8 @@ MsxChar2Unicode::MsxChar2Unicode(std::string_view mappingName)
 		throw MSXException("Couldn't find MSX character mapping file that was specified in unicodemap: ", mappingName, " (", e.getMessage(), ")");
 	}
 	try {
-		File file(filename);
-		auto buf = file.mmap();
-		parseVid(std::string_view(std::bit_cast<const char*>(buf.data()), buf.size()));
+		auto buf = File(filename).mmap<const char>();
+		parseVid(std::string_view(buf.data(), buf.size()));
 	} catch (FileException&) {
 		throw MSXException("Couldn't load MSX character mapping file that was specified in unicodemap: ", filename);
 	} catch (MSXException& e) {
@@ -154,8 +153,9 @@ void MsxChar2Unicode::parseVid(std::string_view file)
 	// Sort on unicode (for later binary-search). If there are duplicate
 	// unicodes (with different msx-code), then keep the first entry (hence
 	// use stable_sort).
-	ranges::stable_sort(unicode2msx, {}, &Entry::unicode);
-	unicode2msx.erase(ranges::unique(unicode2msx, {}, &Entry::unicode), end(unicode2msx));
+	std::ranges::stable_sort(unicode2msx, {}, &Entry::unicode);
+	auto u = std::ranges::unique(unicode2msx, {}, &Entry::unicode);
+	unicode2msx.erase(u.begin(), u.end());
 }
 
 std::string MsxChar2Unicode::msxToUtf8(

@@ -11,13 +11,18 @@ void MemoryBufferFile::read(std::span<uint8_t> dst)
 	if (getSize() < (getPos() + dst.size())) {
 		throw FileException("Read beyond end of file");
 	}
-	ranges::copy(buffer.subspan(pos, dst.size()), dst);
+	copy_to_range(buffer.subspan(pos, dst.size()), dst);
 	pos += dst.size();
 }
 
 void MemoryBufferFile::write(std::span<const uint8_t> /*src*/)
 {
 	throw FileException("Writing to MemoryBufferFile not supported");
+}
+
+MappedFileImpl MemoryBufferFile::mmap(size_t extra, bool is_const)
+{
+	return {buffer, extra, is_const};
 }
 
 size_t MemoryBufferFile::getSize()

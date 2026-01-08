@@ -1,7 +1,8 @@
 #include "PrinterPortLogger.hh"
-#include "PlugException.hh"
+
 #include "FileContext.hh"
 #include "FileException.hh"
+#include "PlugException.hh"
 #include "serialize.hh"
 
 namespace openmsx {
@@ -14,12 +15,12 @@ PrinterPortLogger::PrinterPortLogger(CommandController& commandController)
 {
 }
 
-bool PrinterPortLogger::getStatus(EmuTime::param /*time*/)
+bool PrinterPortLogger::getStatus(EmuTime /*time*/)
 {
 	return false; // false = low = ready
 }
 
-void PrinterPortLogger::setStrobe(bool strobe, EmuTime::param /*time*/)
+void PrinterPortLogger::setStrobe(bool strobe, EmuTime /*time*/)
 {
 	if (file.is_open() && !strobe && prevStrobe) {
 		// falling edge
@@ -30,13 +31,13 @@ void PrinterPortLogger::setStrobe(bool strobe, EmuTime::param /*time*/)
 	prevStrobe = strobe;
 }
 
-void PrinterPortLogger::writeData(uint8_t data, EmuTime::param /*time*/)
+void PrinterPortLogger::writeData(uint8_t data, EmuTime /*time*/)
 {
 	toPrint = data;
 }
 
 void PrinterPortLogger::plugHelper(
-		Connector& /*connector*/, EmuTime::param /*time*/)
+		Connector& /*connector*/, EmuTime /*time*/)
 {
 	try {
 		file = File(userFileContext().resolve(logFilenameSetting.getString()),
@@ -47,17 +48,17 @@ void PrinterPortLogger::plugHelper(
 	}
 }
 
-void PrinterPortLogger::unplugHelper(EmuTime::param /*time*/)
+void PrinterPortLogger::unplugHelper(EmuTime /*time*/)
 {
 	file.close();
 }
 
-std::string_view PrinterPortLogger::getName() const
+zstring_view PrinterPortLogger::getName() const
 {
 	return "logger";
 }
 
-std::string_view PrinterPortLogger::getDescription() const
+zstring_view PrinterPortLogger::getDescription() const
 {
 	return "Log everything that is sent to the printer port to a "
 	       "file. The filename can be set with the "

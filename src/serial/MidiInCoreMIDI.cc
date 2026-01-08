@@ -1,4 +1,4 @@
-#if defined(__APPLE__)
+#ifdef __APPLE__
 
 #include "MidiInCoreMIDI.hh"
 #include "MidiInConnector.hh"
@@ -60,7 +60,7 @@ MidiInCoreMIDI::~MidiInCoreMIDI()
 			EventType::MIDI_IN_COREMIDI, *this);
 }
 
-void MidiInCoreMIDI::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
+void MidiInCoreMIDI::plugHelper(Connector& /*connector*/, EmuTime /*time*/)
 {
 	// Create client.
 	if (OSStatus status = MIDIClientCreate(
@@ -78,7 +78,7 @@ void MidiInCoreMIDI::plugHelper(Connector& /*connector*/, EmuTime::param /*time*
 	MIDIPortConnectSource(port, endpoint, nullptr);
 }
 
-void MidiInCoreMIDI::unplugHelper(EmuTime::param /*time*/)
+void MidiInCoreMIDI::unplugHelper(EmuTime /*time*/)
 {
 	// Dispose of the client; this automatically disposes of the port as well.
 	if (OSStatus status = MIDIClientDispose(client)) {
@@ -88,12 +88,12 @@ void MidiInCoreMIDI::unplugHelper(EmuTime::param /*time*/)
 	client = 0;
 }
 
-std::string_view MidiInCoreMIDI::getName() const
+zstring_view MidiInCoreMIDI::getName() const
 {
 	return name;
 }
 
-std::string_view MidiInCoreMIDI::getDescription() const
+zstring_view MidiInCoreMIDI::getDescription() const
 {
 	return "Receives MIDI events from an existing CoreMIDI source.";
 }
@@ -121,7 +121,7 @@ void MidiInCoreMIDI::sendPacketList(const MIDIPacketList *packetList,
 }
 
 // MidiInDevice
-void MidiInCoreMIDI::signal(EmuTime::param time)
+void MidiInCoreMIDI::signal(EmuTime time)
 {
 	auto connector = static_cast<MidiInConnector*>(getConnector());
 	if (!connector->acceptsData()) {
@@ -133,7 +133,7 @@ void MidiInCoreMIDI::signal(EmuTime::param time)
 		return;
 	}
 
-	byte data;
+	uint8_t data;
 	{
 		std::scoped_lock lock(mutex);
 		if (queue.empty()) return;
@@ -182,7 +182,7 @@ MidiInCoreMIDIVirtual::~MidiInCoreMIDIVirtual()
 }
 
 void MidiInCoreMIDIVirtual::plugHelper(Connector& /*connector*/,
-                                       EmuTime::param /*time*/)
+                                       EmuTime /*time*/)
 {
 	// Create client.
 	if (OSStatus status = MIDIClientCreate(CFSTR("openMSX"),
@@ -198,7 +198,7 @@ void MidiInCoreMIDIVirtual::plugHelper(Connector& /*connector*/,
 	}
 }
 
-void MidiInCoreMIDIVirtual::unplugHelper(EmuTime::param /*time*/)
+void MidiInCoreMIDIVirtual::unplugHelper(EmuTime /*time*/)
 {
 	if (OSStatus status = MIDIEndpointDispose(endpoint)) {
 		fprintf(stderr, "Failed to dispose of MIDI port (%d)\n", int(status));
@@ -210,12 +210,12 @@ void MidiInCoreMIDIVirtual::unplugHelper(EmuTime::param /*time*/)
 	client = 0;
 }
 
-std::string_view MidiInCoreMIDIVirtual::getName() const
+zstring_view MidiInCoreMIDIVirtual::getName() const
 {
 	return "Virtual IN";
 }
 
-std::string_view MidiInCoreMIDIVirtual::getDescription() const
+zstring_view MidiInCoreMIDIVirtual::getDescription() const
 {
 	return "Sends MIDI events from a newly created CoreMIDI virtual source.";
 }
@@ -245,7 +245,7 @@ void MidiInCoreMIDIVirtual::sendPacketList(const MIDIPacketList *packetList,
 }
 
 // MidiInDevice
-void MidiInCoreMIDIVirtual::signal(EmuTime::param time)
+void MidiInCoreMIDIVirtual::signal(EmuTime time)
 {
 	auto connector = static_cast<MidiInConnector*>(getConnector());
 	if (!connector->acceptsData()) {
@@ -257,7 +257,7 @@ void MidiInCoreMIDIVirtual::signal(EmuTime::param time)
 		return;
 	}
 
-	byte data;
+	uint8_t data;
 	{
 		std::scoped_lock lock(mutex);
 		if (queue.empty()) return;

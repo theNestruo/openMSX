@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -81,6 +82,7 @@ public:
 	void begin(std::string_view tag);
 	void attribute(std::string_view name, std::string_view value);
 	void data(std::string_view value);
+	void dataRaw(std::string_view value); // if you're sure 'value' doesn't need to be escaped
 	void end(std::string_view tag);
 
 	void with_tag(std::string_view tag, std::invocable auto next);
@@ -94,7 +96,7 @@ private:
 private:
 	Operations& ops;
 	unsigned level = 0;
-	enum State {
+	enum State : uint8_t {
 		INDENT, // the next (begin or end) tag needs to be indented
 		CLOSE,  // the begin tag still needs to be closed
 		DATA,   // we got data, but no end-tag yet
@@ -145,6 +147,19 @@ void XMLOutputStream<Writer>::data(std::string_view value)
 
 	writeChar('>');
 	writeEscapedString(value);
+	state = DATA;
+}
+
+template<typename Writer>
+void XMLOutputStream<Writer>::dataRaw(std::string_view value)
+{
+	ops.check(level > 0);
+	ops.check(state == CLOSE);
+
+	if (value.empty()) return;
+
+	writeChar('>');
+	writeString(value); // no escaping here
 	state = DATA;
 }
 

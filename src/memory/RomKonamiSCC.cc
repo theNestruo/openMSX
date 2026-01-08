@@ -12,11 +12,12 @@
 //  bank 4: 0xB000 - 0xB7ff (0xB000 used)
 
 #include "RomKonamiSCC.hh"
+
 #include "CacheLine.hh"
-#include "MSXMotherBoard.hh"
 #include "MSXCliComm.hh"
-#include "sha1.hh"
+#include "MSXMotherBoard.hh"
 #include "serialize.hh"
+
 #include "xrange.hh"
 
 namespace openmsx {
@@ -35,7 +36,7 @@ RomKonamiSCC::RomKonamiSCC(const DeviceConfig& config, Rom&& rom_)
 	powerUp(getCurrentTime());
 }
 
-void RomKonamiSCC::powerUp(EmuTime::param time)
+void RomKonamiSCC::powerUp(EmuTime time)
 {
 	scc.powerUp(time);
 	reset(time);
@@ -57,7 +58,7 @@ void RomKonamiSCC::bankSwitch(unsigned page, unsigned block)
 	}
 }
 
-void RomKonamiSCC::reset(EmuTime::param time)
+void RomKonamiSCC::reset(EmuTime time)
 {
 	for (auto i : xrange(2, 6)) {
 		bankSwitch(i, i - 2);
@@ -67,7 +68,7 @@ void RomKonamiSCC::reset(EmuTime::param time)
 	scc.reset(time);
 }
 
-byte RomKonamiSCC::peekMem(word address, EmuTime::param time) const
+byte RomKonamiSCC::peekMem(uint16_t address, EmuTime time) const
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		return scc.peekMem(narrow_cast<uint8_t>(address & 0xFF), time);
@@ -76,7 +77,7 @@ byte RomKonamiSCC::peekMem(word address, EmuTime::param time) const
 	}
 }
 
-byte RomKonamiSCC::readMem(word address, EmuTime::param time)
+byte RomKonamiSCC::readMem(uint16_t address, EmuTime time)
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		return scc.readMem(narrow_cast<uint8_t>(address & 0xFF), time);
@@ -85,7 +86,7 @@ byte RomKonamiSCC::readMem(word address, EmuTime::param time)
 	}
 }
 
-const byte* RomKonamiSCC::getReadCacheLine(word address) const
+const byte* RomKonamiSCC::getReadCacheLine(uint16_t address) const
 {
 	if (sccEnabled && (0x9800 <= address) && (address < 0xA000)) {
 		// don't cache SCC
@@ -95,7 +96,7 @@ const byte* RomKonamiSCC::getReadCacheLine(word address) const
 	}
 }
 
-void RomKonamiSCC::writeMem(word address, byte value, EmuTime::param time)
+void RomKonamiSCC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if ((address < 0x5000) || (address >= 0xC000)) {
 		return;
@@ -123,7 +124,7 @@ void RomKonamiSCC::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* RomKonamiSCC::getWriteCacheLine(word address)
+byte* RomKonamiSCC::getWriteCacheLine(uint16_t address)
 {
 	if ((address < 0x5000) || (address >= 0xC000)) {
 		return unmappedWrite.data();

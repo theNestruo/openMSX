@@ -1,43 +1,42 @@
 #include "RomMatraInk.hh"
-#include "ranges.hh"
+
 #include "serialize.hh"
-#include <array>
 
 namespace openmsx {
 
-RomMatraInk::RomMatraInk(const DeviceConfig& config, Rom&& rom_)
+RomMatraInk::RomMatraInk(DeviceConfig& config, Rom&& rom_)
         : MSXRom(config, std::move(rom_))
-        , flash(rom, AmdFlashChip::AM29F040, {}, config)
+        , flash(rom, AmdFlashChip::AM29F040B, {}, config)
 {
 	reset(EmuTime::dummy());
 }
 
-void RomMatraInk::reset(EmuTime::param /*time*/)
+void RomMatraInk::reset(EmuTime /*time*/)
 {
 	flash.reset();
 }
 
-byte RomMatraInk::peekMem(word address, EmuTime::param /*time*/) const
+byte RomMatraInk::peekMem(uint16_t address, EmuTime time) const
 {
-	return flash.peek(address);
+	return flash.peek(address, time);
 }
 
-byte RomMatraInk::readMem(word address, EmuTime::param /*time*/)
+byte RomMatraInk::readMem(uint16_t address, EmuTime time)
 {
-	return flash.read(address);
+	return flash.read(address, time);
 }
 
-void RomMatraInk::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomMatraInk::writeMem(uint16_t address, byte value, EmuTime time)
 {
-	flash.write(address + 0x10000, value);
+	flash.write(address + 0x10000, value, time);
 }
 
-const byte* RomMatraInk::getReadCacheLine(word address) const
+const byte* RomMatraInk::getReadCacheLine(uint16_t address) const
 {
 	return flash.getReadCacheLine(address);
 }
 
-byte* RomMatraInk::getWriteCacheLine(word /*address*/)
+byte* RomMatraInk::getWriteCacheLine(uint16_t /*address*/)
 {
 	return nullptr;
 }

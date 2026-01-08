@@ -14,10 +14,10 @@
 #define CIRCULAR_BUFFER_HH
 
 #include <algorithm>
-#include <iterator>
-#include <utility>
 #include <cstddef>
 #include <cstdlib>
+#include <iterator>
+#include <utility>
 
 /** Random access iterator for circular_buffer. */
 template<typename BUF, typename T> class cb_iterator
@@ -38,8 +38,8 @@ public:
 	[[nodiscard]] T& operator*()  const { return *p; }
 	T* operator->() const { return  p; }
 
-	[[nodiscard]] difference_type operator-(const cb_iterator& it) const {
-		return index(p) - index(it.p);
+	[[nodiscard]] friend difference_type operator-(const cb_iterator& l, const cb_iterator& r) {
+		return l.index(l.p) - r.index(r.p);
 	}
 
 	cb_iterator& operator++() {
@@ -381,7 +381,7 @@ public:
 private:
 	void checkGrow() {
 		if (buf.full()) {
-			buf.set_capacity(std::max(size_t(4), buf.capacity() * 2));
+			buf.set_capacity(std::max(4uz, buf.capacity() * 2));
 		}
 	}
 

@@ -1,9 +1,11 @@
 #include "Event.hh"
+
 #include "stl.hh"
 #include "strCat.hh"
 
-#include <tuple>
 #include <SDL.h>
+
+#include <tuple>
 
 using namespace std::literals;
 
@@ -140,17 +142,17 @@ TclObject toTclList(const Event& event)
 			return makeTclList(e.getJoystick().str(), tmpStrCat("axis", e.getAxis()), e.getValue());
 		},
 		[](const JoystickHatEvent& e) {
-			const char* str = [&] {
+			auto str = [&] {
 				switch (e.getValue()) {
-					case SDL_HAT_UP:        return "up";
-					case SDL_HAT_RIGHT:     return "right";
-					case SDL_HAT_DOWN:      return "down";
-					case SDL_HAT_LEFT:      return "left";
-					case SDL_HAT_RIGHTUP:   return "rightup";
-					case SDL_HAT_RIGHTDOWN: return "rightdown";
-					case SDL_HAT_LEFTUP:    return "leftup";
-					case SDL_HAT_LEFTDOWN:  return "leftdown";
-					default:                return "center";
+					case SDL_HAT_UP:        return "up"sv;
+					case SDL_HAT_RIGHT:     return "right"sv;
+					case SDL_HAT_DOWN:      return "down"sv;
+					case SDL_HAT_LEFT:      return "left"sv;
+					case SDL_HAT_RIGHTUP:   return "rightup"sv;
+					case SDL_HAT_RIGHTDOWN: return "rightdown"sv;
+					case SDL_HAT_LEFTUP:    return "leftup"sv;
+					case SDL_HAT_LEFTDOWN:  return "leftdown"sv;
+					default:                return "center"sv;
 				}
 			}();
 			return makeTclList(e.getJoystick().str(), tmpStrCat("hat", e.getHat()), str);
@@ -186,7 +188,7 @@ TclObject toTclList(const Event& event)
 			return makeTclList("quit");
 		},
 		[](const FinishFrameEvent& e) {
-			return makeTclList("finishframe", int(e.getSource()), int(e.getSelectedSource()), e.isSkipped());
+			return makeTclList("finishframe", e.getSource(), e.getSelectedSource(), e.isSkipped());
 		},
 		[](const CliCommandEvent& e) {
 			return makeTclList("CliCmd", e.getCommand());
@@ -199,6 +201,9 @@ TclObject toTclList(const Event& event)
 		},
 		[](const ImGuiActiveEvent& e) {
 			return makeTclList("imgui", e.getActive());
+		},
+		[](const SwitchRendererEvent& e) {
+			return makeTclList("renderer", std::to_underlying(e.getRenderer()));
 		}
 	}, event);
 }

@@ -6,22 +6,26 @@
 #include "GLUtil.hh"
 #include "gl_vec.hh"
 
+#include <string>
+
 namespace openmsx {
 
 class ImGuiSpriteViewer final : public ImGuiPart
 {
 public:
-	using ImGuiPart::ImGuiPart;
+	ImGuiSpriteViewer(ImGuiManager& manager_, size_t index);
 
-	[[nodiscard]] zstring_view iniName() const override { return "sprite viewer"; }
+	[[nodiscard]] zstring_view iniName() const override { return title; }
 	void save(ImGuiTextBuffer& buf) override;
 	void loadLine(std::string_view name, zstring_view value) override;
 	void paint(MSXMotherBoard* motherBoard) override;
 
 public:
-	bool show = false;
+	bool show = true;
 
 private:
+	std::string title;
+
 	bool overrideAll    = false;
 	bool overrideMode   = false;
 	bool overrideSize   = false;
@@ -56,6 +60,7 @@ private:
 	gl::Texture zoomGridTex{gl::Null{}};
 	gl::Texture checkerTex {gl::Null{}};
 	gl::Texture renderTex  {gl::Null{}};
+	gl::vecN<2, int> gridPosition;
 
 	static constexpr auto validSizes = {8, 16};
 	static constexpr auto persistentElements = std::tuple{

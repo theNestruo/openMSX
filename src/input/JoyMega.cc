@@ -15,6 +15,7 @@
 #include "unreachable.hh"
 #include "xrange.hh"
 
+#include <algorithm>
 #include <memory>
 
 namespace openmsx {
@@ -23,7 +24,7 @@ class JoyMegaState final : public StateChange
 {
 public:
 	JoyMegaState() = default; // for serialize
-	JoyMegaState(EmuTime::param time_, uint8_t id_,
+	JoyMegaState(EmuTime time_, uint8_t id_,
 	             unsigned press_, unsigned release_)
 		: StateChange(time_)
 		, press(press_), release(release_), id(id_) {}
@@ -102,11 +103,11 @@ void JoyMega::checkJoystickConfig(const TclObject& newValue)
 	std::array<std::vector<BooleanInput>, 12> newBindings;
 
 	auto& interp = commandController.getInterpreter();
-	unsigned n = newValue.getListLength(interp);
+	auto n = newValue.getListLength(interp);
 	if (n & 1) {
 		throw CommandException("Need an even number of elements");
 	}
-	for (unsigned i = 0; i < n; i += 2) {
+	for (decltype(n) i = 0; i < n; i += 2) {
 		static constexpr std::array<std::string_view, 12> keys = {
 			// order is important!
 			"UP", "DOWN", "LEFT", "RIGHT",
@@ -114,7 +115,7 @@ void JoyMega::checkJoystickConfig(const TclObject& newValue)
 			"X", "Y", "Z", "SELECT",
 		};
 		std::string_view key  = newValue.getListIndex(interp, i + 0).getString();
-		auto it = ranges::find(keys, key);
+		auto it = std::ranges::find(keys, key);
 		if (it == keys.end()) {
 			throw CommandException(
 				"Invalid key: must be one of ", join(keys, ", "));
@@ -133,11 +134,11 @@ void JoyMega::checkJoystickConfig(const TclObject& newValue)
 	}
 
 	// only change current bindings when parsing was fully successful
-	ranges::copy(newBindings, bindings);
+	copy_to_range(newBindings, bindings);
 }
 
 // Pluggable
-std::string_view JoyMega::getName() const
+zstring_view JoyMega::getName() const
 {
 	switch (id) {
 		case 1: return "joymega1";
@@ -146,12 +147,12 @@ std::string_view JoyMega::getName() const
 	}
 }
 
-std::string_view JoyMega::getDescription() const
+zstring_view JoyMega::getDescription() const
 {
 	return description;
 }
 
-void JoyMega::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
+void JoyMega::plugHelper(Connector& /*connector*/, EmuTime /*time*/)
 {
 	plugHelper2();
 	status = 0xfff;
@@ -167,7 +168,7 @@ void JoyMega::plugHelper2()
 	stateChangeDistributor.registerListener(*this);
 }
 
-void JoyMega::unplugHelper(EmuTime::param /*time*/)
+void JoyMega::unplugHelper(EmuTime /*time*/)
 {
 	stateChangeDistributor.unregisterListener(*this);
 	eventDistributor.unregisterEventListener(*this);
@@ -175,7 +176,7 @@ void JoyMega::unplugHelper(EmuTime::param /*time*/)
 
 
 // JoystickDevice
-uint8_t JoyMega::read(EmuTime::param time)
+uint8_t JoyMega::read(EmuTime time)
 {
 	// See http://segaretro.org/Control_Pad_(Mega_Drive)
 	// and http://frs.badcoffee.info/hardware/joymega-en.html
@@ -205,7 +206,7 @@ uint8_t JoyMega::read(EmuTime::param time)
 	}
 }
 
-void JoyMega::write(uint8_t value, EmuTime::param time)
+void JoyMega::write(uint8_t value, EmuTime time)
 {
 	checkTime(time);
 	lastTime = time;
@@ -215,7 +216,7 @@ void JoyMega::write(uint8_t value, EmuTime::param time)
 	assert(((value >> 2) & 1) == (cycle & 1));
 }
 
-void JoyMega::checkTime(EmuTime::param time)
+void JoyMega::checkTime(EmuTime time)
 {
 	if ((time - lastTime) > EmuDuration::usec(1500)) {
 		// longer than 1.5ms since last write -> reset cycle
@@ -224,7 +225,7 @@ void JoyMega::checkTime(EmuTime::param time)
 }
 
 // MSXEventListener
-void JoyMega::signalMSXEvent(const Event& event, EmuTime::param time) noexcept
+void JoyMega::signalMSXEvent(const Event& event, EmuTime time) noexcept
 {
 	unsigned press = 0;
 	unsigned release = 0;
@@ -257,7 +258,7 @@ void JoyMega::signalStateChange(const StateChange& event)
 	status = (status & ~js->getPress()) | js->getRelease();
 }
 
-void JoyMega::stopReplay(EmuTime::param time) noexcept
+void JoyMega::stopReplay(EmuTime time) noexcept
 {
 	unsigned newStatus = 0xfff;
 	if (newStatus != status) {

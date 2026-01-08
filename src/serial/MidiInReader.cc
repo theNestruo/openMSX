@@ -1,14 +1,18 @@
 #include "MidiInReader.hh"
+
 #include "MidiInConnector.hh"
-#include "PlugException.hh"
+
 #include "EventDistributor.hh"
-#include "Scheduler.hh"
 #include "FileOperations.hh"
-#include "checked_cast.hh"
+#include "PlugException.hh"
+#include "Scheduler.hh"
 #include "serialize.hh"
+
+#include "checked_cast.hh"
+
 #include <array>
-#include <cstdio>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 
 namespace openmsx {
@@ -31,7 +35,7 @@ MidiInReader::~MidiInReader()
 }
 
 // Pluggable
-void MidiInReader::plugHelper(Connector& connector_, EmuTime::param /*time*/)
+void MidiInReader::plugHelper(Connector& connector_, EmuTime /*time*/)
 {
 	file = FileOperations::openFile(readFilenameSetting.getString(), "rb");
 	if (!file) {
@@ -45,23 +49,24 @@ void MidiInReader::plugHelper(Connector& connector_, EmuTime::param /*time*/)
 
 	setConnector(&connector_); // base class will do this in a moment,
 	                           // but thread already needs it
-	poller.reset();
+	poller.emplace();
 	thread = std::thread([this]() { run(); });
 }
 
-void MidiInReader::unplugHelper(EmuTime::param /*time*/)
+void MidiInReader::unplugHelper(EmuTime /*time*/)
 {
-	poller.abort();
+	poller->abort();
 	thread.join();
+	poller.reset();
 	file.reset();
 }
 
-std::string_view MidiInReader::getName() const
+zstring_view MidiInReader::getName() const
 {
 	return "midi-in-reader";
 }
 
-std::string_view MidiInReader::getDescription() const
+zstring_view MidiInReader::getDescription() const
 {
 	return "MIDI in file reader. Sends data from an input file to the "
 	       "MIDI port it is connected to. The filename is set with "
@@ -74,13 +79,13 @@ void MidiInReader::run()
 	if (!file) return;
 	while (true) {
 #ifndef _WIN32
-		if (poller.poll(fileno(file.get()))) {
+		if (poller->poll(fileno(file.get()))) {
 			break;
 		}
 #endif
 		std::array<uint8_t, 1> buf;
 		size_t num = fread(buf.data(), sizeof(uint8_t), buf.size(), file.get());
-		if (poller.aborted()) {
+		if (poller->aborted()) {
 			break;
 		}
 		if (num != 1) {
@@ -97,7 +102,7 @@ void MidiInReader::run()
 }
 
 // MidiInDevice
-void MidiInReader::signal(EmuTime::param time)
+void MidiInReader::signal(EmuTime time)
 {
 	auto* conn = checked_cast<MidiInConnector*>(getConnector());
 	if (!conn->acceptsData()) {

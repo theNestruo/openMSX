@@ -1,10 +1,13 @@
-#include "MSXCliComm.hh"
 #include "RomBlocks.hh"
+
+#include "MSXCliComm.hh"
 #include "SRAM.hh"
+
 #include "narrow.hh"
 #include "serialize.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
+
 #include <bit>
 
 namespace openmsx {
@@ -57,19 +60,19 @@ unsigned RomBlocks<BANK_SIZE>::getBaseSizeAlignment() const
 }
 
 template<unsigned BANK_SIZE>
-byte RomBlocks<BANK_SIZE>::peekMem(word address, EmuTime::param /*time*/) const
+byte RomBlocks<BANK_SIZE>::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	return bankPtr[address / BANK_SIZE][address & BANK_MASK];
 }
 
 template<unsigned BANK_SIZE>
-byte RomBlocks<BANK_SIZE>::readMem(word address, EmuTime::param time)
+byte RomBlocks<BANK_SIZE>::readMem(uint16_t address, EmuTime time)
 {
 	return RomBlocks<BANK_SIZE>::peekMem(address, time);
 }
 
 template<unsigned BANK_SIZE>
-const byte* RomBlocks<BANK_SIZE>::getReadCacheLine(word address) const
+const byte* RomBlocks<BANK_SIZE>::getReadCacheLine(uint16_t address) const
 {
 	return &bankPtr[address / BANK_SIZE][address & BANK_MASK];
 }
@@ -174,7 +177,7 @@ void RomBlocks<BANK_SIZE>::serialize(Archive& ar, unsigned /*version*/)
 	} else {
 		assert(Archive::IS_LOADER);
 		// set dummy value, anyway only used for debuggable
-		ranges::fill(blockNr, 255);
+		std::ranges::fill(blockNr, 255);
 	}*/
 }
 

@@ -1,14 +1,17 @@
 #ifndef MSXCOMMANDCONTROLLER_HH
 #define MSXCOMMANDCONTROLLER_HH
 
-#include "CommandController.hh"
 #include "Command.hh"
+#include "CommandController.hh"
 #include "InfoCommand.hh"
-#include "MSXEventListener.hh"
+
 #include "MSXCliComm.hh"
+#include "MSXEventListener.hh"
+
 #include "TemporaryString.hh"
 #include "hash_set.hh"
 #include "xxhash.hh"
+
 #include <memory>
 
 namespace openmsx {
@@ -81,7 +84,7 @@ private:
 
 	// MSXEventListener
 	void signalMSXEvent(const Event& event,
-	                    EmuTime::param time) noexcept override;
+	                    EmuTime time) noexcept override;
 
 	GlobalCommandController& globalCommandController;
 	Reactor& reactor;

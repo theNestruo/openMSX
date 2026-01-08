@@ -1,70 +1,73 @@
 #include "RomFactory.hh"
 
-#include "RomTypes.hh"
-#include "RomInfo.hh"
-#include "RomPageNN.hh"
-#include "RomPlain.hh"
-#include "RomDRAM.hh"
-#include "RomGeneric8kB.hh"
-#include "RomGeneric16kB.hh"
-#include "RomKonami.hh"
-#include "RomKonamiSCC.hh"
-#include "RomKonamiKeyboardMaster.hh"
-#include "RomAscii8kB.hh"
-#include "RomAscii8_8.hh"
-#include "RomAscii16kB.hh"
+#include "KonamiUltimateCollection.hh"
+#include "MegaFlashRomSCCPlus.hh"
+#include "ROMHunterMk2.hh"
+#include "ReproCartridgeV1.hh"
+#include "ReproCartridgeV2.hh"
+#include "Rom.hh"
+#include "RomAlAlamiah30in1.hh"
+#include "RomArc.hh"
 #include "RomAscii16X.hh"
+#include "RomAscii16_2.hh"
+#include "RomAscii16kB.hh"
+#include "RomAscii8_8.hh"
+#include "RomAscii8kB.hh"
+#include "RomColecoMegaCart.hh"
+#include "RomCrossBlaim.hh"
+#include "RomDRAM.hh"
+#include "RomDatabase.hh"
+#include "RomDooly.hh"
+#include "RomFSA1FM.hh"
+#include "RomGameMaster2.hh"
+#include "RomGeneric16kB.hh"
+#include "RomGeneric8kB.hh"
+#include "RomHalnote.hh"
+#include "RomHarryFox.hh"
+#include "RomHolyQuran.hh"
+#include "RomHolyQuran2.hh"
+#include "RomInfo.hh"
+#include "RomKonami.hh"
+#include "RomKonamiKeyboardMaster.hh"
+#include "RomKonamiSCC.hh"
+#include "RomMSXDOS2.hh"
 #include "RomMSXWrite.hh"
-#include "RomPadial8kB.hh"
+#include "RomMSXtra.hh"
+#include "RomMajutsushi.hh"
+#include "RomManbow2.hh"
+#include "RomMatraCompilation.hh"
+#include "RomMatraInk.hh"
+#include "RomMitsubishiMLTS2.hh"
+#include "RomMultiRom.hh"
+#include "RomNational.hh"
+#include "RomNeo16.hh"
+#include "RomNeo8.hh"
+#include "RomNettouYakyuu.hh"
 #include "RomPadial16kB.hh"
+#include "RomPadial8kB.hh"
+#include "RomPageNN.hh"
+#include "RomPanasonic.hh"
+#include "RomPlain.hh"
+#include "RomPlayBall.hh"
+#include "RomRType.hh"
+#include "RomRamFile.hh"
+#include "RomRetroHard31in1.hh"
 #include "RomSuperLodeRunner.hh"
 #include "RomSuperSwangi.hh"
-#include "RomMitsubishiMLTS2.hh"
-#include "RomMSXDOS2.hh"
-#include "RomAscii16_2.hh"
-#include "RomRType.hh"
-#include "RomCrossBlaim.hh"
-#include "RomHarryFox.hh"
-#include "RomPanasonic.hh"
-#include "RomNational.hh"
-#include "RomNeo8.hh"
-#include "RomNeo16.hh"
-#include "RomMajutsushi.hh"
 #include "RomSynthesizer.hh"
-#include "RomPlayBall.hh"
-#include "RomNettouYakyuu.hh"
-#include "RomGameMaster2.hh"
-#include "RomHalnote.hh"
+#include "RomTypes.hh"
+#include "RomWonderKid.hh"
+#include "RomZemina126in1.hh"
 #include "RomZemina25in1.hh"
 #include "RomZemina80in1.hh"
 #include "RomZemina90in1.hh"
-#include "RomZemina126in1.hh"
-#include "RomHolyQuran.hh"
-#include "RomHolyQuran2.hh"
-#include "RomFSA1FM.hh"
-#include "RomManbow2.hh"
-#include "RomMatraInk.hh"
-#include "RomMatraCompilation.hh"
-#include "RomArc.hh"
-#include "RomAlAlamiah30in1.hh"
-#include "RomRetroHard31in1.hh"
-#include "ROMHunterMk2.hh"
-#include "MegaFlashRomSCCPlus.hh"
-#include "ReproCartridgeV1.hh"
-#include "ReproCartridgeV2.hh"
-#include "KonamiUltimateCollection.hh"
-#include "RomDooly.hh"
-#include "RomMSXtra.hh"
-#include "RomRamFile.hh"
-#include "RomColecoMegaCart.hh"
-#include "RomMultiRom.hh"
-#include "Rom.hh"
-#include "Reactor.hh"
-#include "MSXMotherBoard.hh"
-#include "RomDatabase.hh"
+#include "Yamanooto.hh"
+
 #include "DeviceConfig.hh"
-#include "XMLElement.hh"
 #include "MSXException.hh"
+#include "MSXMotherBoard.hh"
+#include "Reactor.hh"
+#include "XMLElement.hh"
 
 #include "enumerate.hh"
 #include "one_of.hh"
@@ -75,7 +78,6 @@
 
 namespace openmsx::RomFactory {
 
-using std::make_unique;
 using enum RomType;
 
 [[nodiscard]] static RomType guessRomType(const Rom& rom)
@@ -84,8 +86,7 @@ using enum RomType;
 	if (size == 0) {
 		return NORMAL;
 	}
-	//std::span data = rom; // TODO error with clang-13/libc++
-	std::span data{std::to_address(rom.begin()), size};
+	std::span data = rom;
 
 	if (const size_t signatureOffset = 16, signatureSize = 8; size >= (signatureOffset + signatureSize)) {
 		auto signature = std::string_view(std::bit_cast<const char*>(data.data()) + signatureOffset, signatureSize);
@@ -96,8 +97,8 @@ using enum RomType;
 	if (size < 0x10000) {
 		if ((size <= 0x4000) &&
 		           (data[0] == 'A') && (data[1] == 'B')) {
-			auto initAddr = word(data[2] + 256 * data[3]);
-			auto textAddr = word(data[8] + 256 * data[9]);
+			auto initAddr = uint16_t(data[2] + 256 * data[3]);
+			auto textAddr = uint16_t(data[8] + 256 * data[9]);
 			if ((textAddr & 0xC000) == 0x8000) {
 				if ((initAddr == 0) ||
 				    (((initAddr & 0xC000) == 0x8000) &&
@@ -125,7 +126,7 @@ using enum RomType;
 		array_with_enum_index<RomType, unsigned> typeGuess = {}; // 0-initialized
 		for (auto i : xrange(size - 3)) {
 			if (data[i] == 0x32) {
-				auto value = word(data[i + 1] + (data[i + 2] << 8));
+				auto value = uint16_t(data[i + 1] + (data[i + 2] << 8));
 				switch (value) {
 				case 0x5000:
 				case 0x9000:
@@ -168,7 +169,7 @@ using enum RomType;
 	}
 }
 
-std::unique_ptr<MSXDevice> create(const DeviceConfig& config)
+std::unique_ptr<MSXDevice> create(DeviceConfig& config)
 {
 	Rom rom(std::string(config.getAttributeValue("id")), "rom", config);
 
@@ -215,11 +216,9 @@ std::unique_ptr<MSXDevice> create(const DeviceConfig& config)
 	// was updated).
 	// We do it at this point so that constructors used below can use this
 	// information for warning messages etc.
-	auto& doc = const_cast<DeviceConfig&>(config).getXMLDocument();
-	doc.setChildData(const_cast<XMLElement&>(*config.getXML()),
-	                 "mappertype", RomInfo::romTypeToName(type).data());
+	auto& doc = config.getXMLDocument();
+	doc.setChildData(*config.getXML(), "mappertype", RomInfo::romTypeToName(type).data());
 
-	std::unique_ptr<MSXRom> result;
 	switch (type) {
 	case MIRRORED:
 	case MIRRORED0000:
@@ -231,8 +230,7 @@ std::unique_ptr<MSXDevice> create(const DeviceConfig& config)
 	case NORMAL4000:
 	case NORMAL8000:
 	case NORMALC000:
-		result = make_unique<RomPlain>(config, std::move(rom), type);
-		break;
+		return std::make_unique<RomPlain>(config, std::move(rom), type);
 	case PAGE0:
 	case PAGE1:
 	case PAGE01:
@@ -243,206 +241,146 @@ std::unique_ptr<MSXDevice> create(const DeviceConfig& config)
 	case PAGE23:
 	case PAGE123:
 	case PAGE0123:
-		result = make_unique<RomPageNN>(config, std::move(rom), type);
-		break;
+		return std::make_unique<RomPageNN>(config, std::move(rom), type);
 	case DRAM:
-		result = make_unique<RomDRAM>(config, std::move(rom));
-		break;
+		return std::make_unique<RomDRAM>(config, std::move(rom));
 	case GENERIC_8KB:
-		result = make_unique<RomGeneric8kB>(config, std::move(rom));
-		break;
+		return std::make_unique<RomGeneric8kB>(config, std::move(rom));
 	case GENERIC_16KB:
-		result = make_unique<RomGeneric16kB>(config, std::move(rom));
-		break;
+		return std::make_unique<RomGeneric16kB>(config, std::move(rom));
 	case KONAMI_SCC:
-		result = make_unique<RomKonamiSCC>(config, std::move(rom));
-		break;
+		return std::make_unique<RomKonamiSCC>(config, std::move(rom));
 	case KONAMI:
-		result = make_unique<RomKonami>(config, std::move(rom));
-		break;
+		return std::make_unique<RomKonami>(config, std::move(rom));
 	case KBDMASTER:
-		result = make_unique<RomKonamiKeyboardMaster>(config, std::move(rom));
-		break;
+		return std::make_unique<RomKonamiKeyboardMaster>(config, std::move(rom));
 	case ASCII8:
-		result = make_unique<RomAscii8kB>(config, std::move(rom));
-		break;
+		return std::make_unique<RomAscii8kB>(config, std::move(rom));
 	case ASCII16:
-		result = make_unique<RomAscii16kB>(config, std::move(rom));
-		break;
+		return std::make_unique<RomAscii16kB>(config, std::move(rom));
 	case ASCII16X:
-		result = make_unique<RomAscii16X>(config, std::move(rom));
-		break;
+		return std::make_unique<RomAscii16X>(config, std::move(rom));
 	case MSXWRITE:
-		result = make_unique<RomMSXWrite>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMSXWrite>(config, std::move(rom));
 	case PADIAL8:
-		result = make_unique<RomPadial8kB>(config, std::move(rom));
-		break;
+		return std::make_unique<RomPadial8kB>(config, std::move(rom));
 	case PADIAL16:
-		result = make_unique<RomPadial16kB>(config, std::move(rom));
-		break;
+		return std::make_unique<RomPadial16kB>(config, std::move(rom));
 	case SUPERLODERUNNER:
-		result = make_unique<RomSuperLodeRunner>(config, std::move(rom));
-		break;
+		return std::make_unique<RomSuperLodeRunner>(config, std::move(rom));
 	case SUPERSWANGI:
-		result = make_unique<RomSuperSwangi>(config, std::move(rom));
-		break;
+		return std::make_unique<RomSuperSwangi>(config, std::move(rom));
 	case MITSUBISHIMLTS2:
-		result = make_unique<RomMitsubishiMLTS2>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMitsubishiMLTS2>(config, std::move(rom));
 	case MSXDOS2:
-		result = make_unique<RomMSXDOS2>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMSXDOS2>(config, std::move(rom));
 	case R_TYPE:
-		result = make_unique<RomRType>(config, std::move(rom));
-		break;
+		return std::make_unique<RomRType>(config, std::move(rom));
 	case CROSS_BLAIM:
-		result = make_unique<RomCrossBlaim>(config, std::move(rom));
-		break;
+		return std::make_unique<RomCrossBlaim>(config, std::move(rom));
 	case HARRY_FOX:
-		result = make_unique<RomHarryFox>(config, std::move(rom));
-		break;
+		return std::make_unique<RomHarryFox>(config, std::move(rom));
 	case ASCII8_8:
-		result = make_unique<RomAscii8_8>(
+		return std::make_unique<RomAscii8_8>(
 			config, std::move(rom), RomAscii8_8::SubType::ASCII8_8);
-		break;
 	case ASCII8_32:
-		result = make_unique<RomAscii8_8>(
+		return std::make_unique<RomAscii8_8>(
 			config, std::move(rom), RomAscii8_8::SubType::ASCII8_32);
-		break;
 	case ASCII8_2:
-		result = make_unique<RomAscii8_8>(
+		return std::make_unique<RomAscii8_8>(
 			config, std::move(rom), RomAscii8_8::SubType::ASCII8_2);
-		break;
 	case KOEI_8:
-		result = make_unique<RomAscii8_8>(
+		return std::make_unique<RomAscii8_8>(
 			config, std::move(rom), RomAscii8_8::SubType::KOEI_8);
-		break;
 	case KOEI_32:
-		result = make_unique<RomAscii8_8>(
+		return std::make_unique<RomAscii8_8>(
 			config, std::move(rom), RomAscii8_8::SubType::KOEI_32);
-		break;
 	case WIZARDRY:
-		result = make_unique<RomAscii8_8>(
+		return std::make_unique<RomAscii8_8>(
 			config, std::move(rom), RomAscii8_8::SubType::WIZARDRY);
-		break;
 	case ASCII16_2:
-		result = make_unique<RomAscii16_2>(config, std::move(rom), RomAscii16_2::SubType::ASCII16_2);
-		break;
+		return std::make_unique<RomAscii16_2>(config, std::move(rom), RomAscii16_2::SubType::ASCII16_2);
 	case ASCII16_8:
-		result = make_unique<RomAscii16_2>(config, std::move(rom), RomAscii16_2::SubType::ASCII16_8);
-		break;
+		return std::make_unique<RomAscii16_2>(config, std::move(rom), RomAscii16_2::SubType::ASCII16_8);
 	case GAME_MASTER2:
-		result = make_unique<RomGameMaster2>(config, std::move(rom));
-		break;
+		return std::make_unique<RomGameMaster2>(config, std::move(rom));
 	case PANASONIC:
-		result = make_unique<RomPanasonic>(config, std::move(rom));
-		break;
+		return std::make_unique<RomPanasonic>(config, std::move(rom));
 	case NATIONAL:
-		result = make_unique<RomNational>(config, std::move(rom));
-		break;
+		return std::make_unique<RomNational>(config, std::move(rom));
 	case NEO8:
-		result = make_unique<RomNeo8>(config, std::move(rom));
-		break;
+		return std::make_unique<RomNeo8>(config, std::move(rom));
 	case NEO16:
-		result = make_unique<RomNeo16>(config, std::move(rom));
-		break;
+		return std::make_unique<RomNeo16>(config, std::move(rom));
 	case MAJUTSUSHI:
-		result = make_unique<RomMajutsushi>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMajutsushi>(config, std::move(rom));
 	case SYNTHESIZER:
-		result = make_unique<RomSynthesizer>(config, std::move(rom));
-		break;
+		return std::make_unique<RomSynthesizer>(config, std::move(rom));
 	case PLAYBALL:
-		result = make_unique<RomPlayBall>(config, std::move(rom));
-		break;
+		return std::make_unique<RomPlayBall>(config, std::move(rom));
 	case NETTOU_YAKYUU:
-		result = make_unique<RomNettouYakyuu>(config, std::move(rom));
-		break;
+		return std::make_unique<RomNettouYakyuu>(config, std::move(rom));
 	case HALNOTE:
-		result = make_unique<RomHalnote>(config, std::move(rom));
-		break;
+		return std::make_unique<RomHalnote>(config, std::move(rom));
 	case ZEMINA25IN1:
-		result = make_unique<RomZemina25in1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomZemina25in1>(config, std::move(rom));
 	case ZEMINA80IN1:
-		result = make_unique<RomZemina80in1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomZemina80in1>(config, std::move(rom));
 	case ZEMINA90IN1:
-		result = make_unique<RomZemina90in1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomZemina90in1>(config, std::move(rom));
 	case ZEMINA126IN1:
-		result = make_unique<RomZemina126in1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomZemina126in1>(config, std::move(rom));
 	case HOLY_QURAN:
-		result = make_unique<RomHolyQuran>(config, std::move(rom));
-		break;
+		return std::make_unique<RomHolyQuran>(config, std::move(rom));
 	case HOLY_QURAN2:
-		result = make_unique<RomHolyQuran2>(config, std::move(rom));
-		break;
+		return std::make_unique<RomHolyQuran2>(config, std::move(rom));
 	case FSA1FM1:
-		result = make_unique<RomFSA1FM1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomFSA1FM1>(config, std::move(rom));
 	case FSA1FM2:
-		result = make_unique<RomFSA1FM2>(config, std::move(rom));
-		break;
+		return std::make_unique<RomFSA1FM2>(config, std::move(rom));
 	case MANBOW2:
 	case MANBOW2_2:
 	case HAMARAJANIGHT:
 	case MEGAFLASHROMSCC:
 	case RBSC_FLASH_KONAMI_SCC:
-		result = make_unique<RomManbow2>(config, std::move(rom), type);
-		break;
+		return std::make_unique<RomManbow2>(config, std::move(rom), type);
 	case MATRAINK:
-		result = make_unique<RomMatraInk>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMatraInk>(config, std::move(rom));
 	case MATRACOMPILATION:
-		result = make_unique<RomMatraCompilation>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMatraCompilation>(config, std::move(rom));
 	case ARC:
-		result = make_unique<RomArc>(config, std::move(rom));
-		break;
+		return std::make_unique<RomArc>(config, std::move(rom));
 	case ALALAMIAH30IN1:
-		result = make_unique<RomAlAlamiah30in1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomAlAlamiah30in1>(config, std::move(rom));
 	case RETROHARD31IN1:
-		result = make_unique<RomRetroHard31in1>(config, std::move(rom));
-		break;
+		return std::make_unique<RomRetroHard31in1>(config, std::move(rom));
 	case ROMHUNTERMK2:
-		result = make_unique<ROMHunterMk2>(config, std::move(rom));
-		break;
+		return std::make_unique<ROMHunterMk2>(config, std::move(rom));
 	case MEGAFLASHROMSCCPLUS:
-		result = make_unique<MegaFlashRomSCCPlus>(config, std::move(rom));
-		break;
+		return std::make_unique<MegaFlashRomSCCPlus>(config, std::move(rom));
 	case REPRO_CARTRIDGE1:
-		result = make_unique<ReproCartridgeV1>(config, std::move(rom));
-		break;
+		return std::make_unique<ReproCartridgeV1>(config, std::move(rom));
 	case REPRO_CARTRIDGE2:
-		result = make_unique<ReproCartridgeV2>(config, std::move(rom));
-		break;
+		return std::make_unique<ReproCartridgeV2>(config, std::move(rom));
+	case YAMANOOTO:
+		return std::make_unique<Yamanooto>(config, std::move(rom));
 	case KONAMI_ULTIMATE_COLLECTION:
-		result = make_unique<KonamiUltimateCollection>(config, std::move(rom));
-		break;
+		return std::make_unique<KonamiUltimateCollection>(config, std::move(rom));
 	case DOOLY:
-		result = make_unique<RomDooly>(config, std::move(rom));
-		break;
+		return std::make_unique<RomDooly>(config, std::move(rom));
 	case MSXTRA:
-		result = make_unique<RomMSXtra>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMSXtra>(config, std::move(rom));
 	case MULTIROM:
-		result = make_unique<RomMultiRom>(config, std::move(rom));
-		break;
+		return std::make_unique<RomMultiRom>(config, std::move(rom));
 	case RAMFILE:
-		result = make_unique<RomRamFile>(config, std::move(rom));
-		break;
+		return std::make_unique<RomRamFile>(config, std::move(rom));
 	case COLECOMEGACART:
-		result = make_unique<RomColecoMegaCart>(config, std::move(rom));
-		break;
-	default:
-		throw MSXException("Unknown ROM type");
+		return std::make_unique<RomColecoMegaCart>(config, std::move(rom));
+	case WONDERKID:
+		return std::make_unique<RomWonderKid>(config, std::move(rom));
+	case NUM: case UNKNOWN: break; // no actual rom types
 	}
-
-	return result;
+	throw MSXException("Unknown ROM type");
 }
 
 } // namespace openmsx::RomFactory

@@ -1,10 +1,13 @@
 #include "MSXPrinterPort.hh"
+
 #include "DummyPrinterPortDevice.hh"
+#include "serialize.hh"
+
 #include "checked_cast.hh"
 #include "narrow.hh"
 #include "outer.hh"
-#include "serialize.hh"
 #include "unreachable.hh"
+
 #include <cstdint>
 #include <memory>
 
@@ -22,18 +25,18 @@ MSXPrinterPort::MSXPrinterPort(const DeviceConfig& config)
 	reset(getCurrentTime());
 }
 
-void MSXPrinterPort::reset(EmuTime::param time)
+void MSXPrinterPort::reset(EmuTime time)
 {
 	writeData(0, time);    // TODO check this
 	setStrobe(true, time); // TODO check this
 }
 
-uint8_t MSXPrinterPort::readIO(uint16_t port, EmuTime::param time)
+uint8_t MSXPrinterPort::readIO(uint16_t port, EmuTime time)
 {
 	return peekIO(port, time);
 }
 
-uint8_t MSXPrinterPort::peekIO(uint16_t port, EmuTime::param time) const
+uint8_t MSXPrinterPort::peekIO(uint16_t port, EmuTime time) const
 {
 	bool showStatus = (port & readPortMask) == 0;
 	if (!showStatus) return 0xFF;
@@ -43,7 +46,7 @@ uint8_t MSXPrinterPort::peekIO(uint16_t port, EmuTime::param time) const
 		       ? (unusedBits | 0b10) : (unusedBits & ~0b10);
 }
 
-void MSXPrinterPort::writeIO(uint16_t port, uint8_t value, EmuTime::param time)
+void MSXPrinterPort::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	switch (port & writePortMask) {
 	case 0:
@@ -61,14 +64,14 @@ void MSXPrinterPort::writeIO(uint16_t port, uint8_t value, EmuTime::param time)
 	}
 }
 
-void MSXPrinterPort::setStrobe(bool newStrobe, EmuTime::param time)
+void MSXPrinterPort::setStrobe(bool newStrobe, EmuTime time)
 {
 	if (newStrobe != strobe) {
 		strobe = newStrobe;
 		getPluggedPrintDev().setStrobe(strobe, time);
 	}
 }
-void MSXPrinterPort::writeData(uint8_t newData, EmuTime::param time)
+void MSXPrinterPort::writeData(uint8_t newData, EmuTime time)
 {
 	if (newData != data) {
 		data = newData;
@@ -76,17 +79,17 @@ void MSXPrinterPort::writeData(uint8_t newData, EmuTime::param time)
 	}
 }
 
-std::string_view MSXPrinterPort::getDescription() const
+zstring_view MSXPrinterPort::getDescription() const
 {
 	return "MSX Printer port";
 }
 
-std::string_view MSXPrinterPort::getClass() const
+zstring_view MSXPrinterPort::getClass() const
 {
 	return "Printer Port";
 }
 
-void MSXPrinterPort::plug(Pluggable& dev, EmuTime::param time)
+void MSXPrinterPort::plug(Pluggable& dev, EmuTime time)
 {
 	Connector::plug(dev, time);
 	getPluggedPrintDev().writeData(data, time);

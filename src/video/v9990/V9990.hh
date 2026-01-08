@@ -1,26 +1,28 @@
 #ifndef V9990_HH
 #define V9990_HH
 
-#include "MSXDevice.hh"
-#include "Schedulable.hh"
-#include "TclCallback.hh"
-#include "VideoSystemChangeListener.hh"
-#include "IRQHelper.hh"
 #include "V9990CmdEngine.hh"
 #include "V9990DisplayTiming.hh"
 #include "V9990ModeEnum.hh"
 #include "V9990VRAM.hh"
-#include "SimpleDebuggable.hh"
+
 #include "Clock.hh"
+#include "IRQHelper.hh"
+#include "MSXDevice.hh"
+#include "Schedulable.hh"
+#include "SimpleDebuggable.hh"
+#include "TclCallback.hh"
+#include "VideoSystemChangeListener.hh"
+
 #include "narrow.hh"
-#include "openmsx.hh"
 #include "one_of.hh"
 #include "outer.hh"
 #include "serialize_meta.hh"
 #include "unreachable.hh"
+
 #include <array>
+#include <cstdint>
 #include <memory>
-#include <optional>
 
 namespace openmsx {
 
@@ -38,11 +40,11 @@ public:
 	~V9990() override;
 
 	// MSXDevice interface:
-	void powerUp(EmuTime::param time) override;
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readIO(word port, EmuTime::param time) override;
-	[[nodiscard]] byte peekIO(word port, EmuTime::param time) const override;
-	void writeIO(word port, byte value, EmuTime::param time) override;
+	void powerUp(EmuTime time) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] uint8_t readIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] uint8_t peekIO(uint16_t port, EmuTime time) const override;
+	void writeIO(uint16_t port, uint8_t value, EmuTime time) override;
 
 	/** Used by Video9000 to be able to couple the VDP and V9990 output.
 	 * Can return nullptr in case of renderer=none. This value can change
@@ -52,28 +54,28 @@ public:
 
 	/** Obtain a reference to the V9990's VRAM
 	  */
-	[[nodiscard]] inline V9990VRAM& getVRAM() {
+	[[nodiscard]] V9990VRAM& getVRAM() {
 		return vram;
 	}
 
 	/** Get interlace status.
 	  * @return True iff interlace is enabled.
 	  */
-	[[nodiscard]] inline bool isInterlaced() const {
+	[[nodiscard]] bool isInterlaced() const {
 		return interlaced;
 	}
 
 	/** Get even/odd page alternation status.
 	  * @return True iff even/odd page alternation is enabled.
 	  */
-	[[nodiscard]] inline bool isEvenOddEnabled() const {
+	[[nodiscard]] bool isEvenOddEnabled() const {
 		return (regs[SCREEN_MODE_1] & 0x04) != 0;
 	}
 
 	/** Is the even or odd field being displayed?
 	  * @return True iff the odd lines should be displayed.
 	  */
-	[[nodiscard]] inline bool getEvenOdd() const {
+	[[nodiscard]] bool getEvenOdd() const {
 		return (status & 0x02) != 0;
 	}
 
@@ -82,14 +84,14 @@ public:
 	  *  because V9990 doesn't have the same overscan trick (?)
 	  * @return true iff enabled
 	  */
-	[[nodiscard]] inline bool isDisplayEnabled() const {
+	[[nodiscard]] bool isDisplayEnabled() const {
 		return isDisplayArea && displayEnabled;
 	}
 
 	/** Are sprites (cursors) enabled?
 	  * @return true iff enabled
 	  */
-	[[nodiscard]] inline bool spritesEnabled() const {
+	[[nodiscard]] bool spritesEnabled() const {
 		return !(regs[CONTROL] & 0x40);
 	}
 
@@ -98,7 +100,7 @@ public:
 	  * between [0..63] with lowest two bits always 0).
 	  * @return palette offset
 	  */
-	[[nodiscard]] inline byte getPaletteOffset() const {
+	[[nodiscard]] uint8_t getPaletteOffset() const {
 		return (regs[PALETTE_CONTROL] & 0x0F);
 	}
 
@@ -110,7 +112,7 @@ public:
 	  *  - the YS bit in the palette-entry is set
 	  */
 	struct GetPaletteResult {
-		byte r, g, b;
+		uint8_t r, g, b;
 		bool ys;
 	};
 	[[nodiscard]] GetPaletteResult getPalette(int index) const;
@@ -119,7 +121,7 @@ public:
 	  * @param  time Point in emulated time.
 	  * @return      Number of UC ticks.
 	  */
-	[[nodiscard]] inline int getUCTicksThisFrame(EmuTime::param time) const {
+	[[nodiscard]] int getUCTicksThisFrame(EmuTime time) const {
 		return narrow<int>(frameStartTime.getTicksTill_fast(time));
 	}
 
@@ -127,13 +129,13 @@ public:
 	  * This setting is fixed at start of frame.
 	  * @return True if PAL timing, false if NTSC timing.
 	  */
-	[[nodiscard]] inline bool isPalTiming() const {
+	[[nodiscard]] bool isPalTiming() const {
 		return palTiming;
 	}
 
 	/** Returns true iff in overscan mode
 	  */
-	[[nodiscard]] inline bool isOverScan() const {
+	[[nodiscard]] bool isOverScan() const {
 		return mode == one_of(V9990DisplayMode::B0, V9990DisplayMode::B2, V9990DisplayMode::B4);
 	}
 
@@ -143,7 +145,7 @@ public:
 	  * because this property only changes once per frame we can't directly
 	  * calculate it like that.
 	  */
-	[[nodiscard]] inline bool isSuperimposing() const {
+	[[nodiscard]] bool isSuperimposing() const {
 		return superimposing;
 	}
 
@@ -156,7 +158,7 @@ public:
 	  * 'normal' (non-overscan) y-coordinates. This method returns the
 	  * offset between those two coord-systems.
 	  */
-	[[nodiscard]] inline unsigned getCursorYOffset() const {
+	[[nodiscard]] unsigned getCursorYOffset() const {
 		// TODO vertical set-adjust may or may not influence this,
 		//      need to investigate that.
 		if (!isOverScan()) return 0;
@@ -171,7 +173,7 @@ public:
 	  * @return       Pixel position
 	  * TODO: Move this to V9990DisplayTiming??
 	  */
-	[[nodiscard]] static inline int UCtoX(int ticks, V9990DisplayMode mode) {
+	[[nodiscard]] static int UCtoX(int ticks, V9990DisplayMode mode) {
 		int x;
 		ticks = ticks % V9990DisplayTiming::UC_TICKS_PER_LINE;
 		switch (mode) {
@@ -193,7 +195,7 @@ public:
 
 	/** Return the current display mode
 	  */
-	[[nodiscard]] inline V9990DisplayMode getDisplayMode() const {
+	[[nodiscard]] V9990DisplayMode getDisplayMode() const {
 		return mode;
 	}
 
@@ -208,44 +210,44 @@ public:
 	  *             2 ->  8bpp
 	  *             3 -> 16bpp
 	  */
-	[[nodiscard]] inline unsigned getColorDepth() const {
+	[[nodiscard]] unsigned getColorDepth() const {
 		return regs[SCREEN_MODE_0] & 0x03;
 	}
 
 	/** Return the current back drop color
 	  * @return  Index the color palette
 	  */
-	[[nodiscard]] inline byte getBackDropColor() const {
+	[[nodiscard]] uint8_t getBackDropColor() const {
 		return regs[BACK_DROP_COLOR];
 	}
 
 	/** Returns the X scroll offset for screen A of P1 and other modes
 	  */
-	[[nodiscard]] inline unsigned getScrollAX() const {
+	[[nodiscard]] unsigned getScrollAX() const {
 		return regs[SCROLL_CONTROL_AX0] + 8 * regs[SCROLL_CONTROL_AX1];
 	}
 
 	/** Returns the Y scroll offset for screen A of P1 and other modes
 	  */
-	[[nodiscard]] inline unsigned getScrollAY() const {
+	[[nodiscard]] unsigned getScrollAY() const {
 		return regs[SCROLL_CONTROL_AY0] + 256 * scrollAYHigh;
 	}
 
 	/** Returns the X scroll offset for screen B of P1 mode
 	  */
-	[[nodiscard]] inline unsigned getScrollBX() const {
+	[[nodiscard]] unsigned getScrollBX() const {
 		return regs[SCROLL_CONTROL_BX0] + 8 * regs[SCROLL_CONTROL_BX1];
 	}
 
 	/** Returns the Y scroll offset for screen B of P1 mode
 	  */
-	[[nodiscard]] inline unsigned getScrollBY() const {
+	[[nodiscard]] unsigned getScrollBY() const {
 		return regs[SCROLL_CONTROL_BY0] + 256 * scrollBYHigh;
 	}
 
 	/** Returns the vertical roll mask
 	  */
-	[[nodiscard]] inline unsigned getRollMask(unsigned maxMask) const {
+	[[nodiscard]] unsigned getRollMask(unsigned maxMask) const {
 		static std::array<unsigned, 4> rollMasks = {
 			0xFFFF, // no rolling (use maxMask)
 			0x00FF,
@@ -258,7 +260,7 @@ public:
 
 	/** Return the image width
 	  */
-	[[nodiscard]] inline unsigned getImageWidth() const {
+	[[nodiscard]] unsigned getImageWidth() const {
 		switch (regs[SCREEN_MODE_0] & 0xC0) {
 		case 0x00: // P1
 			return 256;
@@ -271,7 +273,7 @@ public:
 	}
 	/** Return the display width
 	  */
-	[[nodiscard]] inline unsigned getLineWidth() const {
+	[[nodiscard]] unsigned getLineWidth() const {
 		switch (getDisplayMode()) {
 		using enum V9990DisplayMode;
 		case B0:          return  213;
@@ -288,13 +290,13 @@ public:
 
 	/** Command execution ready
 	  */
-	inline void cmdReady() {
+	void cmdReady() {
 		raiseIRQ(CMD_IRQ);
 	}
 
 	/** Return the sprite pattern table base address
 	  */
-	[[nodiscard]] inline int getSpritePatternAddress(V9990DisplayMode m) const {
+	[[nodiscard]] int getSpritePatternAddress(V9990DisplayMode m) const {
 		switch (m) {
 		case V9990DisplayMode::P1:
 			return (int(regs[SPRITE_PATTERN_ADDRESS] & 0x0E) << 14);
@@ -307,49 +309,49 @@ public:
 
 	/** return sprite palette offset
 	  */
-	[[nodiscard]] inline byte getSpritePaletteOffset() const {
-		return narrow_cast<byte>(regs[SPRITE_PALETTE_CONTROL] << 2);
+	[[nodiscard]] uint8_t getSpritePaletteOffset() const {
+		return narrow_cast<uint8_t>(regs[SPRITE_PALETTE_CONTROL] << 2);
 	}
 
 	/** Get horizontal display timings
 	 */
-	[[nodiscard]] inline const V9990DisplayPeriod& getHorizontalTiming() const {
+	[[nodiscard]] const V9990DisplayPeriod& getHorizontalTiming() const {
 		return *horTiming;
 	}
 
 	/** Get the number of VDP clock-ticks between the start of the line and
 	  * the end of the left border.
 	  */
-	[[nodiscard]] inline int getLeftBorder() const {
+	[[nodiscard]] int getLeftBorder() const {
 		return horTiming->blank + horTiming->border1 +
 		       (((regs[DISPLAY_ADJUST] & 0x0F) ^ 7) - 8) * 8;
 	}
 	/** Get the number of VDP clock-ticks between the start of the line and
 	  * the end of the right border.
 	  */
-	[[nodiscard]] inline int getRightBorder() const {
+	[[nodiscard]] int getRightBorder() const {
 		return getLeftBorder() + horTiming->display;
 	}
 
 	/** Get vertical display timings
 	 */
-	[[nodiscard]] inline const V9990DisplayPeriod& getVerticalTiming() const {
+	[[nodiscard]] const V9990DisplayPeriod& getVerticalTiming() const {
 		return *verTiming;
 	}
 
-	[[nodiscard]] inline int getTopBorder() const {
+	[[nodiscard]] int getTopBorder() const {
 		return verTiming->blank + verTiming->border1 +
 		       (((regs[DISPLAY_ADJUST] >> 4) ^ 7) - 8);
 	}
-	[[nodiscard]] inline int getBottomBorder() const {
+	[[nodiscard]] int getBottomBorder() const {
 		return getTopBorder() + verTiming->display;
 	}
 
-	[[nodiscard]] inline unsigned getPriorityControlX() const {
+	[[nodiscard]] unsigned getPriorityControlX() const {
 		unsigned t = regs[PRIORITY_CONTROL] & 0x03;
 		return (t == 0) ? 256 : t << 6;
 	}
-	[[nodiscard]] inline unsigned getPriorityControlY() const {
+	[[nodiscard]] unsigned getPriorityControlY() const {
 		unsigned t = regs[PRIORITY_CONTROL] & 0x0C;
 		return (t == 0) ? 256 : t << 4;
 	}
@@ -373,7 +375,7 @@ private:
 
 	struct SyncVSync final : SyncBase {
 		using SyncBase::SyncBase;
-		void executeUntil(EmuTime::param time) override {
+		void executeUntil(EmuTime time) override {
 			auto& v9990 = OUTER(V9990, syncVSync);
 			v9990.execVSync(time);
 		}
@@ -381,7 +383,7 @@ private:
 
 	struct SyncDisplayStart final : SyncBase {
 		using SyncBase::SyncBase;
-		void executeUntil(EmuTime::param time) override {
+		void executeUntil(EmuTime time) override {
 			auto& v9990 = OUTER(V9990, syncDisplayStart);
 			v9990.execDisplayStart(time);
 		}
@@ -389,7 +391,7 @@ private:
 
 	struct SyncVScan final : SyncBase {
 		using SyncBase::SyncBase;
-		void executeUntil(EmuTime::param time) override {
+		void executeUntil(EmuTime time) override {
 			auto& v9990 = OUTER(V9990, syncVScan);
 			v9990.execVScan(time);
 		}
@@ -397,7 +399,7 @@ private:
 
 	struct SyncHScan final : SyncBase {
 		using SyncBase::SyncBase;
-		void executeUntil(EmuTime::param /*time*/) override {
+		void executeUntil(EmuTime /*time*/) override {
 			auto& v9990 = OUTER(V9990, syncHScan);
 			v9990.execHScan();
 		}
@@ -405,7 +407,7 @@ private:
 
 	struct SyncSetMode final : SyncBase {
 		using SyncBase::SyncBase;
-		void executeUntil(EmuTime::param time) override {
+		void executeUntil(EmuTime time) override {
 			auto& v9990 = OUTER(V9990, syncSetMode);
 			v9990.execSetMode(time);
 		}
@@ -413,24 +415,24 @@ private:
 
 	struct SyncCmdEnd final : SyncBase {
 		using SyncBase::SyncBase;
-		void executeUntil(EmuTime::param time) override {
+		void executeUntil(EmuTime time) override {
 			auto& v9990 = OUTER(V9990, syncCmdEnd);
 			v9990.execCheckCmdEnd(time);
 		}
 	} syncCmdEnd;
 
-	void execVSync(EmuTime::param time);
-	void execDisplayStart(EmuTime::param time);
-	void execVScan(EmuTime::param time);
+	void execVSync(EmuTime time);
+	void execDisplayStart(EmuTime time);
+	void execVScan(EmuTime time);
 	void execHScan();
-	void execSetMode(EmuTime::param time);
-	void execCheckCmdEnd(EmuTime::param time);
+	void execSetMode(EmuTime time);
+	void execCheckCmdEnd(EmuTime time);
 
 	// --- types ------------------------------------------------------
 
 	/** IRQ types
 	  */
-	enum IRQType : byte {
+	enum IRQType : uint8_t {
 		VER_IRQ = 1,
 		HOR_IRQ = 2,
 		CMD_IRQ = 4
@@ -438,7 +440,7 @@ private:
 
 	/** I/O Ports
 	  */
-	enum PortId {
+	enum PortId : uint8_t {
 		VRAM_DATA = 0,
 		PALETTE_DATA,
 		COMMAND_DATA,
@@ -459,7 +461,7 @@ private:
 
 	/** Registers
 	  */
-	enum RegisterId {
+	enum RegisterId : uint8_t {
 		VRAM_WRITE_ADDRESS_0 = 0,
 		VRAM_WRITE_ADDRESS_1,
 		VRAM_WRITE_ADDRESS_2,
@@ -518,14 +520,16 @@ private:
 
 	struct RegDebug final : SimpleDebuggable {
 		explicit RegDebug(const V9990& v9990);
-		[[nodiscard]] byte read(unsigned address) override;
-		void write(unsigned address, byte value, EmuTime::param time) override;
+		[[nodiscard]] uint8_t read(unsigned address) override;
+		void write(unsigned address, uint8_t value, EmuTime time) override;
+		void readBlock(unsigned start, std::span<uint8_t> output) override;
 	} v9990RegDebug;
 
 	struct PalDebug final : SimpleDebuggable {
 		explicit PalDebug(const V9990& v9990);
-		[[nodiscard]] byte read(unsigned address) override;
-		void write(unsigned address, byte value, EmuTime::param time) override;
+		[[nodiscard]] uint8_t read(unsigned address) override;
+		void write(unsigned address, uint8_t value, EmuTime time) override;
+		void readBlock(unsigned start, std::span<uint8_t> output) override;
 	} v9990PalDebug;
 
 	IRQHelper irq;
@@ -539,7 +543,7 @@ private:
 	  */
 	V9990VRAM vram;
 	unsigned vramReadPtr, vramWritePtr;
-	byte vramReadBuffer;
+	uint8_t vramReadBuffer;
 
 	/** Command Engine
 	  */
@@ -568,20 +572,20 @@ private:
 
 	/** Palette
 	  */
-	std::array<byte, 0x100> palette;
+	std::array<uint8_t, 0x100> palette;
 
 	/** Status port (P#5)
 	  */
-	byte status;
+	uint8_t status;
 
 	/** Interrupt flag (P#6)
 	  */
-	byte pendingIRQs = 0;
+	uint8_t pendingIRQs = 0;
 
 	/** Registers
 	  */
-	std::array<byte, 0x40> regs = {}; // fill with zero
-	byte regSelect;
+	std::array<uint8_t, 0x40> regs = {}; // fill with zero
+	uint8_t regSelect;
 
 	/** Is PAL timing active?  False means NTSC timing
 	  */
@@ -611,8 +615,8 @@ private:
 	  *       as on V99x8, see V9990PixelRenderer::updateScrollAYLow() for
 	  *       details.
 	  */
-	byte scrollAYHigh;
-	byte scrollBYHigh;
+	uint8_t scrollAYHigh;
+	uint8_t scrollBYHigh;
 
 	/** Corresponds to bit 1 in the System Control Port.
 	  * When this is true, all registers are held in the 'power ON reset'
@@ -636,54 +640,54 @@ private:
 	void setHorizontalTiming();
 	void setVerticalTiming();
 
-	[[nodiscard]] V9990ColorMode getColorMode(byte pal_ctrl) const;
+	[[nodiscard]] V9990ColorMode getColorMode(uint8_t pal_ctrl) const;
 
 	/** Get VRAM read or write address from V9990 registers
 	  * @param base  VRAM_READ_ADDRESS_0 or VRAM_WRITE_ADDRESS_0
 	  * @returns     VRAM read or write address
 	  */
-	[[nodiscard]] inline unsigned getVRAMAddr(RegisterId base) const;
+	[[nodiscard]] unsigned getVRAMAddr(RegisterId base) const;
 
 	/** set VRAM read or write address into V9990 registers
 	  * @param base  VRAM_READ_ADDRESS_0 or VRAM_WRITE_ADDRESS_0
 	  * @param addr  Address to set
 	  */
-	inline void setVRAMAddr(RegisterId base, unsigned addr);
+	void setVRAMAddr(RegisterId base, unsigned addr);
 
 	/** Read V9990 register value
 	  * @param reg   Register to read from
 	  * @param time  Moment in emulated time to read register
 	  * @returns     Register value
 	  */
-	[[nodiscard]] byte readRegister(byte reg, EmuTime::param time) const;
+	[[nodiscard]] uint8_t readRegister(uint8_t reg, EmuTime time) const;
 
 	/** Write V9990 register value
 	  * @param reg   Register to write to
 	  * @param val   Value to write
 	  * @param time  Moment in emulated time to write register
 	  */
-	void writeRegister(byte reg, byte val, EmuTime::param time);
+	void writeRegister(uint8_t reg, uint8_t val, EmuTime time);
 
 	/** Write V9990 palette register
 	  * @param reg   Register to write to
 	  * @param val   Value to write
 	  * @param time  Moment in emulated time to write register
 	  */
-	void writePaletteRegister(byte reg, byte val, EmuTime::param time);
+	void writePaletteRegister(uint8_t reg, uint8_t val, EmuTime time);
 
 	/** Schedule a sync point at the start of the next line
 	 */
-	void syncAtNextLine(SyncBase& type, EmuTime::param time) const;
+	void syncAtNextLine(SyncBase& type, EmuTime time) const;
 
 	/** Create a new renderer.
 	  * @param time  Moment in emulated time to create the renderer
 	  */
-	void createRenderer(EmuTime::param time);
+	void createRenderer(EmuTime time);
 
 	/** Start a new frame.
 	  * @param time  Moment in emulated time to start the frame
 	  */
-	void frameStart(EmuTime::param time);
+	void frameStart(EmuTime time);
 
 	/** Raise an IRQ
 	  * @param irqType  Type of IRQ
@@ -699,11 +703,11 @@ private:
 	  * @param time The current time
 	  * @result Timestamp for next hor irq
 	  */
-	void scheduleHscan(EmuTime::param time);
+	void scheduleHscan(EmuTime time);
 
 	/** Estimate when the current (if any) command will finish.
 	 */
-	void scheduleCmdEnd(EmuTime::param time);
+	void scheduleCmdEnd(EmuTime time);
 };
 SERIALIZE_CLASS_VERSION(V9990, 5);
 

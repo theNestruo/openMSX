@@ -1,9 +1,10 @@
 #ifndef WD2793BASEDFDC_HH
 #define WD2793BASEDFDC_HH
 
-#include "MSXFDC.hh"
 #include "DriveMultiplexer.hh"
+#include "MSXFDC.hh"
 #include "WD2793.hh"
+
 #include <string>
 
 namespace openmsx {
@@ -11,13 +12,13 @@ namespace openmsx {
 class WD2793BasedFDC : public MSXFDC
 {
 public:
-	void reset(EmuTime::param time) override;
+	void reset(EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 protected:
-	explicit WD2793BasedFDC(const DeviceConfig& config, const std::string& romId = {},
+	explicit WD2793BasedFDC(DeviceConfig& config, const std::string& romId = {},
 	                        bool needROM = true,
 	                        DiskDrive::TrackMode mode = DiskDrive::TrackMode::NORMAL);
 	~WD2793BasedFDC() override = default;

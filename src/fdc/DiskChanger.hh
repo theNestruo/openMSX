@@ -2,9 +2,11 @@
 #define DISKCHANGER_HH
 
 #include "DiskContainer.hh"
-#include "StateChangeListener.hh"
+
 #include "RecordedCommand.hh"
+#include "StateChangeListener.hh"
 #include "serialize_meta.hh"
+
 #include <functional>
 #include <memory>
 #include <optional>
@@ -83,7 +85,7 @@ private:
 
 	// StateChangeListener
 	void signalStateChange(const StateChange& event) override;
-	void stopReplay(EmuTime::param time) noexcept override;
+	void stopReplay(EmuTime time) noexcept override;
 
 private:
 	Reactor& reactor;
@@ -100,6 +102,8 @@ private:
 	const bool doubleSidedDrive; // for DirAsDSK
 
 	bool diskChangedFlag;
+
+	friend class RealDrive;
 };
 SERIALIZE_CLASS_VERSION(DiskChanger, 2);
 

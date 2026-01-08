@@ -7,6 +7,8 @@
 #include "Observer.hh"
 #include "StateChangeListener.hh"
 
+#include <cstdint>
+
 namespace openmsx {
 
 class MSXMotherBoard;
@@ -24,7 +26,7 @@ class StateChangeDistributor;
 class Autofire final : private Observer<Setting>, private StateChangeListener
 {
 public:
-	enum ID { RENSHATURBO, UNKNOWN };
+	enum class ID : uint8_t { RENSHATURBO, UNKNOWN };
 
 public:
 	Autofire(MSXMotherBoard& motherBoard,
@@ -36,13 +38,13 @@ public:
 	  * @result When auto-fire is on, result will alternate between true
 	  *         and false. When auto-fire if off result is false.
 	  */
-	[[nodiscard]] bool getSignal(EmuTime::param time) const;
+	[[nodiscard]] bool getSignal(EmuTime time) const;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	void setSpeed(EmuTime::param time);
+	void setSpeed(EmuTime time);
 
 	/** Sets the clock frequency according to the current value of the speed
 	  * settings.
@@ -54,7 +56,7 @@ private:
 
 	// StateChangeListener
 	void signalStateChange(const StateChange& event) override;
-	void stopReplay(EmuTime::param time) noexcept override;
+	void stopReplay(EmuTime time) noexcept override;
 
 private:
 	Scheduler& scheduler;

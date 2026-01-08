@@ -7,6 +7,7 @@
 #include "stl.hh"
 #include "zstring_view.hh"
 
+#include <cstdint>
 #include <optional>
 #include <string_view>
 
@@ -15,7 +16,7 @@ namespace openmsx {
 class Shortcuts
 {
 public:
-	enum class ID {
+	enum class ID : uint8_t {
 		HEX_GOTO_ADDR,
 		DEBUGGER_STEP_IN,
 		DEBUGGER_STEP_OVER,
@@ -25,11 +26,27 @@ public:
 		DISASM_GOTO_ADDR,
 		DISASM_RUN_TO_ADDR,
 		DISASM_TOGGLE_BREAKPOINT,
+		TRACE_ZOOM_TO_FIT,
+		TRACE_ZOOM_IN,
+		TRACE_ZOOM_OUT,
+		TRACE_PREV_NEG_EDGE,
+		TRACE_PREV_POS_EDGE,
+		TRACE_PREV_EDGE,
+		TRACE_NEXT_EDGE,
+		TRACE_NEXT_POS_EDGE,
+		TRACE_NEXT_NEG_EDGE,
+		TRACE_ALT_PREV_NEG_EDGE,
+		TRACE_ALT_PREV_POS_EDGE,
+		TRACE_ALT_PREV_EDGE,
+		TRACE_ALT_NEXT_EDGE,
+		TRACE_ALT_NEXT_POS_EDGE,
+		TRACE_ALT_NEXT_NEG_EDGE,
+		TRACE_SHOW_MENU_BAR,
 
 		NUM,
 		INVALID = NUM
 	};
-	enum class Type {
+	enum class Type : uint8_t {
 		LOCAL,
 		GLOBAL,
 		ALWAYS_LOCAL,
@@ -74,9 +91,8 @@ public:
 	void saveShortcuts(XmlStream& xml) const
 	{
 		xml.with_tag("shortcuts", [&]{
-			for (auto [id_, shortcut_] : enumerate(shortcuts)) {
+			for (auto [id_, shortcut] : enumerate(shortcuts)) {
 				auto id = static_cast<ID>(id_);
-				const auto& shortcut = shortcut_; // clang-15 workaround
 				if (shortcut == getDefaultShortcut(id)) continue;
 				xml.with_tag("shortcut", [&]{
 					xml.attribute("key", getKeyChordName(shortcut.keyChord));

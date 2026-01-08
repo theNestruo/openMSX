@@ -1,8 +1,12 @@
 #include "MidiOutConnector.hh"
-#include "MidiOutDevice.hh"
+
 #include "DummyMidiOutDevice.hh"
-#include "checked_cast.hh"
+#include "MidiOutDevice.hh"
+
 #include "serialize.hh"
+
+#include "checked_cast.hh"
+
 #include <memory>
 
 namespace openmsx {
@@ -15,12 +19,12 @@ MidiOutConnector::MidiOutConnector(PluggingController& pluggingController_,
 {
 }
 
-std::string_view MidiOutConnector::getDescription() const
+zstring_view MidiOutConnector::getDescription() const
 {
 	return description;
 }
 
-std::string_view MidiOutConnector::getClass() const
+zstring_view MidiOutConnector::getClass() const
 {
 	return "midi out";
 }
@@ -45,7 +49,7 @@ void MidiOutConnector::setParityBit(bool enable, Parity parity)
 	getPluggedMidiOutDev().setParityBit(enable, parity);
 }
 
-void MidiOutConnector::recvByte(byte value, EmuTime::param time)
+void MidiOutConnector::recvByte(uint8_t value, EmuTime time)
 {
 	getPluggedMidiOutDev().recvByte(value, time);
 }

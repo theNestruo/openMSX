@@ -8,52 +8,27 @@
 #include "Display.hh"
 #include "EnumSetting.hh"
 #include "EventDistributor.hh"
-#include "FileContext.hh"
 #include "MSXException.hh"
 #include "Reactor.hh"
 #include "RenderSettings.hh"
 #include "Thread.hh"
-#include "openmsx.hh"
 
-#include "Date.hh"
 #include "one_of.hh"
 #include "random.hh"
+#include "setenv.hh" // setenv() for windows
 
-#include "build-info.hh"
+#include <SDL.h>
 
-#include <iostream>
-#include <exception>
-#include <ctime>
 #include <cstdio>
 #include <cstdlib>
-#include <SDL.h>
+#include <ctime>
+#include <exception>
+#include <iostream>
 #ifdef _WIN32
 #include "win32-arggen.hh"
 #endif
 
-// Set LOG_TO_FILE to 1 for any platform on which stdout and stderr must
-// be redirected to a file
-// Also, specify the appropriate file names, depending on the platform conventions
-#if PLATFORM_ANDROID
-#define LOG_TO_FILE 1
-static constexpr const char* STDOUT_LOG_FILE_NAME = "openmsx_system/openmsx.stdout";
-static constexpr const char* STDERR_LOG_FILE_NAME = "openmsx_system/openmsx.stderr";
-#else
-#define LOG_TO_FILE 0
-#endif
-
 namespace openmsx {
-
-#ifdef _WIN32
-// wrapper for Windows, as the MS runtime doesn't provide setenv!?
-static int setenv(const char* name, const char* value, int overwrite)
-{
-	if (!overwrite && getenv(name)) {
-		return 0;
-	}
-	return _putenv_s(name, value);
-}
-#endif
 
 #ifdef _WIN32
 // enable console output on Windows
@@ -87,28 +62,6 @@ static void initializeSDL()
 
 static int main(int argc, char **argv)
 {
-#if LOG_TO_FILE
-	ad_printf("Redirecting stdout to %s and stderr to %s\n",
-	          STDOUT_LOG_FILE_NAME, STDERR_LOG_FILE_NAME);
-
-	if (!freopen(STDOUT_LOG_FILE_NAME, "a", stdout)) {
-		ad_printf("Couldn't redirect stdout to logfile, aborting\n");
-		std::cerr << "Couldn't redirect stdout to "
-		             STDOUT_LOG_FILE_NAME "\n";
-		return 1;
-	}
-	if (!freopen(STDERR_LOG_FILE_NAME, "a", stderr)) {
-		ad_printf("Couldn't redirect stderr to logfile, aborting\n");
-		std::cout << "Couldn't redirect stderr to "
-		             STDERR_LOG_FILE_NAME "\n";
-		return 1;
-	}
-
-	std::string msg = Date::toString(time(nullptr)) + ": starting openMSX";
-	std::cout << msg << '\n';
-	std::cerr << msg << '\n';
-#endif
-
 #ifdef _WIN32
     EnableConsoleOutput();
 #endif
@@ -128,15 +81,15 @@ static int main(int argc, char **argv)
 #endif
 		CommandLineParser parser(reactor);
 		parser.parse(args);
-		CommandLineParser::ParseStatus parseStatus = parser.getParseStatus();
+		auto parseStatus = parser.getParseStatus();
 
-		if (parseStatus != one_of(CommandLineParser::EXIT, CommandLineParser::TEST)) {
+		if (parseStatus != one_of(CommandLineParser::Status::EXIT, CommandLineParser::Status::TEST)) {
 			reactor.runStartupScripts(parser);
 
 			auto& display = reactor.getDisplay();
 			auto& render = display.getRenderSettings().getRendererSetting();
 			if ((render.getEnum() == RenderSettings::RendererID::UNINITIALIZED) &&
-			    (parseStatus != CommandLineParser::CONTROL)) {
+			    (parseStatus != CommandLineParser::Status::CONTROL)) {
 				render.setValue(render.getDefaultValue());
 				// Switching renderer requires events, handle
 				// these events before continuing with the rest
@@ -151,7 +104,7 @@ static int main(int argc, char **argv)
 			                    reactor.getEventDistributor(),
 			                    reactor.getGlobalCliComm());
 
-			if (parser.getParseStatus() == CommandLineParser::RUN) {
+			if (parser.getParseStatus() == CommandLineParser::Status::RUN) {
 				reactor.powerOn();
 			}
 			display.repaint();

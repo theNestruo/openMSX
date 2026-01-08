@@ -1,16 +1,19 @@
 #include "MSXS1985.hh"
+
 #include "MSXMapperIO.hh"
 #include "MSXMotherBoard.hh"
 #include "SRAM.hh"
+#include "serialize.hh"
+
 #include "enumerate.hh"
 #include "narrow.hh"
-#include "serialize.hh"
+
 #include <array>
 #include <memory>
 
 namespace openmsx {
 
-static constexpr byte ID = 0xFE;
+static constexpr uint8_t ID = 0xFE;
 
 MSXS1985::MSXS1985(const DeviceConfig& config)
 	: MSXDevice(config)
@@ -29,8 +32,8 @@ MSXS1985::MSXS1985(const DeviceConfig& config)
 	}
 
 	auto& mapperIO = getMotherBoard().createMapperIO();
-	byte mask = 0b0001'1111; // always(?) 5 bits
-	auto baseValue = narrow_cast<byte>(config.getChildDataAsInt("MapperReadBackBaseValue", 0x80));
+	uint8_t mask = 0b0001'1111; // always(?) 5 bits
+	auto baseValue = narrow_cast<uint8_t>(config.getChildDataAsInt("MapperReadBackBaseValue", 0x80));
 	mapperIO.setMode(MSXMapperIO::Mode::INTERNAL, mask, baseValue);
 
 	reset(EmuTime::dummy());
@@ -41,27 +44,27 @@ MSXS1985::~MSXS1985()
 	getMotherBoard().destroyMapperIO();
 }
 
-void MSXS1985::reset(EmuTime::param /*time*/)
+void MSXS1985::reset(EmuTime /*time*/)
 {
 	color1 = color2 = pattern = address = 0; // TODO check this
 }
 
-byte MSXS1985::readSwitchedIO(word port, EmuTime::param time)
+uint8_t MSXS1985::readSwitchedIO(uint16_t port, EmuTime time)
 {
-	byte result = peekSwitchedIO(port, time);
+	uint8_t result = peekSwitchedIO(port, time);
 	switch (port & 0x0F) {
 	case 7:
-		pattern = byte((pattern << 1) | (pattern >> 7));
+		pattern = uint8_t((pattern << 1) | (pattern >> 7));
 		break;
 	}
 	return result;
 }
 
-byte MSXS1985::peekSwitchedIO(word port, EmuTime::param /*time*/) const
+uint8_t MSXS1985::peekSwitchedIO(uint16_t port, EmuTime /*time*/) const
 {
 	switch (port & 0x0F) {
 	case 0:
-		return byte(~ID);
+		return uint8_t(~ID);
 	case 2:
 		return (*sram)[address];
 	case 7:
@@ -71,7 +74,7 @@ byte MSXS1985::peekSwitchedIO(word port, EmuTime::param /*time*/) const
 	}
 }
 
-void MSXS1985::writeSwitchedIO(word port, byte value, EmuTime::param /*time*/)
+void MSXS1985::writeSwitchedIO(uint16_t port, uint8_t value, EmuTime /*time*/)
 {
 	switch (port & 0x0F) {
 	case 1:
@@ -108,7 +111,7 @@ void MSXS1985::serialize(Archive& ar, unsigned version)
 		//      <ram encoding="..">...</ram>
 		//    </ram>
 		// deserialize that structure and transfer it to SRAM
-		std::array<byte, 0x10> tmp;
+		std::array<uint8_t, 0x10> tmp;
 		ar.beginTag("ram");
 		ar.serialize_blob("ram", tmp);
 		ar.endTag("ram");

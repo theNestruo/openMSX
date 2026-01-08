@@ -26,15 +26,17 @@
 */
 
 #include "YM2413NukeYKT.hh"
-#include "serialize.hh"
+
+#include "Math.hh"
 #include "cstd.hh"
 #include "enumerate.hh"
-#include "Math.hh"
 #include "narrow.hh"
 #include "one_of.hh"
 #include "ranges.hh"
+#include "serialize.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -42,11 +44,11 @@
 namespace openmsx {
 namespace YM2413NukeYKT {
 
-[[nodiscard]] constexpr bool is_rm_cycle(int cycle)
+[[nodiscard]] static constexpr bool is_rm_cycle(int cycle)
 {
 	return (11 <= cycle) && (cycle <= 16);
 }
-[[nodiscard]] constexpr YM2413::RmNum rm_for_cycle(int cycle)
+[[nodiscard]] static constexpr YM2413::RmNum rm_for_cycle(int cycle)
 {
 	return static_cast<YM2413::RmNum>(cycle - 11);
 }
@@ -117,7 +119,7 @@ YM2413::YM2413()
 	, releasePtr(/*dummy*/releaseData[0])
 {
 	// copy ROM patches to array (for faster lookup)
-	ranges::copy(m_patches, subspan(patches, 1));
+	copy_to_range(m_patches, subspan(patches, 1));
 	reset();
 }
 
@@ -133,17 +135,17 @@ void YM2413::reset()
 	attackPtr  = attack[eg_timer_shift_lock][eg_timer_lock];
 	auto idx = releaseIndex[eg_timer_shift_lock][eg_timer_lock][eg_counter_state];
 	releasePtr = releaseData[idx];
-	ranges::fill(eg_state, EgState::release);
-	ranges::fill(eg_level, 0x7f);
-	ranges::fill(eg_dokon, false);
+	std::ranges::fill(eg_state, EgState::release);
+	std::ranges::fill(eg_level, 0x7f);
+	std::ranges::fill(eg_dokon, false);
 	eg_rate[0] = eg_rate[1] = 0;
 	eg_sl[0] = eg_sl[1] = eg_out[0] = eg_out[1] = 0;
 	eg_timer_shift_stop = false;
 	eg_kon[0] = eg_kon[1] = eg_off[0] = eg_off[1] = false;
 
-	ranges::fill(pg_phase, 0);
-	ranges::fill(op_fb1, 0);
-	ranges::fill(op_fb2, 0);
+	std::ranges::fill(pg_phase, 0);
+	std::ranges::fill(op_fb1, 0);
+	std::ranges::fill(op_fb2, 0);
 
 	op_mod = 0;
 	op_phase[0] = op_phase[1] = 0;
@@ -153,11 +155,11 @@ void YM2413::reset()
 	lfo_vib = VIB_TAB[lfo_vib_counter];
 	lfo_am_step = lfo_am_dir = false;
 
-	ranges::fill(fnum, 0);
-	ranges::fill(block, 0);
-	ranges::fill(vol8, 0);
-	ranges::fill(inst, 0);
-	ranges::fill(sk_on, 0);
+	std::ranges::fill(fnum, 0);
+	std::ranges::fill(block, 0);
+	std::ranges::fill(vol8, 0);
+	std::ranges::fill(inst, 0);
+	std::ranges::fill(sk_on, 0);
 	for (auto i : xrange(9)) {
 		p_inst[i] = &patches[inst[i]];
 		changeFnumBlock(i);
@@ -171,7 +173,7 @@ void YM2413::reset()
 
 	delay6 = delay7 = delay10 = delay11 = delay12 = 0;
 
-	ranges::fill(regs, 0);
+	std::ranges::fill(regs, 0);
 	latch = 0;
 }
 
@@ -188,7 +190,7 @@ template<uint32_t CYCLES> ALWAYS_INLINE uint32_t YM2413::envelopeKSLTL(const Pat
 	constexpr uint32_t ch = CH_OFFSET[CYCLES];
 
 	auto ksl = uint32_t(p_ksl[ch]) >> patch1.ksl_t[mcsel];
-	auto tl2 = [&]() -> uint32_t {
+	auto tl2 = [&] -> uint32_t {
 		if ((rm_for_cycle(CYCLES) == one_of(RmNum::hh, RmNum::tom)) && use_rm_patches) {
 			return inst[ch] << (2 + 1);
 		} else if /*constexpr*/ (mcsel == 1) { // constexpr triggers compile error on visual studio
@@ -283,7 +285,7 @@ template<uint32_t CYCLES> ALWAYS_INLINE bool YM2413::envelopeGenerate1()
 	    = (state != attack && prev2_eg_off && !prev2_eg_dokon) ? 0x7f
 	    : ((prev2_rate >= 60) && prev2_eg_dokon)                        ? 0x00
 	                                                                    : level;
-	auto step = [&]() -> int {
+	auto step = [&] -> int {
 		switch (state) {
 		case attack:
 			if (prev2_eg_kon && (level != 0)) [[likely]] {
@@ -318,7 +320,7 @@ template<uint32_t CYCLES> ALWAYS_INLINE void YM2413::envelopeGenerate2(const Pat
 	eg_off[CYCLES & 1] = new_eg_off;
 
 	auto sk = sk_on[CH_OFFSET[CYCLES]];
-	bool new_eg_kon = [&]() {
+	bool new_eg_kon = [&] {
 		bool result = sk & 1;
 		if (is_rm_cycle(CYCLES) && use_rm_patches) {
 			switch (rm_for_cycle(CYCLES)) {
@@ -357,7 +359,7 @@ template<uint32_t CYCLES> ALWAYS_INLINE void YM2413::envelopeGenerate2(const Pat
 		eg_dokon[CYCLES] = false;
 	}
 
-	auto rate4 = [&]() {
+	auto rate4 = [&] {
 		if (!new_eg_kon && !(sk & 2) && mcsel == 1 && !patch1.et[mcsel]) {
 			return 7 * 4;
 		}
@@ -374,7 +376,7 @@ template<uint32_t CYCLES> ALWAYS_INLINE void YM2413::envelopeGenerate2(const Pat
 		   : /*(state_rate == release) ?*/ ((sk & 2) ? (5 * 4) : patch1.rr4[mcsel]);
 	}();
 
-	eg_rate[CYCLES & 1] = narrow_cast<uint8_t>([&]() {
+	eg_rate[CYCLES & 1] = narrow_cast<uint8_t>([&] {
 		if (rate4 == 0) return 0;
 		auto tmp = rate4 + (p_ksr_freq[ch] >> patch1.ksr_t[mcsel]);
 		return (tmp < 0x40) ? tmp
@@ -626,10 +628,10 @@ template<uint32_t CYCLES> ALWAYS_INLINE void YM2413::doOperator(std::span<float*
 	            : (((CYCLES + 2) / 3) & 1);
 	constexpr bool is_next_mod3 = ((CYCLES + 2) / 3) & 1; // approximate: will 'ismod3' possibly be true next step
 
-	auto output = [&]() -> int32_t {
+	auto output = [&] -> int32_t {
 		if (eg_silent) return 0;
 		auto prev2_phase = op_phase[(CYCLES - 2) & 1];
-		uint8_t quarter = narrow_cast<uint8_t>((prev2_phase & 0x100) ? ~prev2_phase : prev2_phase);
+		auto quarter = narrow_cast<uint8_t>((prev2_phase & 0x100) ? ~prev2_phase : prev2_phase);
 		auto logSin = logSinTab[quarter];
 		auto op_level = std::min(4095, logSin + (eg_out[(CYCLES - 2) & 1] << 4));
 		uint32_t op_exp_m = expTab[op_level & 0xff];
@@ -667,7 +669,7 @@ template<uint32_t CYCLES, bool TEST_MODE> ALWAYS_INLINE uint32_t YM2413::getPhas
 	}
 
 	if (rhythm & 0x20) {
-		auto rm_bit = [&]() {
+		auto rm_bit = [&] {
 			bool rm_hh_bit2 = (rm_hh_bits >> (2 - 2)) & 1;
 			bool rm_hh_bit3 = (rm_hh_bits >> (3 - 2)) & 1;
 			bool rm_hh_bit7 = (rm_hh_bits >> (7 - 2)) & 1;
@@ -677,7 +679,7 @@ template<uint32_t CYCLES, bool TEST_MODE> ALWAYS_INLINE uint32_t YM2413::getPhas
 			     | (rm_hh_bit3 ^ rm_tc_bit5)
 			     | (rm_tc_bit3 ^ rm_tc_bit5);
 		};
-		auto noise_bit = [&]() {
+		auto noise_bit = [&] {
 			// see comments in doRhythm()
 			return (rm_noise >> (TEST_MODE ? 0 : (CYCLES + 1))) & 1;
 		};
@@ -704,7 +706,7 @@ template<uint32_t CYCLES> ALWAYS_INLINE uint32_t YM2413::phaseCalcIncrement(cons
 	constexpr uint32_t mcsel = ((CYCLES + 1) / 3) & 1;
 	constexpr uint32_t ch = CH_OFFSET[CYCLES];
 
-	uint32_t incr = [&]() {
+	uint32_t incr = [&] {
 		// Apply vibrato?
 		if (patch1.vib[mcsel]) {
 			// note: _must_ be '/ 256' rather than '>> 8' because of
@@ -815,7 +817,7 @@ ALWAYS_INLINE void YM2413::step(Locals& l)
 void YM2413::generateChannels(std::span<float*, 9 + 5> out_, uint32_t n)
 {
 	std::array<float*, 9 + 5> out;
-	ranges::copy(out_, out);
+	copy_to_range(out_, out);
 
 	// Loop here (instead of in step18) seems faster. (why?)
 	if (test_mode_active) [[unlikely]] {
@@ -879,12 +881,12 @@ void YM2413::writePort(bool port, uint8_t value, int cycle_offset)
 		allowed_offset = ((port ? 84 : 12) / 4) + cycle_offset;
 	}
 
-	writes[cycle_offset] = {port, value};
+	writes[cycle_offset] = {.port = port, .value = value};
 	if (port && (write_address == 0xf)) {
 		test_mode_active = true;
 	}
 
-	// only needed for peekReg()
+	// only needed for peekRegs()
 	if (port == 0) {
 		latch = value & 63;
 	} else {
@@ -904,9 +906,9 @@ void YM2413::pokeReg(uint8_t reg, uint8_t value)
 	}
 }
 
-uint8_t YM2413::peekReg(uint8_t reg) const
+std::span<const uint8_t, 64> YM2413::peekRegs() const
 {
-	return regs[reg & 63];
+	return regs;
 }
 
 float YM2413::getAmplificationFactor() const
@@ -922,12 +924,12 @@ void YM2413::setSpeed(double speed)
 } // namespace YM2413NukeYKT
 
 
-static constexpr std::initializer_list<enum_string<YM2413NukeYKT::YM2413::EgState>> egStateInfo = {
+static constexpr auto egStateInfo = std::to_array<enum_string<YM2413NukeYKT::YM2413::EgState>>({
 	{ "attack",  YM2413NukeYKT::YM2413::EgState::attack },
 	{ "decay",   YM2413NukeYKT::YM2413::EgState::decay },
 	{ "sustain", YM2413NukeYKT::YM2413::EgState::sustain },
-	{ "release", YM2413NukeYKT::YM2413::EgState::release }
-};
+	{ "release", YM2413NukeYKT::YM2413::EgState::release },
+});
 SERIALIZE_ENUM(YM2413NukeYKT::YM2413::EgState, egStateInfo);
 
 namespace YM2413NukeYKT {

@@ -2,11 +2,13 @@
 #define FILEPOOLCORE_HH
 
 #include "FileOperations.hh"
-#include "ObjectPool.hh"
+
 #include "MemBuffer.hh"
+#include "ObjectPool.hh"
 #include "SimpleHashSet.hh"
 #include "sha1.hh"
 #include "xxhash.hh"
+
 #include <cassert>
 #include <cstdint>
 #include <ctime>
@@ -19,7 +21,7 @@ namespace openmsx {
 
 class File;
 
-enum class FileType {
+enum class FileType : uint8_t {
 	NONE = 0,
 	SYSTEM_ROM = 1, ROM = 2, DISK = 4, TAPE = 8
 };
@@ -38,10 +40,6 @@ class FilePoolCore
 {
 public:
 	struct Dir {
-		Dir() = default;
-		Dir(std::string_view p, FileType t)
-			: path(p), types(t) {} // clang-15 workaround
-
 		std::string_view path;
 		FileType types;
 	};

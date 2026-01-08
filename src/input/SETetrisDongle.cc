@@ -1,37 +1,38 @@
 #include "SETetrisDongle.hh"
+
 #include "serialize.hh"
 #include "serialize_meta.hh"
 
 namespace openmsx {
 
 // Pluggable
-std::string_view SETetrisDongle::getName() const
+zstring_view SETetrisDongle::getName() const
 {
 	return "tetris2-protection";
 }
 
-std::string_view SETetrisDongle::getDescription() const
+zstring_view SETetrisDongle::getDescription() const
 {
 	return "Tetris II Special Edition dongle";
 }
 
 void SETetrisDongle::plugHelper(
-	Connector& /*connector*/, EmuTime::param /*time*/)
+	Connector& /*connector*/, EmuTime /*time*/)
 {
 }
 
-void SETetrisDongle::unplugHelper(EmuTime::param /*time*/)
+void SETetrisDongle::unplugHelper(EmuTime /*time*/)
 {
 }
 
 
 // JoystickDevice
-uint8_t SETetrisDongle::read(EmuTime::param /*time*/)
+uint8_t SETetrisDongle::read(EmuTime /*time*/)
 {
 	return status;
 }
 
-void SETetrisDongle::write(uint8_t value, EmuTime::param /*time*/)
+void SETetrisDongle::write(uint8_t value, EmuTime /*time*/)
 {
 	// Original device used 4 NOR ports
 	// pin4 will be value of pin7

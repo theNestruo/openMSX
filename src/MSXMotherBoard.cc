@@ -11,6 +11,7 @@
 #include "EventDelay.hh"
 #include "EventDistributor.hh"
 #include "FileException.hh"
+#include "FileOperations.hh"
 #include "GlobalCliComm.hh"
 #include "GlobalSettings.hh"
 #include "HardwareConfig.hh"
@@ -28,6 +29,7 @@
 #include "MSXMixer.hh"
 #include "Observer.hh"
 #include "PanasonicMemory.hh"
+#include "Pluggable.hh"
 #include "PluggingController.hh"
 #include "Reactor.hh"
 #include "RealTime.hh"
@@ -44,18 +46,15 @@
 
 #include "ScopedAssign.hh"
 #include "one_of.hh"
-#include "ranges.hh"
 #include "stl.hh"
 #include "unreachable.hh"
-#include "view.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <functional>
 #include <iostream>
 #include <memory>
-
-using std::make_unique;
-using std::string;
+#include <ranges>
 
 namespace openmsx {
 
@@ -77,8 +76,8 @@ class ResetCmd final : public RecordedCommand
 public:
 	explicit ResetCmd(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens, TclObject& result,
-	             EmuTime::param time) override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
+	             EmuTime time) override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -88,8 +87,8 @@ class LoadMachineCmd final : public Command
 public:
 	explicit LoadMachineCmd(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens, TclObject& result) override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
-	void tabCompletion(std::vector<string>& tokens) const override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
+	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -99,7 +98,7 @@ class ListExtCmd final : public Command
 public:
 	explicit ListExtCmd(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens, TclObject& result) override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -109,9 +108,20 @@ class RemoveExtCmd final : public RecordedCommand
 public:
 	explicit RemoveExtCmd(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens, TclObject& result,
-	             EmuTime::param time) override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
-	void tabCompletion(std::vector<string>& tokens) const override;
+	             EmuTime time) override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
+	void tabCompletion(std::vector<std::string>& tokens) const override;
+private:
+	MSXMotherBoard& motherBoard;
+};
+
+class StoreSetupCmd final : public Command
+{
+public:
+	explicit StoreSetupCmd(MSXMotherBoard& motherBoard);
+	void execute(std::span<const TclObject> tokens, TclObject& result) override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
+	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -122,7 +132,7 @@ public:
 	explicit MachineNameInfo(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens,
 	             TclObject& result) const override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -133,7 +143,7 @@ public:
 	explicit MachineTypeInfo(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens,
 	             TclObject& result) const override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -144,8 +154,8 @@ public:
 	explicit MachineExtensionInfo(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens,
 	             TclObject& result) const override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
-	void tabCompletion(std::vector<string>& tokens) const override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
+	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -154,24 +164,12 @@ class MachineMediaInfo final : public InfoTopic
 {
 public:
 	explicit MachineMediaInfo(MSXMotherBoard& motherBoard);
-	~MachineMediaInfo() {
-		assert(providers.empty());
-	}
 	void execute(std::span<const TclObject> tokens,
 	             TclObject& result) const override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
-	void tabCompletion(std::vector<string>& tokens) const override;
-	void registerProvider(std::string_view name, MediaInfoProvider& provider);
-	void unregisterProvider(MediaInfoProvider& provider);
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
+	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:
-	struct ProviderInfo {
-		ProviderInfo(std::string_view n, MediaInfoProvider* p)
-			: name(n), provider(p) {} // clang-15 workaround
-		std::string_view name;
-		MediaInfoProvider* provider;
-	};
-	// There will only be a handful of providers, use an unsorted vector.
-	std::vector<ProviderInfo> providers;
+	MSXMotherBoard& motherBoard;
 };
 
 class DeviceInfo final : public InfoTopic
@@ -180,8 +178,8 @@ public:
 	explicit DeviceInfo(MSXMotherBoard& motherBoard);
 	void execute(std::span<const TclObject> tokens,
 	             TclObject& result) const override;
-	[[nodiscard]] string help(std::span<const TclObject> tokens) const override;
-	void tabCompletion(std::vector<string>& tokens) const override;
+	[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
+	void tabCompletion(std::vector<std::string>& tokens) const override;
 private:
 	MSXMotherBoard& motherBoard;
 };
@@ -190,9 +188,9 @@ class FastForwardHelper final : private Schedulable
 {
 public:
 	explicit FastForwardHelper(MSXMotherBoard& motherBoard);
-	void setTarget(EmuTime::param targetTime);
+	void setTarget(EmuTime targetTime);
 private:
-	void executeUntil(EmuTime::param time) override;
+	void executeUntil(EmuTime time) override;
 	MSXMotherBoard& motherBoard;
 };
 
@@ -200,8 +198,8 @@ class JoyPortDebuggable final : public SimpleDebuggable
 {
 public:
 	explicit JoyPortDebuggable(MSXMotherBoard& motherBoard);
-	[[nodiscard]] byte read(unsigned address, EmuTime::param time) override;
-	void write(unsigned address, byte value) override;
+	[[nodiscard]] uint8_t read(unsigned address, EmuTime time) override;
+	void write(unsigned address, uint8_t value) override;
 };
 
 class SettingObserver final : public Observer<Setting>
@@ -219,14 +217,14 @@ static unsigned machineIDCounter = 0;
 MSXMotherBoard::MSXMotherBoard(Reactor& reactor_)
 	: reactor(reactor_)
 	, machineID(strCat("machine", ++machineIDCounter))
-	, msxCliComm(make_unique<MSXCliComm>(*this, reactor.getGlobalCliComm()))
-	, msxEventDistributor(make_unique<MSXEventDistributor>())
-	, stateChangeDistributor(make_unique<StateChangeDistributor>())
-	, msxCommandController(make_unique<MSXCommandController>(
+	, msxCliComm(std::make_unique<MSXCliComm>(*this, reactor.getGlobalCliComm()))
+	, msxEventDistributor(std::make_unique<MSXEventDistributor>())
+	, stateChangeDistributor(std::make_unique<StateChangeDistributor>())
+	, msxCommandController(std::make_unique<MSXCommandController>(
 		reactor.getGlobalCommandController(), reactor,
 		*this, *msxEventDistributor, machineID))
-	, scheduler(make_unique<Scheduler>())
-	, msxMixer(make_unique<MSXMixer>(
+	, scheduler(std::make_unique<Scheduler>())
+	, msxMixer(std::make_unique<MSXMixer>(
 		reactor.getMixer(), *this,
 		reactor.getGlobalSettings()))
 	, videoSourceSetting(*msxCommandController)
@@ -236,37 +234,38 @@ MSXMotherBoard::MSXMotherBoard(Reactor& reactor_)
 		"of which you don't want to see warning messages about blank "
 		"SRAM content or PSG port directions for instance.",
 		false, Setting::Save::NO)
-	, fastForwardHelper(make_unique<FastForwardHelper>(*this))
-	, settingObserver(make_unique<SettingObserver>(*this))
+	, fastForwardHelper(std::make_unique<FastForwardHelper>(*this))
+	, settingObserver(std::make_unique<SettingObserver>(*this))
 	, powerSetting(reactor.getGlobalSettings().getPowerSetting())
 {
-	slotManager = make_unique<CartridgeSlotManager>(*this);
-	reverseManager = make_unique<ReverseManager>(*this);
-	resetCommand = make_unique<ResetCmd>(*this);
-	loadMachineCommand = make_unique<LoadMachineCmd>(*this);
-	listExtCommand = make_unique<ListExtCmd>(*this);
-	extCommand = make_unique<ExtCmd>(*this, "ext");
-	removeExtCommand = make_unique<RemoveExtCmd>(*this);
-	machineNameInfo = make_unique<MachineNameInfo>(*this);
-	machineTypeInfo = make_unique<MachineTypeInfo>(*this);
-	machineExtensionInfo = make_unique<MachineExtensionInfo>(*this);
-	machineMediaInfo = make_unique<MachineMediaInfo>(*this);
-	deviceInfo = make_unique<DeviceInfo>(*this);
-	debugger = make_unique<Debugger>(*this);
+	slotManager = std::make_unique<CartridgeSlotManager>(*this);
+	reverseManager = std::make_unique<ReverseManager>(*this);
+	resetCommand = std::make_unique<ResetCmd>(*this);
+	loadMachineCommand = std::make_unique<LoadMachineCmd>(*this);
+	listExtCommand = std::make_unique<ListExtCmd>(*this);
+	extCommand = std::make_unique<ExtCmd>(*this, "ext");
+	removeExtCommand = std::make_unique<RemoveExtCmd>(*this);
+	storeSetupCommand = std::make_unique<StoreSetupCmd>(*this);
+	machineNameInfo = std::make_unique<MachineNameInfo>(*this);
+	machineTypeInfo = std::make_unique<MachineTypeInfo>(*this);
+	machineExtensionInfo = std::make_unique<MachineExtensionInfo>(*this);
+	machineMediaInfo = std::make_unique<MachineMediaInfo>(*this);
+	deviceInfo = std::make_unique<DeviceInfo>(*this);
+	debugger = std::make_unique<Debugger>(*this);
 
 	// Do this before machine-specific settings are created, otherwise
 	// a setting-info CliComm message is send with a machine id that hasn't
 	// been announced yet over CliComm.
-	addRemoveUpdate = make_unique<AddRemoveUpdate>(*this);
+	addRemoveUpdate = std::make_unique<AddRemoveUpdate>(*this);
 
 	// TODO: Initialization of this field cannot be done much earlier because
 	//       EventDelay creates a setting, calling getMSXCliComm()
 	//       on MSXMotherBoard, so "pimpl" has to be set up already.
-	eventDelay = make_unique<EventDelay>(
+	eventDelay = std::make_unique<EventDelay>(
 		*scheduler, *msxCommandController,
 		reactor.getEventDistributor(), *msxEventDistributor,
 		*reverseManager);
-	realTime = make_unique<RealTime>(
+	realTime = std::make_unique<RealTime>(
 		*this, reactor.getGlobalSettings(), *eventDelay);
 
 	powerSetting.attach(*settingObserver);
@@ -310,8 +309,8 @@ void MSXMotherBoard::setMachineConfig(HardwareConfig* machineConfig_)
 
 	// make sure the CPU gets instantiated from the main thread
 	assert(!msxCpu);
-	msxCpu = make_unique<MSXCPU>(*this);
-	msxCpuInterface = make_unique<MSXCPUInterface>(*this);
+	msxCpu = std::make_unique<MSXCPU>(*this);
+	msxCpuInterface = std::make_unique<MSXCPUInterface>(*this);
 }
 
 std::string_view MSXMotherBoard::getMachineType() const
@@ -344,7 +343,7 @@ bool MSXMotherBoard::hasToshibaEngine() const
 		   devices.findChild("T9769") != nullptr;
 }
 
-string MSXMotherBoard::loadMachine(const string& machine)
+std::string MSXMotherBoard::loadMachine(const std::string& machine)
 {
 	assert(machineName.empty());
 	assert(extensions.empty());
@@ -375,11 +374,82 @@ string MSXMotherBoard::loadMachine(const string& machine)
 	return machineName;
 }
 
+void MSXMotherBoard::storeAsSetup(const std::string& filename, SetupDepth depth)
+{
+	// level 0: don't do anything. Added as convenience.
+	if (depth == SetupDepth::NONE) return;
+
+	XmlOutputArchive out(filename);
+
+	if (depth == SetupDepth::COMPLETE_STATE) {
+		// level 5: just save state to given file
+		out.serialize("machine", this);
+		out.close();
+		return;
+	}
+
+	// level 1: create new board based on current board of this machine
+	auto newBoard = reactor.createEmptyMotherBoard();
+	newBoard->loadMachine(machineName);
+	auto newTime = newBoard->getCurrentTime();
+
+	if (depth >= SetupDepth::EXTENSIONS) {
+		// level 2: add the extensions of the current board to the new board
+
+		// suppress any messages from this temporary board
+		newBoard->getMSXCliComm().setSuppressMessages(true);
+
+		for (auto& extension: extensions) {
+			if (extension->getType() == HardwareConfig::Type::EXTENSION) {
+				const auto& configName = extension->getConfigName();
+				auto slot = slotManager->findSlotWith(*extension);
+				const std::string slotSpec = slot ? std::string(1, char('a' + *slot)) : "any";
+				// TODO: a bit weird that we need to convert the slot
+				// spec into a string and then parse it again deep down
+				// in loadExtension...
+				auto extConfig = newBoard->loadExtension(configName, slotSpec);
+				newBoard->insertExtension(configName, std::move(extConfig));
+			}
+		}
+	}
+
+	if (depth >= SetupDepth::CONNECTORS) {
+		// level 3: add the connectors/pluggables of the current board to the new board
+		auto& newBoardPluggingController = newBoard->getPluggingController();
+		for (const auto* connector: getPluggingController().getConnectors()) {
+			const auto& plugged = connector->getPlugged();
+			const auto& pluggedName = plugged.getName();
+			if (!pluggedName.empty()) {
+				const auto& connectorName = connector->getName();
+				if (auto* newBoardConnector = newBoardPluggingController.findConnector(connectorName)) {
+					if (auto* newBoardPluggable = newBoardPluggingController.findPluggable(pluggedName)) {
+						newBoardConnector->plug(*newBoardPluggable, newTime);
+					}
+				}
+			}
+		}
+	}
+
+	if (depth >= SetupDepth::MEDIA) {
+		// level 4: add the inserted media of the current board to the new board
+		for (const auto& oldMedia : getMediaProviders()) {
+			if (auto* newMediaProvider = newBoard->findMediaProvider(oldMedia.name)) {
+				TclObject info;
+				oldMedia.provider->getMediaInfo(info);
+				newMediaProvider->setMedia(info, newTime);
+			}
+		}
+	}
+
+	out.serialize("machine", newBoard);
+	out.close();
+}
+
 std::unique_ptr<HardwareConfig> MSXMotherBoard::loadExtension(std::string_view name, std::string_view slotName)
 {
 	try {
 		return HardwareConfig::createExtensionConfig(
-			*this, string(name), slotName);
+			*this, std::string(name), slotName);
 	} catch (FileException& e) {
 		throw MSXException(
 			"Extension \"", name, "\" not found: ", e.getMessage());
@@ -389,7 +459,7 @@ std::unique_ptr<HardwareConfig> MSXMotherBoard::loadExtension(std::string_view n
 	}
 }
 
-string MSXMotherBoard::insertExtension(
+std::string MSXMotherBoard::insertExtension(
 	std::string_view name, std::unique_ptr<HardwareConfig> extension)
 {
 	try {
@@ -399,7 +469,7 @@ string MSXMotherBoard::insertExtension(
 		throw MSXException(
 			"Error in \"", name, "\" extension: ", e.getMessage());
 	}
-	string result = extension->getName();
+	std::string result = extension->getName();
 	extensions.push_back(std::move(extension));
 	getMSXCliComm().update(CliComm::UpdateType::EXTENSION, result, "add");
 	return result;
@@ -407,7 +477,7 @@ string MSXMotherBoard::insertExtension(
 
 HardwareConfig* MSXMotherBoard::findExtension(std::string_view extensionName)
 {
-	auto it = ranges::find(extensions, extensionName, &HardwareConfig::getName);
+	auto it = std::ranges::find(extensions, extensionName, &HardwareConfig::getName);
 	return (it != end(extensions)) ? it->get() : nullptr;
 }
 
@@ -429,7 +499,7 @@ PluggingController& MSXMotherBoard::getPluggingController()
 {
 	assert(getMachineConfig()); // needed for PluggableFactory::createAll()
 	if (!pluggingController) {
-		pluggingController = make_unique<PluggingController>(*this);
+		pluggingController = std::make_unique<PluggingController>(*this);
 	}
 	return *pluggingController;
 }
@@ -450,7 +520,7 @@ MSXCPUInterface& MSXMotherBoard::getCPUInterface()
 PanasonicMemory& MSXMotherBoard::getPanasonicMemory()
 {
 	if (!panasonicMemory) {
-		panasonicMemory = make_unique<PanasonicMemory>(*this);
+		panasonicMemory = std::make_unique<PanasonicMemory>(*this);
 	}
 	return *panasonicMemory;
 }
@@ -468,9 +538,9 @@ CassettePortInterface& MSXMotherBoard::getCassettePort()
 	if (!cassettePort) {
 		assert(getMachineConfig());
 		if (getMachineConfig()->getConfig().findChild("CassettePort")) {
-			cassettePort = make_unique<CassettePort>(*getMachineConfig());
+			cassettePort = std::make_unique<CassettePort>(*getMachineConfig());
 		} else {
-			cassettePort = make_unique<DummyCassettePort>();
+			cassettePort = std::make_unique<DummyCassettePort>(*this);
 		}
 	}
 	return *cassettePort;
@@ -491,18 +561,18 @@ JoystickPortIf& MSXMotherBoard::getJoystickPort(unsigned port)
 		}
 		PluggingController& ctrl = getPluggingController();
 		if (ports == one_of("AB", "A")) {
-			joystickPort[0] = make_unique<JoystickPort>(
+			joystickPort[0] = std::make_unique<JoystickPort>(
 				ctrl, "joyporta", "MSX Joystick port A");
 		} else {
-			joystickPort[0] = make_unique<DummyJoystickPort>();
+			joystickPort[0] = std::make_unique<DummyJoystickPort>();
 		}
 		if (ports == one_of("AB", "B")) {
-			joystickPort[1] = make_unique<JoystickPort>(
+			joystickPort[1] = std::make_unique<JoystickPort>(
 				ctrl, "joyportb", "MSX Joystick port B");
 		} else {
-			joystickPort[1] = make_unique<DummyJoystickPort>();
+			joystickPort[1] = std::make_unique<DummyJoystickPort>();
 		}
-		joyPortDebuggable = make_unique<JoyPortDebuggable>(*this);
+		joyPortDebuggable = std::make_unique<JoyPortDebuggable>(*this);
 	}
 	return *joystickPort[port];
 }
@@ -511,7 +581,7 @@ RenShaTurbo& MSXMotherBoard::getRenShaTurbo()
 {
 	if (!renShaTurbo) {
 		assert(getMachineConfig());
-		renShaTurbo = make_unique<RenShaTurbo>(
+		renShaTurbo = std::make_unique<RenShaTurbo>(
 			*this,
 			getMachineConfig()->getConfig());
 	}
@@ -522,7 +592,7 @@ LedStatus& MSXMotherBoard::getLedStatus()
 {
 	if (!ledStatus) {
 		(void)getMSXCliComm(); // force init, to be on the safe side
-		ledStatus = make_unique<LedStatus>(
+		ledStatus = std::make_unique<LedStatus>(
 			reactor.getRTScheduler(),
 			*msxCommandController,
 			*msxCliComm);
@@ -540,7 +610,7 @@ InfoCommand& MSXMotherBoard::getMachineInfoCommand()
 	return msxCommandController->getMachineInfoCommand();
 }
 
-EmuTime::param MSXMotherBoard::getCurrentTime() const
+EmuTime MSXMotherBoard::getCurrentTime() const
 {
 	return scheduler->getCurrentTime();
 }
@@ -556,7 +626,7 @@ bool MSXMotherBoard::execute()
 	return true;
 }
 
-void MSXMotherBoard::fastForward(EmuTime::param time, bool fast)
+void MSXMotherBoard::fastForward(EmuTime time, bool fast)
 {
 	assert(powered);
 	assert(getMachineConfig());
@@ -606,7 +676,7 @@ void MSXMotherBoard::doReset()
 	if (!powered) return;
 	assert(getMachineConfig());
 
-	EmuTime::param time = getCurrentTime();
+	EmuTime time = getCurrentTime();
 	getCPUInterface().reset();
 	for (auto& d : availableDevices) {
 		d->reset(time);
@@ -617,9 +687,9 @@ void MSXMotherBoard::doReset()
 	reactor.getEventDistributor().distributeEvent(BootEvent());
 }
 
-byte MSXMotherBoard::readIRQVector() const
+uint8_t MSXMotherBoard::readIRQVector() const
 {
-	byte result = 0xff;
+	uint8_t result = 0xff;
 	for (auto& d : availableDevices) {
 		result &= d->readIRQVector();
 	}
@@ -642,7 +712,7 @@ void MSXMotherBoard::powerUp()
 	//       it separately here.
 	getLedStatus().setLed(LedStatus::POWER, true);
 
-	EmuTime::param time = getCurrentTime();
+	EmuTime time = getCurrentTime();
 	getCPUInterface().reset();
 	for (auto& d : availableDevices) {
 		d->powerUp(time);
@@ -668,7 +738,7 @@ void MSXMotherBoard::powerDown()
 
 	msxMixer->mute();
 
-	EmuTime::param time = getCurrentTime();
+	EmuTime time = getCurrentTime();
 	for (auto& d : availableDevices) {
 		d->powerDown(time);
 	}
@@ -699,7 +769,7 @@ void MSXMotherBoard::exitCPULoopSync()
 
 MSXDevice* MSXMotherBoard::findDevice(std::string_view name)
 {
-	auto it = ranges::find(availableDevices, name, &MSXDevice::getName);
+	auto it = std::ranges::find(availableDevices, name, &MSXDevice::getName);
 	return (it != end(availableDevices)) ? *it : nullptr;
 }
 
@@ -707,12 +777,7 @@ MSXMapperIO& MSXMotherBoard::createMapperIO()
 {
 	if (mapperIOCounter == 0) {
 		mapperIO = DeviceFactory::createMapperIO(*getMachineConfig());
-
-		MSXCPUInterface& cpuInterface = getCPUInterface();
-		for (auto port : {0xfc, 0xfd, 0xfe, 0xff}) {
-			cpuInterface.register_IO_Out(narrow_cast<byte>(port), mapperIO.get());
-			cpuInterface.register_IO_In (narrow_cast<byte>(port), mapperIO.get());
-		}
+		getCPUInterface().register_IO_InOut_range(0xfc, 4, mapperIO.get());
 	}
 	++mapperIOCounter;
 	return *mapperIO;
@@ -724,21 +789,16 @@ void MSXMotherBoard::destroyMapperIO()
 	assert(mapperIOCounter);
 	--mapperIOCounter;
 	if (mapperIOCounter == 0) {
-		MSXCPUInterface& cpuInterface = getCPUInterface();
-		for (auto port : {0xfc, 0xfd, 0xfe, 0xff}) {
-			cpuInterface.unregister_IO_Out(narrow_cast<byte>(port), mapperIO.get());
-			cpuInterface.unregister_IO_In (narrow_cast<byte>(port), mapperIO.get());
-		}
-
+		getCPUInterface().unregister_IO_InOut_range(0xfc, 4, mapperIO.get());
 		mapperIO.reset();
 	}
 }
 
-string MSXMotherBoard::getUserName(const string& hwName)
+std::string MSXMotherBoard::getUserName(const std::string& hwName)
 {
 	auto& s = userNames[hwName];
 	unsigned n = 0;
-	string userName;
+	std::string userName;
 	do {
 		userName = strCat("untitled", ++n);
 	} while (contains(s, userName));
@@ -746,20 +806,29 @@ string MSXMotherBoard::getUserName(const string& hwName)
 	return userName;
 }
 
-void MSXMotherBoard::freeUserName(const string& hwName, const string& userName)
+void MSXMotherBoard::freeUserName(const std::string& hwName, const std::string& userName)
 {
 	auto& s = userNames[hwName];
 	move_pop_back(s, rfind_unguarded(s, userName));
 }
 
-void MSXMotherBoard::registerMediaInfo(std::string_view name, MediaInfoProvider& provider)
+void MSXMotherBoard::registerMediaProvider(std::string_view name, MediaProvider& provider)
 {
-	machineMediaInfo->registerProvider(name, provider);
+	assert(!contains(mediaProviders, name, &MediaProviderInfo::name));
+	assert(!contains(mediaProviders, &provider, &MediaProviderInfo::provider));
+	mediaProviders.emplace_back(name, &provider);
 }
 
-void MSXMotherBoard::unregisterMediaInfo(MediaInfoProvider& provider)
+void MSXMotherBoard::unregisterMediaProvider(MediaProvider& provider)
 {
-	machineMediaInfo->unregisterProvider(provider);
+	move_pop_back(mediaProviders,
+	              rfind_unguarded(mediaProviders, &provider, &MediaProviderInfo::provider));
+}
+
+MediaProvider* MSXMotherBoard::findMediaProvider(std::string_view name) const
+{
+	auto it = std::ranges::find(mediaProviders, name, &MediaProviderInfo::name);
+	return (it != mediaProviders.end()) ? it->provider : nullptr;
 }
 
 
@@ -790,12 +859,12 @@ ResetCmd::ResetCmd(MSXMotherBoard& motherBoard_)
 }
 
 void ResetCmd::execute(std::span<const TclObject> /*tokens*/, TclObject& /*result*/,
-                       EmuTime::param /*time*/)
+                       EmuTime /*time*/)
 {
 	motherBoard.doReset();
 }
 
-string ResetCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string ResetCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Resets the MSX.";
 }
@@ -839,15 +908,15 @@ void LoadMachineCmd::execute(std::span<const TclObject> tokens, TclObject& resul
 	if (motherBoard.getMachineConfig()) {
 		throw CommandException("Already loaded a config in this machine.");
 	}
-	result = motherBoard.loadMachine(string(tokens[1].getString()));
+	result = motherBoard.loadMachine(std::string(tokens[1].getString()));
 }
 
-string LoadMachineCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string LoadMachineCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Load a msx machine configuration into an empty machine.";
 }
 
-void LoadMachineCmd::tabCompletion(std::vector<string>& tokens) const
+void LoadMachineCmd::tabCompletion(std::vector<std::string>& tokens) const
 {
 	completeString(tokens, Reactor::getHwConfigs("machines"));
 }
@@ -863,10 +932,10 @@ ListExtCmd::ListExtCmd(MSXMotherBoard& motherBoard_)
 void ListExtCmd::execute(std::span<const TclObject> /*tokens*/, TclObject& result)
 {
 	result.addListElements(
-		view::transform(motherBoard.getExtensions(), &HardwareConfig::getName));
+		std::views::transform(motherBoard.getExtensions(), &HardwareConfig::getName));
 }
 
-string ListExtCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string ListExtCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Return a list of all inserted extensions.";
 }
@@ -884,7 +953,7 @@ ExtCmd::ExtCmd(MSXMotherBoard& motherBoard_, std::string commandName_)
 }
 
 void ExtCmd::execute(std::span<const TclObject> tokens, TclObject& result,
-                     EmuTime::param /*time*/)
+                     EmuTime /*time*/)
 {
 	checkNumArgs(tokens, Between{2, 3}, "extension");
 	if (tokens.size() == 3 && tokens[1].getString() != "insert") {
@@ -909,12 +978,12 @@ void ExtCmd::execute(std::span<const TclObject> tokens, TclObject& result,
 	}
 }
 
-string ExtCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string ExtCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Insert a hardware extension.";
 }
 
-void ExtCmd::tabCompletion(std::vector<string>& tokens) const
+void ExtCmd::tabCompletion(std::vector<std::string>& tokens) const
 {
 	completeString(tokens, Reactor::getHwConfigs("extensions"));
 }
@@ -931,7 +1000,7 @@ RemoveExtCmd::RemoveExtCmd(MSXMotherBoard& motherBoard_)
 }
 
 void RemoveExtCmd::execute(std::span<const TclObject> tokens, TclObject& /*result*/,
-                           EmuTime::param /*time*/)
+                           EmuTime /*time*/)
 {
 	checkNumArgs(tokens, 2, "extension");
 	std::string_view extName = tokens[1].getString();
@@ -947,17 +1016,75 @@ void RemoveExtCmd::execute(std::span<const TclObject> tokens, TclObject& /*resul
 	}
 }
 
-string RemoveExtCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string RemoveExtCmd::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Remove an extension from the MSX machine.";
 }
 
-void RemoveExtCmd::tabCompletion(std::vector<string>& tokens) const
+void RemoveExtCmd::tabCompletion(std::vector<std::string>& tokens) const
 {
 	if (tokens.size() == 2) {
-		completeString(tokens, view::transform(
+		completeString(tokens, std::views::transform(
 			motherBoard.getExtensions(),
 			[](auto& e) -> std::string_view { return e->getName(); }));
+	}
+}
+
+// StoreSetupCmd
+
+static const std::map<std::string_view, SetupDepth, std::less<>> depthOptionMap = {
+	{"none"          , SetupDepth::NONE          },
+	{"machine"       , SetupDepth::MACHINE       },
+	{"extensions"    , SetupDepth::EXTENSIONS    },
+	{"connectors"    , SetupDepth::CONNECTORS    },
+	{"media"         , SetupDepth::MEDIA         },
+	{"complete_state", SetupDepth::COMPLETE_STATE},
+};
+
+StoreSetupCmd::StoreSetupCmd(MSXMotherBoard& motherBoard_)
+	: Command(motherBoard_.getCommandController(), "store_setup")
+	, motherBoard(motherBoard_)
+{
+}
+
+void StoreSetupCmd::execute(std::span<const TclObject> tokens, TclObject& result)
+{
+	checkNumArgs(tokens, Between{2, 3}, Prefix{1}, "depth ?filename?");
+
+	auto depthArg = tokens[1].getString();
+	const auto* depth = lookup(depthOptionMap, depthArg);
+	if (!depth) {
+		throw CommandException("Unknown depth argument: ", depthArg);
+	}
+
+	if (*depth == SetupDepth::NONE) return;
+
+	std::string_view filenameArg;
+	if (tokens.size() == 3) {
+		filenameArg = tokens[2].getString();
+	}
+
+	auto filename = FileOperations::parseCommandFileArgument(
+		filenameArg, Reactor::SETUP_DIR, motherBoard.getMachineName(), Reactor::SETUP_EXTENSION);
+
+	// TODO: make parts of levels to be saved configurable?
+	motherBoard.storeAsSetup(filename, *depth);
+
+	result = filename;
+}
+
+std::string StoreSetupCmd::help(std::span<const TclObject> /*tokens*/) const
+{
+	return
+		"store_setup <depth> [filename]  Save setup based on this machine with given depth to indicated file.";
+}
+
+void StoreSetupCmd::tabCompletion(std::vector<std::string>& tokens) const
+{
+	if (tokens.size() == 2) {
+		completeString(tokens, std::views::keys(depthOptionMap));
+	} else if (tokens.size() == 3) {
+		completeString(tokens, Reactor::getSetups());
 	}
 }
 
@@ -976,7 +1103,7 @@ void MachineNameInfo::execute(std::span<const TclObject> /*tokens*/,
 	result = motherBoard.getMachineName();
 }
 
-string MachineNameInfo::help(std::span<const TclObject> /*tokens*/) const
+std::string MachineNameInfo::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Returns the configuration name for this machine.";
 }
@@ -995,7 +1122,7 @@ void MachineTypeInfo::execute(std::span<const TclObject> /*tokens*/,
 	result = motherBoard.getMachineType();
 }
 
-string MachineTypeInfo::help(std::span<const TclObject> /*tokens*/) const
+std::string MachineTypeInfo::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Returns the machine type for this machine.";
 }
@@ -1015,7 +1142,7 @@ void MachineExtensionInfo::execute(std::span<const TclObject> tokens,
 	checkNumArgs(tokens, Between{2, 3}, Prefix{2}, "?extension-instance-name?");
 	if (tokens.size() == 2) {
 		result.addListElements(
-			view::transform(motherBoard.getExtensions(), &HardwareConfig::getName));
+			std::views::transform(motherBoard.getExtensions(), &HardwareConfig::getName));
 	} else if (tokens.size() == 3) {
 		std::string_view extName = tokens[2].getString();
 		const HardwareConfig* extension = motherBoard.findExtension(extName);
@@ -1035,20 +1162,20 @@ void MachineExtensionInfo::execute(std::span<const TclObject> tokens,
 		}
 		TclObject deviceList;
 		deviceList.addListElements(
-			view::transform(extension->getDevices(), &MSXDevice::getName));
+			std::views::transform(extension->getDevices(), &MSXDevice::getName));
 		result.addDictKeyValue("devices", deviceList);
 	}
 }
 
-string MachineExtensionInfo::help(std::span<const TclObject> /*tokens*/) const
+std::string MachineExtensionInfo::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Returns information about the given extension instance.";
 }
 
-void MachineExtensionInfo::tabCompletion(std::vector<string>& tokens) const
+void MachineExtensionInfo::tabCompletion(std::vector<std::string>& tokens) const
 {
 	if (tokens.size() == 3) {
-		completeString(tokens, view::transform(
+		completeString(tokens, std::views::transform(
 			motherBoard.getExtensions(),
 			[](auto& e) -> std::string_view { return e->getName(); }));
 	}
@@ -1059,6 +1186,7 @@ void MachineExtensionInfo::tabCompletion(std::vector<string>& tokens) const
 
 MachineMediaInfo::MachineMediaInfo(MSXMotherBoard& motherBoard_)
 	: InfoTopic(motherBoard_.getMachineInfoCommand(), "media")
+	, motherBoard(motherBoard_)
 {
 }
 
@@ -1066,12 +1194,13 @@ void MachineMediaInfo::execute(std::span<const TclObject> tokens,
                               TclObject& result) const
 {
 	checkNumArgs(tokens, Between{2, 3}, Prefix{2}, "?media-slot-name?");
+	const auto& providers = motherBoard.getMediaProviders();
 	if (tokens.size() == 2) {
 		result.addListElements(
-			view::transform(providers, &ProviderInfo::name));
+			std::views::transform(providers, &MediaProviderInfo::name));
 	} else if (tokens.size() == 3) {
 		auto name = tokens[2].getString();
-		if (auto it = ranges::find(providers, name, &ProviderInfo::name);
+		if (auto it = std::ranges::find(providers, name, &MediaProviderInfo::name);
 		    it != providers.end()) {
 			it->provider->getMediaInfo(result);
 		} else {
@@ -1080,30 +1209,17 @@ void MachineMediaInfo::execute(std::span<const TclObject> tokens,
 	}
 }
 
-string MachineMediaInfo::help(std::span<const TclObject> /*tokens*/) const
+std::string MachineMediaInfo::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Returns information about the given media slot.";
 }
 
-void MachineMediaInfo::tabCompletion(std::vector<string>& tokens) const
+void MachineMediaInfo::tabCompletion(std::vector<std::string>& tokens) const
 {
 	if (tokens.size() == 3) {
-		completeString(tokens, view::transform(
-			providers, &ProviderInfo::name));
+		completeString(tokens, std::views::transform(
+			motherBoard.getMediaProviders(), &MediaProviderInfo::name));
 	}
-}
-
-void MachineMediaInfo::registerProvider(std::string_view name, MediaInfoProvider& provider)
-{
-	assert(!contains(providers, name, &ProviderInfo::name));
-	assert(!contains(providers, &provider, &ProviderInfo::provider));
-	providers.emplace_back(name, &provider);
-}
-
-void MachineMediaInfo::unregisterProvider(MediaInfoProvider& provider)
-{
-	move_pop_back(providers,
-	              rfind_unguarded(providers, &provider, &ProviderInfo::provider));
 }
 
 // DeviceInfo
@@ -1120,7 +1236,7 @@ void DeviceInfo::execute(std::span<const TclObject> tokens, TclObject& result) c
 	switch (tokens.size()) {
 	case 2:
 		result.addListElements(
-			view::transform(motherBoard.availableDevices,
+			std::views::transform(motherBoard.availableDevices,
 			                [](auto& d) { return d->getName(); }));
 		break;
 	case 3: {
@@ -1135,17 +1251,17 @@ void DeviceInfo::execute(std::span<const TclObject> tokens, TclObject& result) c
 	}
 }
 
-string DeviceInfo::help(std::span<const TclObject> /*tokens*/) const
+std::string DeviceInfo::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Without any arguments, returns the list of used device names.\n"
 	       "With a device name as argument, returns the type (and for some "
 	       "devices the subtype) of the given device.";
 }
 
-void DeviceInfo::tabCompletion(std::vector<string>& tokens) const
+void DeviceInfo::tabCompletion(std::vector<std::string>& tokens) const
 {
 	if (tokens.size() == 3) {
-		completeString(tokens, view::transform(
+		completeString(tokens, std::views::transform(
 			motherBoard.availableDevices,
 			[](auto& d) -> std::string_view { return d->getName(); }));
 	}
@@ -1160,12 +1276,12 @@ FastForwardHelper::FastForwardHelper(MSXMotherBoard& motherBoard_)
 {
 }
 
-void FastForwardHelper::setTarget(EmuTime::param targetTime)
+void FastForwardHelper::setTarget(EmuTime targetTime)
 {
 	setSyncPoint(targetTime);
 }
 
-void FastForwardHelper::executeUntil(EmuTime::param /*time*/)
+void FastForwardHelper::executeUntil(EmuTime /*time*/)
 {
 	motherBoard.exitCPULoopSync();
 }
@@ -1178,12 +1294,12 @@ JoyPortDebuggable::JoyPortDebuggable(MSXMotherBoard& motherBoard_)
 {
 }
 
-byte JoyPortDebuggable::read(unsigned address, EmuTime::param time)
+uint8_t JoyPortDebuggable::read(unsigned address, EmuTime time)
 {
 	return getMotherBoard().getJoystickPort(address).read(time);
 }
 
-void JoyPortDebuggable::write(unsigned /*address*/, byte /*value*/)
+void JoyPortDebuggable::write(unsigned /*address*/, uint8_t /*value*/)
 {
 	// ignore
 }

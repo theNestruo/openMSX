@@ -3,17 +3,23 @@
 
 #include "serialize_meta.hh"
 
+#include "BitField.hh"
+#include "EmuDuration.hh"
+#include "EmuTime.hh"
+#include "Schedulable.hh"
 #include "cstd.hh"
 #include "narrow.hh"
+#include "outer.hh"
 #include "power_of_two.hh"
-#include "ranges.hh"
 #include "static_vector.hh"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace openmsx {
@@ -30,6 +36,7 @@ public:
 	enum class ManufacturerID : uint8_t {
 		AMD = 0x01,
 		STM = 0x20,
+		SST = 0xBF,
 	};
 
 	struct AutoSelect {
@@ -42,9 +49,9 @@ public:
 
 		constexpr void validate() const {
 			// check parity
-			assert(std::popcount(to_underlying(manufacturer)) & 1);
+			assert(std::popcount(std::to_underlying(manufacturer)) & 1);
 			// extended marker is not part of ID
-			assert(device.size() > 0 && device[0] != 0x7E);
+			assert(!device.empty() && device[0] != 0x7E);
 		}
 	};
 
@@ -76,21 +83,41 @@ public:
 		size_t sectorCount;
 
 		constexpr void validate() const {
-			assert(ranges::all_of(regions, [](const auto& region) { return region.count > 0; }));
+			assert(std::ranges::all_of(regions, [](const auto& region) { return region.count > 0; }));
 			assert(narrow_cast<unsigned>(cstd::abs(writeProtectPinRange)) <= sectorCount);
 		}
 	};
 
-	struct Program {
-		bool fastCommand : 1 = false;
-		bool bufferCommand : 1 = false;
-		bool shortAbortReset : 1 = false;
-		power_of_two<size_t> pageSize = 1;
+	struct Erase {
+		bool suspend : 1 = false;                             // erase suspend support
+		EmuDuration duration = EmuDuration::zero();           // per 64K sector
+		EmuDuration timerDuration = EmuDuration::usec(50);    // to accept additional sector erase commands
+		EmuDuration minimumDuration = EmuDuration::usec(100); // when all sectors protected
+		EmuDuration suspendDuration = EmuDuration::zero();    // time to suspend (max)
 
 		constexpr void validate() const {
-			assert(!fastCommand || pageSize > 1);
-			assert(!bufferCommand || pageSize > 1);
-			assert(!bufferCommand || AmdFlash::MAX_CMD_SIZE >= pageSize + 5);
+			assert(duration > EmuDuration::zero());
+			assert(!suspend || suspendDuration > EmuDuration::zero());
+		}
+	};
+
+	struct Program {
+		bool shortAbortReset : 1 = false; // permit short program abort reset command
+		bool bitRaiseError   : 1 = true;  // raising bit from 0 to 1 causes DQ5 error
+		bool suspend         : 1 = false; // program suspend support
+		bool enhancedSuspend : 1 = false; // enhanced program suspend / resume commands
+		power_of_two<size_t> fastPageSize = 1;   // >1 enables fast program commands
+		power_of_two<size_t> bufferPageSize = 1; // >1 enables buffer program command
+		EmuDuration duration = EmuDuration::zero();           // per command (incl. fast program)
+		EmuDuration additionalDuration = EmuDuration::zero(); // additional time per additional byte
+		EmuDuration suspendDuration = EmuDuration::zero();    // time to suspend
+
+		constexpr void validate() const {
+			assert(fastPageSize <= bufferPageSize);
+			assert(duration > EmuDuration::zero());
+			assert(bufferPageSize == 1 || additionalDuration > EmuDuration::zero());
+			assert(!enhancedSuspend || suspend);
+			assert(!suspend || suspendDuration > EmuDuration::zero());
 		}
 	};
 
@@ -143,14 +170,18 @@ public:
 			uint8_t programSuspend = 0;
 		} primaryAlgorithm = {};
 
-		constexpr void validate() const {
+		constexpr void validate(const Erase& erase_, const Program& program_) const {
+			(void)erase_, (void)program_;
 			assert(!command || primaryAlgorithm.version.major == 1);
+			assert(!command || erase_.suspend == (primaryAlgorithm.eraseSuspend > 0));
+			assert(!command || program_.suspend == (primaryAlgorithm.programSuspend > 0));
 		}
 	};
 
 	struct Misc {
-		bool statusCommand : 1 = false;
-		bool continuityCommand : 1 = false;
+		bool statusCommand       : 1 = false; // enables status command
+		bool continuityCommand   : 1 = false; // enables continuity check command
+		bool readyPin            : 1 = false; // device has ready / not busy pin (RY/BY#)
 
 		constexpr void validate() const {
 			assert(!continuityCommand || statusCommand);
@@ -160,6 +191,7 @@ public:
 	struct Chip {
 		AutoSelect autoSelect;
 		Geometry geometry;
+		Erase erase = {};
 		Program program = {};
 		CFI cfi = {};
 		Misc misc = {};
@@ -167,8 +199,9 @@ public:
 		constexpr void validate() const {
 			autoSelect.validate();
 			geometry.validate();
+			erase.validate();
 			program.validate();
-			cfi.validate();
+			cfi.validate(erase, program);
 			misc.validate();
 		}
 	};
@@ -197,10 +230,10 @@ public:
 	 */
 	AmdFlash(const Rom& rom, const ValidatedChip& chip,
 	         std::span<const bool> writeProtectSectors,
-	         const DeviceConfig& config);
+	         DeviceConfig& config);
 	AmdFlash(const std::string& name, const ValidatedChip& chip,
 	         std::span<const bool> writeProtectSectors,
-	         const DeviceConfig& config);
+	         DeviceConfig& config, std::string_view id = {});
 	~AmdFlash();
 
 	void reset();
@@ -211,11 +244,12 @@ public:
 	 * Numonix/Micron M29W640FB/M29W640GB.)
 	 */
 	void setVppWpPinLow(bool value) { vppWpPinLow = value; }
+	bool getReadyPin() const;
 
 	[[nodiscard]] power_of_two<size_t> size() const { return chip.geometry.size; }
-	[[nodiscard]] uint8_t read(size_t address);
-	[[nodiscard]] uint8_t peek(size_t address) const;
-	void write(size_t address, uint8_t value);
+	[[nodiscard]] uint8_t read(size_t address, EmuTime time);
+	[[nodiscard]] uint8_t peek(size_t address, EmuTime time) const;
+	void write(size_t address, uint8_t value, EmuTime time);
 	[[nodiscard]] const uint8_t* getReadCacheLine(size_t address) const;
 
 	template<typename Archive>
@@ -232,12 +266,13 @@ public:
 		void serialize(Archive& ar, unsigned version);
 	};
 
-	enum class State { IDLE, IDENT, CFI, STATUS, PRGERR };
+	enum class State : uint8_t { READ, AUTOSELECT, CFI, STATUS, ERROR, ERASE_SECTOR, ERASE_CHIP, PROGRAM };
 
 	struct Sector {
-		size_t address;
-		power_of_two<size_t> size;
-		bool writeProtect;
+		size_t index = 0;
+		size_t address = 0;
+		power_of_two<size_t> size = 1;
+		bool writeProtect = false;
 		ptrdiff_t writeAddress = -1;
 		const uint8_t* readAddress = nullptr;
 
@@ -248,50 +283,122 @@ public:
 private:
 	AmdFlash(const std::string& name, const ValidatedChip& chip,
 	         const Rom* rom, std::span<const bool> writeProtectSectors,
-	         const DeviceConfig& config);
+	         DeviceConfig& config, std::string_view id);
 
 	[[nodiscard]] size_t getSectorIndex(size_t address) const;
 	[[nodiscard]] Sector& getSector(size_t address) { return sectors[getSectorIndex(address)]; };
 	[[nodiscard]] const Sector& getSector(size_t address) const { return sectors[getSectorIndex(address)]; };
+	[[nodiscard]] bool isWritable(const Sector& sector) const;
 
 	void softReset();
+	void clearStatus();
+	void setState(State newState);
+
 	[[nodiscard]] uint16_t peekAutoSelect(size_t address, uint16_t undefined = 0xFFFF) const;
 	[[nodiscard]] uint16_t peekCFI(size_t address) const;
 
-	void setState(State newState);
 	[[nodiscard]] bool checkCommandReset();
 	[[nodiscard]] bool checkCommandLongReset();
+	[[nodiscard]] bool checkCommandAutoSelect();
 	[[nodiscard]] bool checkCommandCFIQuery();
 	[[nodiscard]] bool checkCommandCFIExit();
 	[[nodiscard]] bool checkCommandStatusRead();
 	[[nodiscard]] bool checkCommandStatusClear();
-	[[nodiscard]] bool checkCommandEraseSector();
-	[[nodiscard]] bool checkCommandEraseChip();
-	[[nodiscard]] bool checkCommandProgramHelper(size_t numBytes, std::span<const uint8_t> cmdSeq);
-	[[nodiscard]] bool checkCommandProgram();
-	[[nodiscard]] bool checkCommandDoubleByteProgram();
-	[[nodiscard]] bool checkCommandQuadrupleByteProgram();
-	[[nodiscard]] bool checkCommandBufferProgram();
-	[[nodiscard]] bool checkCommandAutoSelect();
 	[[nodiscard]] bool checkCommandContinuityCheck();
+	[[nodiscard]] bool checkCommandEraseSector(EmuTime time);
+	[[nodiscard]] bool checkCommandEraseAdditionalSector(EmuTime time);
+	[[nodiscard]] bool checkCommandEraseChip(EmuTime time);
+	[[nodiscard]] bool checkCommandSuspend(EmuTime time);
+	[[nodiscard]] bool checkCommandResume(EmuTime time);
+	[[nodiscard]] bool checkCommandProgram(EmuTime time);
+	[[nodiscard]] bool checkCommandDoubleByteProgram(EmuTime time);
+	[[nodiscard]] bool checkCommandQuadrupleByteProgram(EmuTime time);
+	[[nodiscard]] bool checkCommandProgramHelper(size_t numBytes, std::span<const uint8_t> cmdSeq, EmuTime time);
+	[[nodiscard]] bool checkCommandBufferProgram(EmuTime time);
 	[[nodiscard]] bool partialMatch(std::span<const uint8_t> dataSeq) const;
 
-	[[nodiscard]] bool isWritable(const Sector& sector) const;
+	void scheduleEraseOperation(EmuTime time);
+	void scheduleProgramOperation(EmuTime time);
+	void execOperation(EmuTime time);
+	void execEraseOperation(EmuTime time);
+	void execProgramOperation(EmuTime time);
+	void execSuspend(EmuTime time);
 
-public:
-	static constexpr unsigned MAX_CMD_SIZE = 5 + 256; // longest command is BufferProgram
-
-private:
 	MSXMotherBoard& motherBoard;
 	std::unique_ptr<SRAM> ram;
 	const Chip& chip;
 	std::vector<Sector> sectors;
-	static_vector<AddressValue, MAX_CMD_SIZE> cmd;
-	State state = State::IDLE;
-	uint8_t status = 0x80;
+	std::vector<AddressValue> cmd;
+	State state = State::READ;
 	bool vppWpPinLow = false; // true = protection on
+
+	template<size_t POS, size_t WIDTH = 1, typename T2 = bool>
+	using BF8 = BitField<uint8_t, POS, WIDTH, T2>;
+
+	union OperationStatus {
+		uint8_t raw = 0x00;
+		BF8<7> dataPolling;
+		BF8<6> busyToggle;
+		BF8<5> error;
+		BF8<4> dq4;
+		BF8<3> eraseTimer;
+		BF8<2> eraseToggle;
+		BF8<1> abort;
+		BF8<0> dq0;
+	} status;
+
+	union StatusRegister {
+		uint8_t raw = 0x80;
+		BF8<7> ready;
+		BF8<6> eraseSuspend;
+		BF8<5> eraseStatus;
+		BF8<4> programStatus;
+		BF8<3> bufferAbort;
+		BF8<2> programSuspend;
+		BF8<1> sectorLock;
+		BF8<0> continuity;
+	} statusRegister;
+
+	struct EraseOperation {
+		size_t index = 0;
+		std::vector</*bool*/uint8_t> buffer;
+
+		bool isPending(const Sector& sector) const;
+		void markPending(const Sector& sector);
+		void reset();
+		template<typename Archive>
+		void serialize(Archive& ar, unsigned version);
+	} erase;
+
+	struct ProgramOperation {
+		size_t address = 0;
+		size_t index = 0;
+		std::vector<uint16_t> buffer;
+
+		void reset();
+		template<typename Archive>
+		void serialize(Archive& ar, unsigned version);
+	} program;
+
+	struct SyncOperation : Schedulable {
+		friend class AmdFlash;
+		explicit SyncOperation(Scheduler& s) : Schedulable(s) {}
+		void executeUntil(EmuTime time) override {
+			auto& outer = OUTER(AmdFlash, syncOperation);
+			outer.execOperation(time);
+		}
+	} syncOperation;
+
+	struct SyncSuspend : Schedulable {
+		friend class AmdFlash;
+		explicit SyncSuspend(Scheduler& s) : Schedulable(s) {}
+		void executeUntil(EmuTime time) override {
+			auto& outer = OUTER(AmdFlash, syncSuspend);
+			outer.execSuspend(time);
+		}
+	} syncSuspend;
 };
-SERIALIZE_CLASS_VERSION(AmdFlash, 3);
+SERIALIZE_CLASS_VERSION(AmdFlash, 4);
 
 namespace AmdFlashChip
 {
@@ -299,52 +406,218 @@ namespace AmdFlashChip
 	using enum AmdFlash::ManufacturerID;
 	using DeviceInterface = AmdFlash::DeviceInterface;
 
-	// AMD AM29F040
-	static constexpr ValidatedChip AM29F040 = {{
+	// AMD AM29F040B
+	static constexpr ValidatedChip AM29F040B = {{
 		.autoSelect{.manufacturer = AMD, .device{0xA4}, .extraCode = 0x01},
-		.geometry{DeviceInterface::x8, {{8, 0x10000}}},
+		.geometry{
+			DeviceInterface::x8, {
+				{.count = 8, .size = 0x10000},
+			},
+		},
+		.erase{.suspend = true, .duration = EmuDuration::msec(1000), .suspendDuration = EmuDuration::usec(20)},
+		.program{.duration = EmuDuration::usec(7)},
 	}};
 
-	// AMD AM29F016
-	static constexpr ValidatedChip AM29F016 = {{
+	// AMD AM29F016D
+	static constexpr ValidatedChip AM29F016D = {{
 		.autoSelect{.manufacturer = AMD, .device{0xAD}},
-		.geometry{DeviceInterface::x8, {{32, 0x10000}}},
+		.geometry{
+			DeviceInterface::x8, {
+				{.count = 32, .size = 0x10000},
+			},
+		},
+		.erase{.suspend = true, .duration = EmuDuration::msec(1000), .suspendDuration = EmuDuration::usec(20)},
+		.program{.duration = EmuDuration::usec(7)},
+		.cfi{
+			.command = true,
+			.systemInterface{
+				.supply = {.minVcc = 0x45, .maxVcc = 0x55, .minVpp = 0x00, .maxVpp = 0x00},
+				.typTimeout     = {.singleProgram =  8, .multiProgram = 1, .sectorErase = 1024, .chipErase = 1},
+				.maxTimeoutMult = {.singleProgram = 32, .multiProgram = 1, .sectorErase =   16, .chipErase = 1},
+			},
+			.primaryAlgorithm{
+				.version = {.major = 1, .minor = 1},
+				.addressSensitiveUnlock = 0,
+				.siliconRevision = 0,
+				.eraseSuspend = 2,
+				.sectorProtect = 4,
+				.sectorTemporaryUnprotect = 1,
+				.sectorProtectScheme = 4,
+				.simultaneousOperation = 0,
+				.burstMode = 0,
+				.pageMode = 0,
+				.supply = {.minAcc = 0, .maxAcc = 0},
+				.bootBlockFlag = 0
+			},
+		},
+		.misc{.readyPin = true},
+	}};
+
+	// Microchip SST39SF010  (128kB, 32 x 4kB sectors)
+	static constexpr ValidatedChip SST39SF010 = {{
+		.autoSelect{.manufacturer = SST, .device{0xB5}},
+		.geometry{
+			DeviceInterface::x8, {
+				{.count = 32, .size = 0x1000},
+			},
+		},
+		.erase{.duration = EmuDuration::msec(25)},
+		.program{.duration = EmuDuration::usec(20)},
 	}};
 
 	// Numonyx M29W800DB
 	static constexpr ValidatedChip M29W800DB = {{
 		.autoSelect{.manufacturer = STM, .device{0x5B}},
-		.geometry{DeviceInterface::x8x16, {{1, 0x4000}, {2, 0x2000}, {1, 0x8000}, {15, 0x10000}}},
+		.geometry{
+			DeviceInterface::x8x16, {
+				{.count = 1, .size = 0x4000},
+				{.count = 2, .size = 0x2000},
+				{.count = 1, .size = 0x8000},
+				{.count = 15, .size = 0x10000},
+			},
+		},
+		.erase{.suspend = true, .duration = EmuDuration::msec(800), .suspendDuration = EmuDuration::usec(25)},
+		.program{.duration = EmuDuration::usec(10)},
 		.cfi{
 			.command = true,
-			.systemInterface{{0x27, 0x36, 0x00, 0x00}, {16, 1, 1024, 1}, {16, 1, 8, 1}},
-			.primaryAlgorithm{{1, 0}, 0, 0, 2, 1, 1, 4, 0, 0, 0},
+			.systemInterface{
+				.supply = {.minVcc = 0x27, .maxVcc = 0x36, .minVpp = 0x00, .maxVpp = 0x00},
+				.typTimeout     = {.singleProgram = 16, .multiProgram = 1, .sectorErase = 1024, .chipErase = 1},
+				.maxTimeoutMult = {.singleProgram = 16, .multiProgram = 1, .sectorErase =    8, .chipErase = 1},
+			},
+			.primaryAlgorithm{
+				.version = {.major = 1, .minor = 0},
+				.addressSensitiveUnlock = 0,
+				.siliconRevision = 0,
+				.eraseSuspend = 2,
+				.sectorProtect = 1,
+				.sectorTemporaryUnprotect = 1,
+				.sectorProtectScheme = 4,
+				.simultaneousOperation = 0,
+				.burstMode = 0,
+				.pageMode = 0,
+			},
 		},
+		.misc{.readyPin = true},
 	}};
 
 	// Micron M29W640GB
 	static constexpr ValidatedChip M29W640GB = {{
 		.autoSelect{.manufacturer = STM, .device{0x10, 0x00}, .extraCode = 0x0008, .undefined = 0, .oddZero = true, .readMask = 0x7F},
-		.geometry{DeviceInterface::x8x16, {{8, 0x2000}, {127, 0x10000}}, 2},
-		.program{.fastCommand = true, .bufferCommand = true, .shortAbortReset = true, .pageSize = 32},
-		.cfi{
-			.command = true, .withManufacturerDevice = true, .commandMask = 0xFFF, .readMask = 0xFF,
-			.systemInterface{{0x27, 0x36, 0xB5, 0xC5}, {16, 1, 1024, 1}, {16, 1, 8, 1}},
-			.primaryAlgorithm{{1, 3}, 0, 0, 2, 4, 1, 4, 0, 0, 1, {0xB5, 0xC5}, 0x02, 1},
+		.geometry{
+			DeviceInterface::x8x16, {
+				{.count = 8, .size = 0x2000},
+				{.count = 127, .size = 0x10000},
+			}, 2
 		},
+		.erase{.suspend = true, .duration = EmuDuration::msec(500), .suspendDuration = EmuDuration::usec(4)},
+		.program{
+			.shortAbortReset = true, .bitRaiseError = true, .suspend = true, .fastPageSize = 8, .bufferPageSize = 32,
+			.duration = EmuDuration::usec(10), .additionalDuration = EmuDuration::usec(5.5), .suspendDuration = EmuDuration::usec(4)
+		},
+		.cfi{
+			.command = true, .withManufacturerDevice = true, .commandMask = 0x7FF, .readMask = 0xFF,
+			.systemInterface{
+				.supply = {.minVcc = 0x27, .maxVcc = 0x36, .minVpp = 0xB5, .maxVpp = 0xC5},
+				.typTimeout     = {.singleProgram = 16, .multiProgram = 1, .sectorErase = 1024, .chipErase = 1},
+				.maxTimeoutMult = {.singleProgram = 16, .multiProgram = 1, .sectorErase =    8, .chipErase = 1},
+			},
+			.primaryAlgorithm{
+				.version = {.major = 1, .minor = 3},
+				.addressSensitiveUnlock = 0,
+				.siliconRevision = 0,
+				.eraseSuspend = 2,
+				.sectorProtect = 4,
+				.sectorTemporaryUnprotect = 1,
+				.sectorProtectScheme = 4,
+				.simultaneousOperation = 0,
+				.burstMode = 0,
+				.pageMode = 1,
+				.supply = {.minAcc = 0xB5, .maxAcc = 0xC5},
+				.bootBlockFlag = 0x02,
+				.programSuspend = 1,
+			},
+		},
+		.misc{.readyPin = true},
+	}};
+
+	// Infineon / Cypress / Spansion S29GL064N90TFI04
+	static constexpr ValidatedChip S29GL064N90TFI04 = {{
+		.autoSelect{.manufacturer = AMD, .device{0x10, 0x00}, .extraCode = 0xFF0A, .readMask = 0x0F},
+		.geometry{
+			DeviceInterface::x8x16, {
+				{.count = 8, .size = 0x2000},
+				{.count = 127, .size = 0x10000},
+			}, 1
+		},
+		.erase{.suspend = true, .duration = EmuDuration::msec(500), .suspendDuration = EmuDuration::usec(20)},
+		.program{
+			.suspend = true, .bufferPageSize = 32,
+			.duration = EmuDuration::usec(60), .additionalDuration = EmuDuration::usec(5.8), .suspendDuration = EmuDuration::usec(20)
+		},
+		.cfi{
+			.command = true,
+			.systemInterface{
+				.supply = {.minVcc = 0x27, .maxVcc = 0x36, .minVpp = 0x00, .maxVpp = 0x00},
+				.typTimeout     = {.singleProgram = 128, .multiProgram = 128, .sectorErase = 1024, .chipErase = 1},
+				.maxTimeoutMult = {.singleProgram =   8, .multiProgram =  32, .sectorErase =   16, .chipErase = 1},
+			},
+			.primaryAlgorithm{
+				.version = {.major = 1, .minor = 3},
+				.addressSensitiveUnlock = 0,
+				.siliconRevision = 8,
+				.eraseSuspend = 2,
+				.sectorProtect = 1,
+				.sectorTemporaryUnprotect = 0,
+				.sectorProtectScheme = 8,
+				.simultaneousOperation = 0,
+				.burstMode = 0,
+				.pageMode = 2,
+				.supply = {.minAcc = 0xB5, .maxAcc = 0xC5},
+				.bootBlockFlag = 0x02,
+				.programSuspend = 1,
+			},
+		},
+		.misc{.readyPin = true},
 	}};
 
 	// Infineon / Cypress / Spansion S29GL064S70TFI040
 	static constexpr ValidatedChip S29GL064S70TFI040 = {{
 		.autoSelect{.manufacturer = AMD, .device{0x10, 0x00}, .extraCode = 0xFF0A, .readMask = 0x0F},
-		.geometry{DeviceInterface::x8x16, {{8, 0x2000}, {127, 0x10000}}, 2},
-		.program{.bufferCommand = true, .pageSize = 256},
+		.geometry{
+			DeviceInterface::x8x16, {
+				{.count = 8, .size = 0x2000},
+				{.count = 127, .size = 0x10000},
+			}, 2
+		},
+		.erase{.suspend = true, .duration = EmuDuration::msec(300), .suspendDuration = EmuDuration::usec(30)},
+		.program{
+			.shortAbortReset = false, .bitRaiseError = false, .suspend = true, .enhancedSuspend = true, .bufferPageSize = 256,
+			.duration = EmuDuration::usec(150), .additionalDuration = EmuDuration::usec(1.0), .suspendDuration = EmuDuration::usec(23.5)
+		},
 		.cfi{
 			.command = true, .withAutoSelect = true, .exitCommand = true, .commandMask = 0xFF, .readMask = 0x7F,
-			.systemInterface{{0x27, 0x36, 0x00, 0x00}, {256, 256, 512, 65536}, {8, 8, 2, 1}},
-			.primaryAlgorithm{{1, 3}, 0, 8, 2, 1, 0, 8, 0, 0, 2, {0xB5, 0xC5}, 0x02, 1},
+			.systemInterface{
+				.supply = {.minVcc = 0x27, .maxVcc = 0x36, .minVpp = 0x00, .maxVpp = 0x00},
+				.typTimeout     = {.singleProgram = 256, .multiProgram = 256, .sectorErase = 512, .chipErase = 65536},
+				.maxTimeoutMult = {.singleProgram =   8, .multiProgram =   8, .sectorErase =   2, .chipErase =     1}},
+			.primaryAlgorithm{
+				.version = {.major = 1, .minor = 3},
+				.addressSensitiveUnlock = 0,
+				.siliconRevision = 8,
+				.eraseSuspend = 2,
+				.sectorProtect = 1,
+				.sectorTemporaryUnprotect = 0,
+				.sectorProtectScheme = 8,
+				.simultaneousOperation = 0,
+				.burstMode = 0,
+				.pageMode = 2,
+				.supply = {.minAcc = 0xB5, .maxAcc = 0xC5},
+				.bootBlockFlag = 0x02,
+				.programSuspend = 1,
+			},
 		},
-		.misc {.statusCommand = true, .continuityCommand = true},
+		.misc{.statusCommand = true, .continuityCommand = true, .readyPin = true},
 	}};
 }
 

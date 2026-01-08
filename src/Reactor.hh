@@ -3,13 +3,14 @@
 
 #include "EnumSetting.hh"
 #include "EventListener.hh"
-#include "Observer.hh"
+#include "StringSetting.hh"
 
-#include "view.hh"
+#include "Observer.hh"
 
 #include <cassert>
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -42,6 +43,7 @@ class InfoCommand;
 class InputEventGenerator;
 class Interpreter;
 class ListMachinesCommand;
+class SetupCommand;
 class MSXMotherBoard;
 class MachineCommand;
 class MessageCommand;
@@ -63,6 +65,8 @@ class UserSettings;
 
 extern int exitCode;
 
+enum class SetupDepth : uint8_t;
+
 /**
  * Contains the main loop of openMSX.
  * openMSX is almost single threaded: the main thread does most of the work,
@@ -73,6 +77,10 @@ extern int exitCode;
  */
 class Reactor final : private Observer<Setting>, private EventListener
 {
+public:
+	static constexpr std::string_view SETUP_DIR = "setups";
+	static constexpr std::string_view SETUP_EXTENSION = ".oms";
+
 public:
 	Reactor();
 	void init();
@@ -94,7 +102,10 @@ public:
 	[[nodiscard]] Mixer& getMixer();
 	[[nodiscard]] DiskFactory& getDiskFactory() { return *diskFactory; }
 	[[nodiscard]] DiskManipulator& getDiskManipulator() { return *diskManipulator; }
-	[[nodiscard]] EnumSetting<int>& getMachineSetting() { return *machineSetting; }
+	[[nodiscard]] EnumSetting<int>& getDefaultMachineSetting() { return *defaultMachineSetting; }
+	[[nodiscard]] StringSetting& getDefaultSetupSetting() { return *defaultSetupSetting; }
+	[[nodiscard]] StringSetting& getSaveSetupAtExitNameSetting() { return *saveSetupAtExitNameSetting; }
+	[[nodiscard]] EnumSetting<SetupDepth>& getSaveSetupAtExitDepthSetting() { return *saveSetupAtExitDepthSetting; }
 	[[nodiscard]] FilePool& getFilePool() { return *filePool; }
 	[[nodiscard]] ImGuiManager& getImGuiManager() { return *imGuiManager; }
 	[[nodiscard]] const HotKey& getHotKey() const;
@@ -104,9 +115,11 @@ public:
 	[[nodiscard]] RomDatabase& getSoftwareDatabase();
 
 	void switchMachine(const std::string& machine);
+	void switchMachineFromSetup(const std::string& filename);
 	[[nodiscard]] MSXMotherBoard* getMotherBoard() const;
 
 	[[nodiscard]] static std::vector<std::string> getHwConfigs(std::string_view type);
+	[[nodiscard]] static std::vector<std::string> getSetups();
 
 	[[nodiscard]] const MsxChar2Unicode& getMsxChar2Unicode() const;
 
@@ -129,11 +142,11 @@ public:
 	[[nodiscard]] bool isFullyStarted() const { return fullyStarted; }
 
 	[[nodiscard]] auto getMachineIDs() const {
-		return view::transform(boards,
+		return std::views::transform(boards,
 			[](auto& b) -> std::string_view { return b->getMachineID(); });
 	}
 private:
-	void createMachineSetting();
+	void createDefaultMachineAndSetupSettings();
 	void switchBoard(Board newBoard);
 	void deleteBoard(Board board);
 
@@ -167,7 +180,10 @@ private:
 	std::unique_ptr<DiskChanger> virtualDrive;
 	std::unique_ptr<FilePool> filePool;
 
-	std::unique_ptr<EnumSetting<int>> machineSetting;
+	std::unique_ptr<EnumSetting<int>> defaultMachineSetting;
+	std::unique_ptr<StringSetting> defaultSetupSetting;
+	std::unique_ptr<StringSetting> saveSetupAtExitNameSetting;
+	std::unique_ptr<EnumSetting<SetupDepth>> saveSetupAtExitDepthSetting;
 	std::unique_ptr<UserSettings> userSettings;
 	std::unique_ptr<RomDatabase> softwareDatabase; // lazy initialized
 
@@ -182,6 +198,7 @@ private:
 	std::unique_ptr<ActivateMachineCommand> activateMachineCommand;
 	std::unique_ptr<StoreMachineCommand> storeMachineCommand;
 	std::unique_ptr<RestoreMachineCommand> restoreMachineCommand;
+	std::unique_ptr<SetupCommand> setupCommand;
 	std::unique_ptr<GetClipboardCommand> getClipboardCommand;
 	std::unique_ptr<SetClipboardCommand> setClipboardCommand;
 	std::unique_ptr<AviRecorder> aviRecordCommand;
@@ -222,6 +239,7 @@ private:
 	friend class ActivateMachineCommand;
 	friend class StoreMachineCommand;
 	friend class RestoreMachineCommand;
+	friend class SetupCommand;
 };
 
 } // namespace openmsx

@@ -1,18 +1,21 @@
 #ifndef SERIALIZE_HH
 #define SERIALIZE_HH
 
-#include "serialize_core.hh"
 #include "SerializeBuffer.hh"
-#include "StringOp.hh"
 #include "XMLElement.hh"
 #include "XMLOutputStream.hh"
+#include "serialize_core.hh"
+
 #include "MemBuffer.hh"
+#include "StringOp.hh"
 #include "hash_map.hh"
 #include "inline.hh"
 #include "strCat.hh"
 #include "unreachable.hh"
 #include "zstring_view.hh"
+
 #include <zlib.h>
+
 #include <array>
 #include <cassert>
 #include <memory>
@@ -20,8 +23,8 @@
 #include <span>
 #include <sstream>
 #include <string>
-#include <typeindex>
 #include <type_traits>
+#include <typeindex>
 #include <vector>
 
 namespace openmsx {
@@ -356,7 +359,7 @@ protected:
 	/** Returns a reference to the most derived class.
 	 * Helper function to implement static polymorphism.
 	 */
-	inline Derived& self()
+	Derived& self()
 	{
 		return static_cast<Derived&>(*this);
 	}
@@ -367,11 +370,11 @@ class OutputArchiveBase2
 {
 public:
 	static constexpr bool IS_LOADER = false;
-	[[nodiscard]] inline bool versionAtLeast(unsigned /*actual*/, unsigned /*required*/) const
+	[[nodiscard]] bool versionAtLeast(unsigned /*actual*/, unsigned /*required*/) const
 	{
 		return true;
 	}
-	[[nodiscard]] inline bool versionBelow(unsigned /*actual*/, unsigned /*required*/) const
+	[[nodiscard]] bool versionBelow(unsigned /*actual*/, unsigned /*required*/) const
 	{
 		return false;
 	}
@@ -473,11 +476,6 @@ public:
 		this->self().endTag(tag);
 	}
 
-	// Default implementation is to base64-encode the blob and serialize
-	// the resulting string. But memory archives will memcpy the blob.
-	void serialize_blob(const char* tag, std::span<const uint8_t> data,
-	                    bool diff = true);
-
 	template<typename T> void serialize(const char* tag, const T& t)
 	{
 		this->self().beginTag(tag);
@@ -570,8 +568,6 @@ public:
 	{
 		doSerialize(tag, t, std::tuple<Args...>(args...));
 	}
-	void serialize_blob(const char* tag, std::span<uint8_t> data,
-	                    bool diff = true);
 
 	template<typename T>
 	void serialize(const char* tag, T& t)
@@ -675,7 +671,7 @@ public:
 	{
 		buffer.insert(&t, sizeof(t));
 	}
-	inline void saveChar(char c)
+	void saveChar(char c)
 	{
 		save(c);
 	}
@@ -721,7 +717,10 @@ public:
 		                &skip, sizeof(skip));
 	}
 
-	[[nodiscard]] MemBuffer<uint8_t> releaseBuffer(size_t& size);
+	[[nodiscard]] MemBuffer<uint8_t> releaseBuffer() &&
+	{
+		return std::move(buffer).release();
+	}
 
 private:
 	ALWAYS_INLINE void serialize_group(const std::tuple<>& /*tuple*/) const
@@ -759,19 +758,19 @@ private:
 class MemInputArchive final : public InputArchiveBase<MemInputArchive>
 {
 public:
-	MemInputArchive(const uint8_t* data, size_t size,
+	MemInputArchive(std::span<const uint8_t> buf_,
 	                std::span<const std::shared_ptr<DeltaBlock>> deltaBlocks_)
-		: buffer(data, size)
+		: buffer(buf_)
 		, deltaBlocks(deltaBlocks_)
 	{
 	}
 
 	static constexpr bool NEED_VERSION = false;
-	[[nodiscard]] inline bool versionAtLeast(unsigned /*actual*/, unsigned /*required*/) const
+	[[nodiscard]] bool versionAtLeast(unsigned /*actual*/, unsigned /*required*/) const
 	{
 		return true;
 	}
-	[[nodiscard]] inline bool versionBelow(unsigned /*actual*/, unsigned /*required*/) const
+	[[nodiscard]] bool versionBelow(unsigned /*actual*/, unsigned /*required*/) const
 	{
 		return false;
 	}
@@ -780,7 +779,7 @@ public:
 	{
 		buffer.read(&t, sizeof(t));
 	}
-	inline void loadChar(char& c)
+	void loadChar(char& c)
 	{
 		load(c);
 	}
@@ -881,6 +880,9 @@ public:
 		this->self().serialize(std::forward<Args>(args)...);
 	}
 
+	void serialize_blob(const char* tag, std::span<const uint8_t> data,
+	                    bool diff = true);
+
 	auto& getXMLOutputStream() { return writer; }
 
 //internal:
@@ -920,11 +922,11 @@ class XmlInputArchive final : public InputArchiveBase<XmlInputArchive>
 public:
 	explicit XmlInputArchive(const std::string& filename);
 
-	[[nodiscard]] inline bool versionAtLeast(unsigned actual, unsigned required) const
+	[[nodiscard]] bool versionAtLeast(unsigned actual, unsigned required) const
 	{
 		return actual >= required;
 	}
-	[[nodiscard]] inline bool versionBelow(unsigned actual, unsigned required) const
+	[[nodiscard]] bool versionBelow(unsigned actual, unsigned required) const
 	{
 		return actual < required;
 	}
@@ -947,6 +949,9 @@ public:
 	}
 	[[nodiscard]] std::string_view loadStr() const;
 
+	void serialize_blob(const char* tag, std::span<uint8_t> data,
+	                    bool diff = true);
+
 	void skipSection(bool /*skip*/) const { /*nothing*/ }
 
 	// workaround(?) for visual studio 2015:
@@ -960,7 +965,7 @@ public:
 		this->self().serialize(std::forward<Args>(args)...);
 	}
 
-	[[nodiscard]] const XMLElement* currentElement() const {
+	[[nodiscard]] XMLElement* currentElement() const {
 		return elems.back().first;
 	}
 
@@ -979,7 +984,7 @@ public:
 		std::istringstream is(str);
 		is >> t;
 	}
-	template<typename T> void attribute(const char* name, T& t)
+	template<typename T> void attribute(const char* name, T& t) const
 	{
 		attributeImpl(name, t);
 	}
@@ -1001,7 +1006,7 @@ public:
 
 private:
 	XMLDocument xmlDoc{16384}; // tweak: initial allocator buffer size
-	std::vector<std::pair<const XMLElement*, const XMLElement*>> elems;
+	std::vector<std::pair<XMLElement*, XMLElement*>> elems;
 };
 
 #define INSTANTIATE_SERIALIZE_METHODS(CLASS) \

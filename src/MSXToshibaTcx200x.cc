@@ -1,4 +1,5 @@
 #include "MSXToshibaTcx200x.hh"
+
 #include "CacheLine.hh"
 #include "serialize.hh"
 
@@ -18,7 +19,7 @@ namespace openmsx {
 // Assumption that SRAM is only visible in page 2, because the ROM segment
 // select is also for page 2 only
 
-MSXToshibaTcx200x::MSXToshibaTcx200x(const DeviceConfig& config)
+MSXToshibaTcx200x::MSXToshibaTcx200x(DeviceConfig& config)
 	: MSXDevice(config)
 	, rs232Rom(getName() + " RS232C ROM", "rom", config, "rs232")
 	, wordProcessorRom(getName() + " Word Processor ROM", "rom", config, "wordpro")
@@ -29,7 +30,7 @@ MSXToshibaTcx200x::MSXToshibaTcx200x(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void MSXToshibaTcx200x::reset(EmuTime::param time)
+void MSXToshibaTcx200x::reset(EmuTime time)
 {
 	copyButtonPressed.setBoolean(false);
 	writeMem(0x7FFF, 0, time);
@@ -46,7 +47,7 @@ byte MSXToshibaTcx200x::getSelectedSegment() const
 	return controlReg & 0b0000'0011;
 }
 
-byte MSXToshibaTcx200x::peekMem(word address, EmuTime::param /*time*/) const
+byte MSXToshibaTcx200x::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	if (address == 0x7FFF) {
 		return byte(controlReg | ((copyButtonPressed.getBoolean() ? 0 : 1) << 7));
@@ -64,12 +65,12 @@ byte MSXToshibaTcx200x::peekMem(word address, EmuTime::param /*time*/) const
 	}
 }
 
-byte MSXToshibaTcx200x::readMem(word address, EmuTime::param time)
+byte MSXToshibaTcx200x::readMem(uint16_t address, EmuTime time)
 {
 	return peekMem(address, time);
 }
 
-void MSXToshibaTcx200x::writeMem(word address, byte value, EmuTime::param /*time*/)
+void MSXToshibaTcx200x::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if (address == 0x7FFF) {
 		controlReg = value & 0b0110'0011; // TODO which bits can be read back?
@@ -79,7 +80,7 @@ void MSXToshibaTcx200x::writeMem(word address, byte value, EmuTime::param /*time
 	}
 }
 
-const byte* MSXToshibaTcx200x::getReadCacheLine(word start) const
+const byte* MSXToshibaTcx200x::getReadCacheLine(uint16_t start) const
 {
 	if ((start & CacheLine::HIGH) == (0x7FFF & CacheLine::HIGH)) {
 		return nullptr;
@@ -95,7 +96,7 @@ const byte* MSXToshibaTcx200x::getReadCacheLine(word start) const
 	return unmappedRead.data();
 }
 
-byte* MSXToshibaTcx200x::getWriteCacheLine(word start)
+byte* MSXToshibaTcx200x::getWriteCacheLine(uint16_t start)
 {
 	if ((start & CacheLine::HIGH) == (0x7FFF & CacheLine::HIGH)) {
 		return nullptr;

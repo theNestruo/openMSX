@@ -4,28 +4,32 @@ TODO:
 */
 
 #include "PixelRenderer.hh"
-#include "Rasterizer.hh"
-#include "PostProcessor.hh"
+
 #include "Display.hh"
-#include "VideoSystem.hh"
+#include "PostProcessor.hh"
+#include "Rasterizer.hh"
 #include "RenderSettings.hh"
-#include "VideoSourceSetting.hh"
-#include "IntegerSetting.hh"
+#include "SpriteChecker.hh"
 #include "VDP.hh"
 #include "VDPVRAM.hh"
-#include "SpriteChecker.hh"
-#include "EventDistributor.hh"
+#include "VideoSourceSetting.hh"
+#include "VideoSystem.hh"
+
 #include "Event.hh"
+#include "EventDistributor.hh"
+#include "GlobalSettings.hh"
+#include "IntegerSetting.hh"
+#include "MSXMotherBoard.hh"
+#include "Reactor.hh"
 #include "RealTime.hh"
 #include "SpeedManager.hh"
 #include "ThrottleManager.hh"
-#include "GlobalSettings.hh"
-#include "MSXMotherBoard.hh"
-#include "Reactor.hh"
 #include "Timer.hh"
+
 #include "narrow.hh"
 #include "one_of.hh"
 #include "unreachable.hh"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -144,6 +148,17 @@ PostProcessor* PixelRenderer::getPostProcessor() const
 	return rasterizer->getPostProcessor();
 }
 
+const RawFrame* PixelRenderer::getWorkingFrame(EmuTime time)
+{
+	sync(time, true);
+	return rasterizer->getWorkingFrame();
+}
+
+const RawFrame* PixelRenderer::getLastFrame() const
+{
+	return rasterizer->getLastFrame();
+}
+
 void PixelRenderer::reInit()
 {
 	// Don't draw before frameStart() is called.
@@ -156,13 +171,13 @@ void PixelRenderer::reInit()
 	displayEnabled = vdp.isDisplayEnabled();
 }
 
-void PixelRenderer::updateDisplayEnabled(bool enabled, EmuTime::param time)
+void PixelRenderer::updateDisplayEnabled(bool enabled, EmuTime time)
 {
 	sync(time, true);
 	displayEnabled = enabled;
 }
 
-void PixelRenderer::frameStart(EmuTime::param time)
+void PixelRenderer::frameStart(EmuTime time)
 {
 	if (!rasterizer->isActive()) {
 		frameSkipCounter = 999.0f;
@@ -216,7 +231,7 @@ void PixelRenderer::frameStart(EmuTime::param time)
 	textModeCounter = 0;
 }
 
-void PixelRenderer::frameEnd(EmuTime::param time)
+void PixelRenderer::frameEnd(EmuTime time)
 {
 	if (renderFrame) {
 		// Render changes from this last frame.
@@ -251,72 +266,72 @@ void PixelRenderer::frameEnd(EmuTime::param time)
 }
 
 void PixelRenderer::updateHorizontalScrollLow(
-	byte scroll, EmuTime::param time)
+	uint8_t scroll, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 	rasterizer->setHorizontalScrollLow(scroll);
 }
 
 void PixelRenderer::updateHorizontalScrollHigh(
-	byte /*scroll*/, EmuTime::param time)
+	uint8_t /*scroll*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateBorderMask(
-	bool masked, EmuTime::param time)
+	bool masked, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 	rasterizer->setBorderMask(masked);
 }
 
 void PixelRenderer::updateMultiPage(
-	bool /*multiPage*/, EmuTime::param time)
+	bool /*multiPage*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateTransparency(
-	bool enabled, EmuTime::param time)
+	bool enabled, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 	rasterizer->setTransparency(enabled);
 }
 
 void PixelRenderer::updateSuperimposing(
-	const RawFrame* videoSource, EmuTime::param time)
+	const RawFrame* videoSource, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 	rasterizer->setSuperimposeVideoFrame(videoSource);
 }
 
 void PixelRenderer::updateForegroundColor(
-	byte /*color*/, EmuTime::param time)
+	uint8_t /*color*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateBackgroundColor(
-	byte color, EmuTime::param time)
+	uint8_t color, EmuTime time)
 {
 	sync(time);
 	rasterizer->setBackgroundColor(color);
 }
 
 void PixelRenderer::updateBlinkForegroundColor(
-	byte /*color*/, EmuTime::param time)
+	uint8_t /*color*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateBlinkBackgroundColor(
-	byte /*color*/, EmuTime::param time)
+	uint8_t /*color*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateBlinkState(
-	bool /*enabled*/, EmuTime::param /*time*/)
+	bool /*enabled*/, EmuTime /*time*/)
 {
 	// TODO: When the sync call is enabled, the screen flashes on
 	//       every call to this method.
@@ -326,7 +341,7 @@ void PixelRenderer::updateBlinkState(
 }
 
 void PixelRenderer::updatePalette(
-	unsigned index, int grb, EmuTime::param time)
+	unsigned index, int grb, EmuTime time)
 {
 	if (displayEnabled) {
 		sync(time);
@@ -348,20 +363,20 @@ void PixelRenderer::updatePalette(
 }
 
 void PixelRenderer::updateVerticalScroll(
-	int /*scroll*/, EmuTime::param time)
+	int /*scroll*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateHorizontalAdjust(
-	int adjust, EmuTime::param time)
+	int adjust, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 	rasterizer->setHorizontalAdjust(adjust);
 }
 
 void PixelRenderer::updateDisplayMode(
-	DisplayMode mode, EmuTime::param time)
+	DisplayMode mode, EmuTime time)
 {
 	// Sync if in display area or if border drawing process changes.
 	DisplayMode oldMode = vdp.getDisplayMode();
@@ -376,25 +391,25 @@ void PixelRenderer::updateDisplayMode(
 }
 
 void PixelRenderer::updateNameBase(
-	unsigned /*addr*/, EmuTime::param time)
+	unsigned /*addr*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updatePatternBase(
-	unsigned /*addr*/, EmuTime::param time)
+	unsigned /*addr*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateColorBase(
-	unsigned /*addr*/, EmuTime::param time)
+	unsigned /*addr*/, EmuTime time)
 {
 	if (displayEnabled) sync(time);
 }
 
 void PixelRenderer::updateSpritesEnabled(
-	bool /*enabled*/, EmuTime::param time
+	bool /*enabled*/, EmuTime time
 ) {
 	if (displayEnabled) sync(time);
 }
@@ -418,7 +433,7 @@ static constexpr bool overlap(
 	return false;
 }
 
-bool PixelRenderer::checkSync(unsigned offset, EmuTime::param time) const
+bool PixelRenderer::checkSync(unsigned offset, EmuTime time) const
 {
 	// TODO: Because range is entire VRAM, offset == address.
 
@@ -507,7 +522,7 @@ bool PixelRenderer::checkSync(unsigned offset, EmuTime::param time) const
 	}
 }
 
-void PixelRenderer::updateVRAM(unsigned offset, EmuTime::param time)
+void PixelRenderer::updateVRAM(unsigned offset, EmuTime time)
 {
 	// Note: No need to sync if display is disabled, because then the
 	//       output does not depend on VRAM (only on background color).
@@ -516,7 +531,7 @@ void PixelRenderer::updateVRAM(unsigned offset, EmuTime::param time)
 	}
 }
 
-void PixelRenderer::updateWindow(bool /*enabled*/, EmuTime::param /*time*/)
+void PixelRenderer::updateWindow(bool /*enabled*/, EmuTime /*time*/)
 {
 	// The bitmapVisibleWindow has moved to a different area.
 	// This update is redundant: Renderer will be notified in another way
@@ -524,7 +539,7 @@ void PixelRenderer::updateWindow(bool /*enabled*/, EmuTime::param /*time*/)
 	// TODO: Can this be used as the main update method instead?
 }
 
-void PixelRenderer::sync(EmuTime::param time, bool force)
+void PixelRenderer::sync(EmuTime time, bool force)
 {
 	if (!renderFrame) return;
 
@@ -546,12 +561,12 @@ void PixelRenderer::sync(EmuTime::param time, bool force)
 	}
 }
 
-void PixelRenderer::renderUntil(EmuTime::param time)
+void PixelRenderer::renderUntil(EmuTime time)
 {
 	// Translate from time to pixel position.
 	int limitTicks = vdp.getTicksThisFrame(time);
 	assert(limitTicks <= vdp.getTicksPerFrame());
-	auto [limitX, limitY] = [&]() -> std::pair<int, int> {
+	auto [limitX, limitY] = [&] -> std::pair<int, int> {
 		switch (accuracy) {
 		case RenderSettings::Accuracy::PIXEL: {
 			return {limitTicks % VDP::TICKS_PER_LINE,

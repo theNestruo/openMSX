@@ -1,17 +1,21 @@
 #include "NationalFDC.hh"
-#include "CacheLine.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
+#include "CacheLine.hh"
 #include "serialize.hh"
 
 namespace openmsx {
 
-NationalFDC::NationalFDC(const DeviceConfig& config)
+NationalFDC::NationalFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config)
 {
+	// ROM only visible in 0x0000-0x7FFF by default
+	parseRomVisibility(config, 0x0000, 0x8000);
 }
 
-byte NationalFDC::readMem(word address, EmuTime::param time)
+byte NationalFDC::readMem(uint16_t address, EmuTime time)
 {
 	switch (address & 0x3FC7) {
 	case 0x3F80:
@@ -36,7 +40,7 @@ byte NationalFDC::readMem(word address, EmuTime::param time)
 	}
 }
 
-byte NationalFDC::peekMem(word address, EmuTime::param time) const
+byte NationalFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	// According to atarulum:
 	//  7FBC        is mirrored in 7FBC - 7FBF
@@ -64,29 +68,21 @@ byte NationalFDC::peekMem(word address, EmuTime::param time) const
 		return value;
 	}
 	default:
-		if (address < 0x8000) {
-			// ROM only visible in 0x0000-0x7FFF
-			return MSXFDC::peekMem(address, time);
-		} else {
-			return 255;
-		}
+		return MSXFDC::peekMem(address, time);
 	}
 }
 
-const byte* NationalFDC::getReadCacheLine(word start) const
+const byte* NationalFDC::getReadCacheLine(uint16_t start) const
 {
 	if ((start & 0x3FC0 & CacheLine::HIGH) == (0x3F80 & CacheLine::HIGH)) {
 		// FDC at 0x7FB8-0x7FBC (also mirrored)
 		return nullptr;
-	} else if (start < 0x8000) {
-		// ROM at 0x0000-0x7FFF
-		return MSXFDC::getReadCacheLine(start);
 	} else {
-		return unmappedRead.data();
+		return MSXFDC::getReadCacheLine(start);
 	}
 }
 
-void NationalFDC::writeMem(word address, byte value, EmuTime::param time)
+void NationalFDC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	switch (address & 0x3FC7) {
 	case 0x3F80:
@@ -123,7 +119,7 @@ void NationalFDC::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* NationalFDC::getWriteCacheLine(word address)
+byte* NationalFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address & 0x3FC0) == (0x3F80 & CacheLine::HIGH)) {
 		// FDC at 0x7FB8-0x7FBC (also mirrored)

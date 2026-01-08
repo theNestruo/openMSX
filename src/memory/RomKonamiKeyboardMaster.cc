@@ -1,12 +1,14 @@
 #include "RomKonamiKeyboardMaster.hh"
+
 #include "MSXCPUInterface.hh"
 #include "serialize.hh"
+
 #include "unreachable.hh"
 
 namespace openmsx {
 
 RomKonamiKeyboardMaster::RomKonamiKeyboardMaster(
-		const DeviceConfig& config, Rom&& rom_)
+		DeviceConfig& config, Rom&& rom_)
 	: Rom16kBBlocks(config, std::move(rom_))
 	, vlm5030("VLM5030", "Konami Keyboard Master's VLM5030",
 	          rom.getFilename(), config)
@@ -19,27 +21,23 @@ RomKonamiKeyboardMaster::RomKonamiKeyboardMaster(
 	reset(EmuTime::dummy());
 
 	auto& cpuInterface = getCPUInterface();
-	for (auto port : {0x00, 0x20}) {
-		cpuInterface.register_IO_Out(narrow_cast<byte>(port), this);
-		cpuInterface.register_IO_In (narrow_cast<byte>(port), this);
-	}
+	cpuInterface.register_IO_InOut(0x00, this);
+	cpuInterface.register_IO_InOut(0x20, this);
 }
 
 RomKonamiKeyboardMaster::~RomKonamiKeyboardMaster()
 {
 	auto& cpuInterface = getCPUInterface();
-	for (auto port : {0x00, 0x20}) {
-		cpuInterface.unregister_IO_Out(narrow_cast<byte>(port), this);
-		cpuInterface.unregister_IO_In (narrow_cast<byte>(port), this);
-	}
+	cpuInterface.unregister_IO_InOut(0x00, this);
+	cpuInterface.unregister_IO_InOut(0x20, this);
 }
 
-void RomKonamiKeyboardMaster::reset(EmuTime::param /*time*/)
+void RomKonamiKeyboardMaster::reset(EmuTime /*time*/)
 {
 	vlm5030.reset();
 }
 
-void RomKonamiKeyboardMaster::writeIO(word port, byte value, EmuTime::param time)
+void RomKonamiKeyboardMaster::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	switch (port & 0xFF) {
 	case 0x00:
@@ -53,12 +51,12 @@ void RomKonamiKeyboardMaster::writeIO(word port, byte value, EmuTime::param time
 	}
 }
 
-byte RomKonamiKeyboardMaster::readIO(word port, EmuTime::param time)
+byte RomKonamiKeyboardMaster::readIO(uint16_t port, EmuTime time)
 {
 	return RomKonamiKeyboardMaster::peekIO(port, time);
 }
 
-byte RomKonamiKeyboardMaster::peekIO(word port, EmuTime::param time) const
+byte RomKonamiKeyboardMaster::peekIO(uint16_t port, EmuTime time) const
 {
 	switch (port & 0xFF) {
 	case 0x00:

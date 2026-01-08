@@ -24,11 +24,11 @@
 #include "JoyHandle.hh"
 #include "KeyCodeSetting.hh"
 #include "KeyboardSettings.hh"
-#include "Mixer.hh"
 #include "MSXCPU.hh"
 #include "MSXCommandController.hh"
 #include "MSXJoystick.hh"
 #include "MSXMotherBoard.hh"
+#include "Mixer.hh"
 #include "ProxySetting.hh"
 #include "R800.hh"
 #include "Reactor.hh"
@@ -39,11 +39,10 @@
 #include "VideoSourceSetting.hh"
 #include "Z80.hh"
 
+#include "StringOp.hh"
 #include "checked_cast.hh"
 #include "foreach_file.hh"
 #include "narrow.hh"
-#include "StringOp.hh"
-#include "unreachable.hh"
 #include "zstring_view.hh"
 
 #include <imgui.h>
@@ -51,11 +50,55 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <optional>
+#include <utility>
 
 using namespace std::literals;
 
 namespace openmsx {
+
+ImGuiSettings::ImGuiSettings(ImGuiManager& manager_)
+	: ImGuiPart(manager_)
+	, saveLayout("layout", ".ini", "layouts")
+	, loadLayout("layout", ".ini", "layouts")
+	, confirmOverwrite("Confirm##overwrite-layout")
+{
+	saveLayout.drawAction = [&]{
+		saveLayout.drawTable();
+		ImGui::TextUnformatted("Enter name:"sv);
+		ImGui::InputText("##save-layout-name", &saveLayoutName);
+		ImGui::SameLine();
+		im::Disabled(saveLayoutName.empty(), [&]{
+			if (ImGui::Button("Save as")) {
+				(void)manager.getReactor().getDisplay().getWindowPosition(); // to save up-to-date window position
+
+				auto filename = FileOperations::parseCommandFileArgument(
+					saveLayoutName, "layouts", "", ".ini");
+				auto action = [filename]{
+					ImGui::SaveIniSettingsToDisk(filename.c_str());
+					ImGui::CloseCurrentPopup();
+				};
+				if (FileOperations::exists(filename)) {
+					confirmOverwrite.open(
+						strCat("Overwrite layout: ", saveLayoutName),
+						action);
+				} else {
+					action();
+				}
+			}
+		});
+		confirmOverwrite.execute();
+	};
+	saveLayout.singleClickAction = [&](const FileListWidget::Entry& entry) {
+		saveLayoutName = entry.getDefaultDisplayName();
+	};
+
+	loadLayout.singleClickAction = [&](const FileListWidget::Entry& entry) {
+		manager.loadIniFile = entry.fullName;
+		ImGui::CloseCurrentPopup();
+	};
+}
 
 ImGuiSettings::~ImGuiSettings()
 {
@@ -117,8 +160,6 @@ void ImGuiSettings::setStyle() const
 
 void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 {
-	bool openConfirmPopup = false;
-
 	im::Menu("Settings", [&]{
 		auto& reactor = manager.getReactor();
 		auto& globalSettings = reactor.getGlobalSettings();
@@ -138,15 +179,13 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 					};
 					using enum RenderSettings::ScaleAlgorithm;
 					static constexpr std::array algoEnables = {
-						//                 scanline / blur
-						AlgoEnable{SIMPLE,     true,  true },
-						AlgoEnable{SCALE,      false, false},
-						AlgoEnable{HQ,         false, false},
-						AlgoEnable{HQLITE,     false, false},
-						AlgoEnable{RGBTRIPLET, true,  true },
-						AlgoEnable{TV,         true,  false},
+						AlgoEnable{.algo = SIMPLE,     .hasScanline = true,  .hasBlur = true },
+						AlgoEnable{.algo = SCALE,      .hasScanline = false, .hasBlur = false},
+						AlgoEnable{.algo = HQ,         .hasScanline = false, .hasBlur = false},
+						AlgoEnable{.algo = RGBTRIPLET, .hasScanline = true,  .hasBlur = true },
+						AlgoEnable{.algo = TV,         .hasScanline = true,  .hasBlur = false},
 					};
-					auto it = ranges::find(algoEnables, scaler.getEnum(), &AlgoEnable::algo);
+					auto it = std::ranges::find(algoEnables, scaler.getEnum(), &AlgoEnable::algo);
 					assert(it != algoEnables.end());
 					im::Disabled(!it->hasScanline, [&]{
 						SliderInt("Scanline (%)", renderSettings.getScanlineSetting());
@@ -168,12 +207,13 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 				SliderInt("Glow (%)", renderSettings.getGlowSetting());
 				if (auto* monitor = dynamic_cast<Setting*>(settingsManager.findSetting("monitor_type"))) {
 					ComboBox("Monitor type", *monitor, [](std::string s) {
-						ranges::replace(s, '_', ' ');
+						std::ranges::replace(s, '_', ' ');
 						return s;
 					});
 				}
 			});
 			im::TreeNode("Shape", ImGuiTreeNodeFlags_DefaultOpen, [&]{
+				Checkbox(hotKey, "Full Stretch", renderSettings.getFullStretchSetting());
 				SliderFloat("Horizontal stretch", renderSettings.getHorizontalStretchSetting(), "%.0f");
 				ComboBox("Display deformation", renderSettings.getDisplayDeformSetting());
 			});
@@ -203,9 +243,9 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 			Checkbox(hotKey, "Mute", muteSetting);
 			ImGui::Separator();
 			static constexpr std::array resamplerToolTips = {
-				EnumToolTip{"hq",   "best quality, uses more CPU"},
-				EnumToolTip{"blip", "good speed/quality tradeoff"},
-				EnumToolTip{"fast", "fast but low quality"},
+				EnumToolTip{.value = "hq",   .tip = "best quality, uses more CPU"},
+				EnumToolTip{.value = "blip", .tip = "good speed/quality tradeoff"},
+				EnumToolTip{.value = "fast", .tip = "fast but low quality"},
 			};
 			ComboBox("Resampler", globalSettings.getResampleSetting(), resamplerToolTips);
 			ImGui::Separator();
@@ -235,10 +275,10 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 				}
 				im::Indent([&]{
 					im::Disabled(fastForward != 0, [&]{
-						SliderInt("Speed (%)", speedManager.getSpeedSetting());
+						SliderFloat("Speed (%)", speedManager.getSpeedSetting(), "%.1f", ImGuiSliderFlags_Logarithmic);
 					});
 					im::Disabled(fastForward != 1, [&]{
-						SliderInt("Fast forward speed (%)", speedManager.getFastForwardSpeedSetting());
+						SliderFloat("Fast forward speed (%)", speedManager.getFastForwardSpeedSetting(), "%.1f", ImGuiSliderFlags_Logarithmic);
 					});
 				});
 				Checkbox(hotKey, "Go full speed when loading", globalSettings.getThrottleManager().getFullSpeedLoadingSetting());
@@ -294,9 +334,9 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 		});
 		im::Menu("Input", [&]{
 			static constexpr std::array kbdModeToolTips = {
-				EnumToolTip{"CHARACTER",  "Tries to understand the character you are typing and then attempts to type that character using the current MSX keyboard. May not work very well when using a non-US host keyboard."},
-				EnumToolTip{"KEY",        "Tries to map a key you press to the corresponding MSX key"},
-				EnumToolTip{"POSITIONAL", "Tries to map the keyboard key positions to the MSX keyboard key positions"},
+				EnumToolTip{.value = "CHARACTER",  .tip = "Tries to understand the character you are typing and then attempts to type that character using the current MSX keyboard. May not work very well when using a non-US host keyboard."},
+				EnumToolTip{.value = "KEY",        .tip = "Tries to map a key you press to the corresponding MSX key"},
+				EnumToolTip{.value = "POSITIONAL", .tip = "Tries to map the keyboard key positions to the MSX keyboard key positions"},
 			};
 			if (motherBoard) {
 				const auto& controller = motherBoard->getMSXCommandController();
@@ -307,80 +347,19 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 					ComboBox("Keyboard mapping mode", *mappingModeSetting, kbdModeToolTips);
 				}
 			}
-			ImGui::MenuItem("Configure MSX joysticks...", nullptr, &showConfigureJoystick);
+			ImGui::MenuItem("Configure MSX joysticks", nullptr, &showConfigureJoystick);
+			auto& grabInputSetting = reactor.getInputEventGenerator().getGrabInput();
+			bool grabInput = grabInputSetting.getBoolean();
+			if (auto shortCut = getShortCutForCommand(hotKey, "toggle grabinput");
+				ImGui::MenuItem("Grab input", shortCut.c_str(), &grabInput)) {
+				grabInputSetting.setBoolean(grabInput);
+			}
+			simpleToolTip("Enable this to help you keep the mouse cursor in the MSX window, e.g. when using drawing programs with mouse in windowed mode.");
 		});
 		im::Menu("GUI", [&]{
-			auto getExistingLayouts = [] {
-				std::vector<std::string> names;
-				for (auto context = userDataFileContext("layouts");
-				     const auto& path : context.getPaths()) {
-					foreach_file(path, [&](const std::string& fullName, std::string_view name) {
-						if (name.ends_with(".ini")) {
-							names.emplace_back(fullName);
-						}
-					});
-				}
-				ranges::sort(names, StringOp::caseless{});
-				return names;
-			};
-			auto listExistingLayouts = [&](const std::vector<std::string>& names) {
-				std::optional<std::pair<std::string, std::string>> selectedLayout;
-				im::ListBox("##select-layout", [&]{
-					for (const auto& name : names) {
-						auto displayName = std::string(FileOperations::stripExtension(FileOperations::getFilename(name)));
-						if (ImGui::Selectable(displayName.c_str())) {
-							selectedLayout = std::pair{name, displayName};
-						}
-						im::PopupContextItem([&]{
-							if (ImGui::MenuItem("delete")) {
-								confirmText = strCat("Delete layout: ", displayName);
-								confirmAction = [name]{ FileOperations::unlink(name); };
-								openConfirmPopup = true;
-							}
-						});
-					}
-				});
-				return selectedLayout;
-			};
-			im::Menu("Save layout", [&]{
-				if (auto names = getExistingLayouts(); !names.empty()) {
-					ImGui::TextUnformatted("Existing layouts"sv);
-					if (auto selectedLayout = listExistingLayouts(names)) {
-						const auto& [name, displayName] = *selectedLayout;
-						saveLayoutName = displayName;
-					}
-				}
-				ImGui::TextUnformatted("Enter name:"sv);
-				ImGui::InputText("##save-layout-name", &saveLayoutName);
-				ImGui::SameLine();
-				im::Disabled(saveLayoutName.empty(), [&]{
-					if (ImGui::Button("Save as")) {
-						(void)reactor.getDisplay().getWindowPosition(); // to save up-to-date window position
-						ImGui::CloseCurrentPopup();
-
-						auto filename = FileOperations::parseCommandFileArgument(
-							saveLayoutName, "layouts", "", ".ini");
-						if (FileOperations::exists(filename)) {
-							confirmText = strCat("Overwrite layout: ", saveLayoutName);
-							confirmAction = [filename]{
-								ImGui::SaveIniSettingsToDisk(filename.c_str());
-							};
-							openConfirmPopup = true;
-						} else {
-							ImGui::SaveIniSettingsToDisk(filename.c_str());
-						}
-					}
-				});
-			});
-			im::Menu("Restore layout", [&]{
-				ImGui::TextUnformatted("Select layout"sv);
-				auto names = getExistingLayouts();
-				if (auto selectedLayout = listExistingLayouts(names)) {
-					const auto& [name, displayName] = *selectedLayout;
-					manager.loadIniFile = name;
-					ImGui::CloseCurrentPopup();
-				}
-			});
+			saveLayout.menu("Save layout");
+			loadLayout.menu("Restore layout");
+			ImGui::Separator();
 			im::Menu("Select style", [&]{
 				std::optional<int> newStyle;
 				static constexpr std::array names = {"Dark", "Light", "Classic"}; // must be in sync with setStyle()
@@ -394,14 +373,17 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 					setStyle();
 				}
 			});
-			ImGui::MenuItem("Select font...", nullptr, &showFont);
-			ImGui::MenuItem("Edit shortcuts...", nullptr, &showShortcut);
-		});
-		im::Menu("Misc", [&]{
-			ImGui::MenuItem("Configure OSD icons...", nullptr, &manager.osdIcons->showConfigureIcons);
+			ImGui::MenuItem("Select font", nullptr, &showFont);
+			ImGui::MenuItem("Edit shortcuts", nullptr, &showShortcut);
+			ImGui::MenuItem("Configure OSD icons", nullptr, &manager.osdIcons->showConfigureIcons);
 			ImGui::MenuItem("Fade out menu bar", nullptr, &manager.menuFade);
-			ImGui::MenuItem("Show status bar", nullptr, &manager.statusBarVisible);
-			ImGui::MenuItem("Configure messages...", nullptr, &manager.messages->configureWindow.open);
+			im::Menu("Status bar", [&]{
+				ImGui::Checkbox("Show", &manager.statusBarVisible);
+				im::DisabledIndent(!manager.statusBarVisible, [&]{
+					manager.configStatusBarVisibilityItems();
+				});
+			});
+			ImGui::MenuItem("Configure messages", nullptr, &manager.messages->configureWindow.open);
 		});
 		ImGui::Separator();
 		im::Menu("Advanced", [&]{
@@ -413,7 +395,7 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 				if (dynamic_cast<ReadOnlySetting*>(setting)) continue;
 				settings.push_back(checked_cast<Setting*>(setting));
 			}
-			ranges::sort(settings, StringOp::caseless{}, &Setting::getBaseName);
+			std::ranges::sort(settings, StringOp::caseless{}, &Setting::getBaseName);
 			for (auto* setting : settings) {
 				if (auto* bSetting = dynamic_cast<BooleanSetting*>(setting)) {
 					Checkbox(hotKey, *bSetting);
@@ -436,26 +418,6 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 				}
 			}
 		});
-	});
-
-	const auto confirmTitle = "Confirm##settings";
-	if (openConfirmPopup) {
-		ImGui::OpenPopup(confirmTitle);
-	}
-	im::PopupModal(confirmTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize, [&]{
-		ImGui::TextUnformatted(confirmText);
-
-		bool close = false;
-		if (ImGui::Button("Ok")) {
-			confirmAction();
-			close = true;
-		}
-		ImGui::SameLine();
-		close |= ImGui::Button("Cancel");
-		if (close) {
-			ImGui::CloseCurrentPopup();
-			confirmAction = {};
-		}
 	});
 }
 
@@ -495,7 +457,7 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 		[&](const BooleanJoystickAxis& a) {
 			return strCat(joystickManager.getDisplayName(a.getJoystick()),
 			              " stick axis ", a.getAxis(), ", ",
-			              (a.getDirection() == BooleanJoystickAxis::Direction::POS ? "positive" : "negative"), " direction");
+			              (a.getDirection() == BooleanJoystickAxis::Direction::POS ? "positive"sv : "negative"sv), " direction");
 		}
 	}, input);
 }
@@ -510,10 +472,12 @@ void ImGuiSettings::showMenu(MSXMotherBoard* motherBoard)
 	return (min <= x) && (x <= max);
 }
 
+namespace {
 struct Rectangle {
 	gl::vec2 topLeft;
 	gl::vec2 bottomRight;
 };
+}
 [[nodiscard]] static bool insideRectangle(gl::vec2 mouse, Rectangle r)
 {
 	return between(mouse.x, r.topLeft.x, r.bottomRight.x) &&
@@ -601,7 +565,7 @@ static void drawLetterA(gl::vec2 center)
 	auto tr = [&](gl::vec2 p) { return center + p; };
 	const std::array<ImVec2, 3> lines = { tr({-6, 7}), tr({0, -7}), tr({6, 7}) };
 	auto color = getColor(imColor::TEXT);
-	drawList->AddPolyline(lines.data(), lines.size(), color, 0, thickness);
+	drawList->AddPolyline(lines.data(), narrow<int>(lines.size()), color, 0, thickness);
 	drawList->AddLine(tr({-3, 1}), tr({3, 1}), color, thickness);
 }
 static void drawLetterB(gl::vec2 center)
@@ -610,7 +574,7 @@ static void drawLetterB(gl::vec2 center)
 	auto tr = [&](gl::vec2 p) { return center + p; };
 	const std::array<ImVec2, 4> lines = { tr({1, -7}), tr({-4, -7}), tr({-4, 7}), tr({2, 7}) };
 	auto color = getColor(imColor::TEXT);
-	drawList->AddPolyline(lines.data(), lines.size(), color, 0, thickness);
+	drawList->AddPolyline(lines.data(), narrow<int>(lines.size()), color, 0, thickness);
 	drawList->AddLine(tr({-4, -1}), tr({2, -1}), color, thickness);
 	drawList->AddBezierQuadratic(tr({1, -7}), tr({4, -7}), tr({4, -4}), color, thickness);
 	drawList->AddBezierQuadratic(tr({4, -4}), tr({4, -1}), tr({1, -1}), color, thickness);
@@ -651,7 +615,7 @@ static void drawLetterZ(gl::vec2 center)
 
 namespace msxjoystick {
 
-enum {UP, DOWN, LEFT, RIGHT, TRIG_A, TRIG_B, NUM_BUTTONS};
+enum : uint8_t {UP, DOWN, LEFT, RIGHT, TRIG_A, TRIG_B, NUM_BUTTONS};
 
 static constexpr std::array<zstring_view, NUM_BUTTONS> buttonNames = {
 	"Up", "Down", "Left", "Right", "A", "B" // show in the GUI
@@ -710,11 +674,11 @@ static void draw(gl::vec2 scrnPos, std::span<uint8_t> hovered, int hoveredRow)
 
 namespace joymega {
 
-enum {UP, DOWN, LEFT, RIGHT,
-      TRIG_A, TRIG_B, TRIG_C,
-      TRIG_X, TRIG_Y, TRIG_Z,
-      TRIG_SELECT, TRIG_START,
-      NUM_BUTTONS};
+enum : uint8_t {UP, DOWN, LEFT, RIGHT,
+                TRIG_A, TRIG_B, TRIG_C,
+                TRIG_X, TRIG_Y, TRIG_Z,
+                TRIG_SELECT, TRIG_START,
+                NUM_BUTTONS};
 
 static constexpr std::array<zstring_view, NUM_BUTTONS> buttonNames = { // show in the GUI
 	"Up", "Down", "Left", "Right",
@@ -998,7 +962,7 @@ void ImGuiSettings::paintJoystick(MSXMotherBoard& motherBoard)
 					});
 					ImGui::SameLine();
 					if (numBindings == 0) {
-						ImGui::TextDisabled("no bindings");
+						ImGui::TextDisabledUnformatted("no bindings");
 					} else {
 						size_t lastBindingIndex = numBindings - 1;
 						size_t bindingIndex = 0;
@@ -1113,8 +1077,8 @@ void ImGuiSettings::paintJoystick(MSXMotherBoard& motherBoard)
 			TclObject key(keyNames[popupForKey]);
 			TclObject bindingList = bindings.getDictValue(interp, key);
 
-			unsigned remove = -1u;
-			unsigned counter = 0;
+			auto remove = size_t(-1);
+			size_t counter = 0;
 			for (const auto& b : bindingList) {
 				if (ImGui::Selectable(b.c_str())) {
 					remove = counter;
@@ -1122,7 +1086,7 @@ void ImGuiSettings::paintJoystick(MSXMotherBoard& motherBoard)
 				simpleToolTip(toGuiString(*parseBooleanInput(b), joystickManager));
 				++counter;
 			}
-			if (remove != unsigned(-1)) {
+			if (remove != size_t(-1)) {
 				bindingList.removeListIndex(interp, remove);
 				bindings.setDictValue(interp, key, bindingList);
 				setting->setValue(bindings);
@@ -1141,18 +1105,18 @@ void ImGuiSettings::paintJoystick(MSXMotherBoard& motherBoard)
 void ImGuiSettings::paintFont()
 {
 	im::Window("Select font", &showFont, [&]{
-		auto selectFilename = [&](FilenameSetting& setting, float width) {
-			auto display = [](std::string_view name) {
-				if (name.ends_with(".gz" )) name.remove_suffix(3);
-				if (name.ends_with(".ttf")) name.remove_suffix(4);
-				return std::string(name);
-			};
-			auto current = setting.getString();
+		auto selectFilename = [&](FilenameSetting& fileSetting, IntegerSetting& faceSetting, zstring_view name, float width) {
+			auto currentFile = fileSetting.getString();
+			auto currentFace = faceSetting.getInt();
+
 			ImGui::SetNextItemWidth(width);
-			im::Combo(tmpStrCat("##", setting.getBaseName()).c_str(), display(current).c_str(), [&]{
+			im::Combo(tmpStrCat("##", fileSetting.getBaseName()).c_str(), name.c_str(), [&]{
 				for (const auto& font : getAvailableFonts()) {
-					if (ImGui::Selectable(display(font).c_str(), current == font)) {
-						setting.setString(font);
+					bool isSelected = currentFile == font.filename &&
+					                  currentFace == font.faceIndex;
+					if (ImGui::Selectable(font.displayName.c_str(), isSelected)) {
+						fileSetting.setString(font.filename);
+						faceSetting.setInt(font.faceIndex);
 					}
 				}
 			});
@@ -1176,7 +1140,7 @@ void ImGuiSettings::paintFont()
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextUnformatted("Normal");
 		ImGui::SameLine(pos);
-		selectFilename(manager.fontPropFilename, width);
+		selectFilename(manager.fontPropFilename, manager.fontPropIndex, manager.fontPropName, width);
 		ImGui::SameLine();
 		selectSize(manager.fontPropSize);
 		HelpMarker("You can install more fonts by copying .ttf file(s) to your \"<openmsx>/share/skins\" directory.");
@@ -1185,7 +1149,7 @@ void ImGuiSettings::paintFont()
 		ImGui::TextUnformatted("Monospace");
 		ImGui::SameLine(pos);
 		im::Font(manager.fontMono, [&]{
-			selectFilename(manager.fontMonoFilename, width);
+			selectFilename(manager.fontMonoFilename, manager.fontMonoIndex, manager.fontMonoName, width);
 		});
 		ImGui::SameLine();
 		selectSize(manager.fontMonoSize);
@@ -1306,7 +1270,7 @@ void ImGuiSettings::paintShortcut()
 			ImGui::TableSetupColumn("key");
 
 			const auto& shortcuts = manager.getShortcuts();
-			im::ID_for_range(to_underlying(Shortcuts::ID::NUM), [&](int i) {
+			im::ID_for_range(std::to_underlying(Shortcuts::ID::NUM), [&](int i) {
 				auto id = static_cast<Shortcuts::ID>(i);
 				auto shortcut = shortcuts.getShortcut(id);
 
@@ -1339,20 +1303,41 @@ void ImGuiSettings::paint(MSXMotherBoard* motherBoard)
 	if (showShortcut) paintShortcut();
 }
 
-std::span<const std::string> ImGuiSettings::getAvailableFonts()
+std::span<const ImGuiSettings::FontInfo> ImGuiSettings::getAvailableFonts()
 {
 	if (availableFonts.empty()) {
-		for (const auto& context = systemFileContext();
-		     const auto& path : context.getPaths()) {
+		// collect font files
+		std::vector<std::string> files;
+		const auto& context = systemFileContext();
+		for (const auto& path : context.getPaths()) {
 			foreach_file(FileOperations::join(path, "skins"), [&](const std::string& /*fullName*/, std::string_view name) {
-				if (name.ends_with(".ttf.gz") || name.ends_with(".ttf")) {
-					availableFonts.emplace_back(name);
+				auto nameGz = name.ends_with(".gz") ? name.substr(0, name.size() - 3) : name;
+				if (nameGz.ends_with(".ttf") || nameGz.ends_with(".ttc") || nameGz.ends_with(".otf")) {
+					files.emplace_back(name);
 				}
 			});
 		}
 		// sort and remove duplicates
-		ranges::sort(availableFonts);
-		availableFonts.erase(ranges::unique(availableFonts), end(availableFonts));
+		std::ranges::sort(files);
+		auto u = std::ranges::unique(files);
+		files.erase(u.begin(), u.end());
+
+		// create FontInfo objects
+		for (const auto& file : files) {
+			try {
+				auto resolved = context.resolve(FileOperations::join("skins", file));
+				auto fontData = File(resolved).mmap<uint8_t>();
+				for (auto i : xrange(getNumFaces(manager.freeTypeLibrary, fontData))) {
+					FontInfo info;
+					info.filename = file;
+					info.displayName = manager.getFontDisplayName(fontData, i, file);
+					info.faceIndex = narrow<int>(i);
+					availableFonts.emplace_back(std::move(info));
+				}
+			} catch (MSXException&) {
+				// ignore invalid font files
+			}
+		}
 	}
 	return availableFonts;
 }

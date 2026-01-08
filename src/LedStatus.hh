@@ -1,8 +1,8 @@
 #ifndef LEDSTATUS_HH
 #define LEDSTATUS_HH
 
-#include "ReadOnlySetting.hh"
 #include "RTSchedulable.hh"
+#include "ReadOnlySetting.hh"
 
 #include <array>
 #include <cstdint>
@@ -17,7 +17,7 @@ class Interpreter;
 class LedStatus final : public RTSchedulable
 {
 public:
-	enum Led {
+	enum Led : uint8_t {
 		POWER,
 		CAPS,
 		KANA, // same as CODE LED

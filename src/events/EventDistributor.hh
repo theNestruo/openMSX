@@ -3,11 +3,11 @@
 
 #include "Event.hh"
 
-#include "stl.hh"
-
 #include <array>
-#include <condition_variable>
+#include <cstdint>
 #include <mutex>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace openmsx {
@@ -21,7 +21,7 @@ public:
 	/** Priorities from high to low, higher priority listeners can block
 	  * events for lower priority listeners.
 	  */
-	enum class Priority {
+	enum class Priority : uint8_t {
 		OTHER,
 		HOTKEY_HIGH, // above IMGUI
 		IMGUI,
@@ -29,7 +29,7 @@ public:
 		MSX,
 		LOWEST, // should only be used internally in EventDistributor
 	};
-	friend auto operator<=>(Priority x, Priority y) { return to_underlying(x) <=> to_underlying(y); }
+	friend auto operator<=>(Priority x, Priority y) { return std::to_underlying(x) <=> std::to_underlying(y); }
 
 	explicit EventDistributor(Reactor& reactor);
 
@@ -59,16 +59,11 @@ public:
 	/** This actually delivers the events. It may only be called from the
 	  * main loop in Reactor (and only from the main thread). Also see
 	  * the distributeEvent() method.
+	  * @param timeoutMs If provided, wait up to this many milliseconds for
+	  *        SDL events before processing. Used when emulation is blocked
+	  *        to avoid busy-waiting while remaining responsive to input.
 	  */
-	void deliverEvents();
-
-	/** Sleep for the specified amount of time, but return early when
-	  * (another thread) called the distributeEvent() method.
-	  * @param us Amount of time to sleep, in micro seconds.
-	  * @result true  if we return because time has passed
-	  *         false if we return because distributeEvent() was called
-	  */
-	bool sleep(unsigned us);
+	void deliverEvents(std::optional<int> timeoutMs = std::nullopt);
 
 private:
 	[[nodiscard]] bool isRegistered(EventType type, EventListener* listener) const;
@@ -85,8 +80,6 @@ private:
 	using EventQueue = std::vector<Event>;
 	EventQueue scheduledEvents;
 	std::mutex mutex; // lock data structures
-	std::mutex cvMutex; // lock condition_variable
-	std::condition_variable condition;
 };
 
 } // namespace openmsx

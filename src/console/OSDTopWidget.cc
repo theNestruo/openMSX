@@ -1,7 +1,8 @@
 #include "OSDTopWidget.hh"
-#include "OutputSurface.hh"
-#include "Display.hh"
+
 #include "CliComm.hh"
+#include "Display.hh"
+#include "OutputSurface.hh"
 
 namespace openmsx {
 
@@ -63,7 +64,8 @@ OSDWidget* OSDTopWidget::findByName(std::string_view widgetName)
 
 const OSDWidget* OSDTopWidget::findByName(std::string_view widgetName) const
 {
-	return const_cast<OSDTopWidget*>(this)->findByName(widgetName);
+	auto it = widgetsByName.find(widgetName);
+	return (it != end(widgetsByName)) ? *it : nullptr;
 }
 
 void OSDTopWidget::addName(OSDWidget& widget)

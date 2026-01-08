@@ -1,39 +1,42 @@
 #include "VisibleSurface.hh"
 
+#include "Display.hh"
+#include "GlobalSettings.hh"
+#include "GLContext.hh"
+#include "GLSnow.hh"
+#include "GLUtil.hh"
+#include "OffScreenSurface.hh"
+#include "RenderSettings.hh"
+#include "VideoSystem.hh"
+
 #include "BooleanSetting.hh"
 #include "CliComm.hh"
-#include "Display.hh"
 #include "Event.hh"
 #include "EventDistributor.hh"
 #include "FileContext.hh"
 #include "FloatSetting.hh"
-#include "GLContext.hh"
-#include "GLSnow.hh"
-#include "GLUtil.hh"
 #include "Icon.hh"
 #include "ImGuiLayer.hh"
 #include "InitException.hh"
 #include "InputEventGenerator.hh"
 #include "MemBuffer.hh"
-#include "OffScreenSurface.hh"
 #include "OSDGUILayer.hh"
 #include "PNG.hh"
-#include "RenderSettings.hh"
-#include "VideoSystem.hh"
 
 #include "narrow.hh"
 #include "outer.hh"
-#include "vla.hh"
+#include "small_buffer.hh"
 
 #include "build-info.hh"
 
 #include <imgui.h>
-#include <imgui_impl_sdl2.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_impl_sdl2.h>
 
 #include <bit>
 #include <cassert>
 #include <memory>
+#include <ranges>
 
 namespace openmsx {
 
@@ -43,19 +46,22 @@ VisibleSurface::VisibleSurface(
 		EventDistributor& eventDistributor_,
 		InputEventGenerator& inputEventGenerator_,
 		CliComm& cliComm_,
-		VideoSystem& videoSystem_)
+		VideoSystem& videoSystem_,
+		BooleanSetting& pauseSetting_)
 	: RTSchedulable(rtScheduler_)
 	, display(display_)
 	, eventDistributor(eventDistributor_)
 	, inputEventGenerator(inputEventGenerator_)
 	, cliComm(cliComm_)
 	, videoSystem(videoSystem_)
+	, pauseSetting(pauseSetting_)
 {
 	auto& renderSettings = display.getRenderSettings();
 
 	inputEventGenerator.getGrabInput().attach(*this);
 	renderSettings.getPointerHideDelaySetting().attach(*this);
 	renderSettings.getFullScreenSetting().attach(*this);
+	pauseSetting.attach(*this);
 
 	for (auto type : {EventType::MOUSE_MOTION,
 	                  EventType::MOUSE_BUTTON_DOWN,
@@ -179,6 +185,7 @@ VisibleSurface::~VisibleSurface()
 	inputEventGenerator.getGrabInput().detach(*this);
 	renderSettings.getPointerHideDelaySetting().detach(*this);
 	renderSettings.getFullScreenSetting().detach(*this);
+	pauseSetting.detach(*this);
 }
 
 std::optional<gl::ivec2> VisibleSurface::getWindowPosition() const
@@ -281,7 +288,7 @@ void VisibleSurface::updateCursor()
 {
 	cancelRT();
 	const auto& renderSettings = display.getRenderSettings();
-	grab = !guiActive &&
+	grab = !guiActive && !pauseSetting.getBoolean() &&
 	       (renderSettings.getFullScreen() ||
 	        inputEventGenerator.getGrabInput().getBoolean());
 	if (grab) {
@@ -336,6 +343,16 @@ void VisibleSurface::updateWindowTitle()
 	SDL_SetWindowTitle(window.get(), getDisplay().getWindowTitle().c_str());
 }
 
+std::optional<gl::ivec2> VisibleSurface::getMouseCoord() const
+{
+	if (SDL_GetMouseFocus() != window.get()) return {};
+
+	int mouseX, mouseY;
+	SDL_GetMouseState(&mouseX, &mouseY);
+	return gl::ivec2{mouseX, mouseY};
+}
+
+
 void VisibleSurface::saveScreenshot(const std::string& filename)
 {
 	saveScreenshotGL(*this, filename);
@@ -351,10 +368,8 @@ void VisibleSurface::saveScreenshotGL(
 	MemBuffer<uint32_t> buffer(size_t(w) * size_t(h));
 	glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
 
-	VLA(const uint32_t*, rowPointers, h);
-	for (auto i : xrange(size_t(h))) {
-		rowPointers[h - 1 - i] = &buffer[size_t(w) * i];
-	}
+	small_buffer<const uint32_t*, 1080> rowPointers(std::views::transform(xrange(size_t(h)),
+		[&](auto i) { return &buffer[size_t(w) * (h - 1 - i)]; }));
 
 	PNG::saveRGBA(w, rowPointers, filename);
 }

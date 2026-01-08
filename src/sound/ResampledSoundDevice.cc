@@ -1,9 +1,8 @@
 #include "ResampledSoundDevice.hh"
 
-#include "ResampleTrivial.hh"
-#include "ResampleHQ.hh"
-#include "ResampleLQ.hh"
 #include "ResampleBlip.hh"
+#include "ResampleHQ.hh"
+#include "ResampleTrivial.hh"
 
 #include "EnumSetting.hh"
 #include "GlobalSettings.hh"
@@ -39,7 +38,7 @@ void ResampledSoundDevice::setOutputRate(unsigned /*hostSampleRate*/, double /*s
 }
 
 bool ResampledSoundDevice::updateBuffer(size_t length, float* buffer,
-                                        EmuTime::param time)
+                                        EmuTime time)
 {
 	return algo->generateOutput(buffer, length, time);
 }
@@ -60,7 +59,7 @@ void ResampledSoundDevice::createResampler()
 {
 	const DynamicClock& hostClock = getHostSampleClock();
 	EmuDuration outputPeriod = hostClock.getPeriod();
-	EmuDuration inputPeriod(getEffectiveSpeed() / double(getInputRate()));
+	EmuDuration inputPeriod = EmuDuration::sec(getEffectiveSpeed() / double(getInputRate()));
 	emuClock.reset(hostClock.getTime());
 	emuClock.setPeriod(inputPeriod);
 
@@ -73,13 +72,6 @@ void ResampledSoundDevice::createResampler()
 				algo = std::make_unique<ResampleHQ<1>>(*this, hostClock);
 			} else {
 				algo = std::make_unique<ResampleHQ<2>>(*this, hostClock);
-			}
-			break;
-		case ResampleType::LQ:
-			if (!isStereo()) {
-				algo = ResampleLQ<1>::create(*this, hostClock);
-			} else {
-				algo = ResampleLQ<2>::create(*this, hostClock);
 			}
 			break;
 		case ResampleType::BLIP:

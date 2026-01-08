@@ -1,14 +1,17 @@
 #ifndef VDPVRAM_HH
 #define VDPVRAM_HH
 
-#include "VRAMObserver.hh"
 #include "VDP.hh"
 #include "VDPCmdEngine.hh"
-#include "SimpleDebuggable.hh"
+#include "VRAMObserver.hh"
+
 #include "Ram.hh"
+#include "SimpleDebuggable.hh"
+
 #include "Math.hh"
-#include "openmsx.hh"
+
 #include <cassert>
+#include <cstdint>
 
 namespace openmsx {
 
@@ -117,8 +120,8 @@ can decide for itself how many bytes to read.
 class DummyVRAMObserver final : public VRAMObserver
 {
 public:
-	void updateVRAM(unsigned /*offset*/, EmuTime::param /*time*/) override {}
-	void updateWindow(bool /*enabled*/, EmuTime::param /*time*/) override {}
+	void updateVRAM(unsigned /*offset*/, EmuTime /*time*/) override {}
+	void updateWindow(bool /*enabled*/, EmuTime /*time*/) override {}
 };
 
 /** Specifies an address range in the VRAM.
@@ -144,7 +147,7 @@ public:
 	  * TODO: Only used by dirty checking. Maybe a new dirty checking
 	  *       approach can obsolete this method?
 	  */
-	[[nodiscard]] inline unsigned getMask() const {
+	[[nodiscard]] unsigned getMask() const {
 		assert(isEnabled());
 		return effectiveBaseMask;
 	}
@@ -162,8 +165,8 @@ public:
 	  *       For many tables the number of index bits depends on the
 	  *       display mode anyway.
 	  */
-	inline void setMask(unsigned newBaseMask, unsigned newIndexMask,
-	                    unsigned newSizeMask, EmuTime::param time) {
+	void setMask(unsigned newBaseMask, unsigned newIndexMask,
+	                    unsigned newSizeMask, EmuTime time) {
 		origBaseMask = newBaseMask;
 		newBaseMask &= newSizeMask;
 		if (isEnabled() &&
@@ -181,15 +184,15 @@ public:
 	/** Same as above, but 'sizeMask' doesn't change.
 	 * This is a useful shortcut, because 'sizeMask' rarely changes.
 	 */
-	inline void setMask(unsigned newBaseMask, unsigned newIndexMask,
-	                    EmuTime::param time) {
+	void setMask(unsigned newBaseMask, unsigned newIndexMask,
+	                    EmuTime time) {
 		setMask(newBaseMask, newIndexMask, sizeMask, time);
 	}
 
 	/** Disable this window: no address will be considered inside.
 	  * @param time The moment in emulated time this change occurs.
 	  */
-	inline void disable(EmuTime::param time) {
+	void disable(EmuTime time) {
 		observer->updateWindow(false, time);
 		baseAddr = unsigned(-1);
 	}
@@ -197,7 +200,7 @@ public:
 	/** Is the given index range continuous in VRAM (iow there's no mirroring)
 	  * Only if the range is continuous it's allowed to call getReadArea().
 	  */
-	[[nodiscard]] inline bool isContinuous(unsigned index, unsigned size) const {
+	[[nodiscard]] bool isContinuous(unsigned index, unsigned size) const {
 		assert(isEnabled());
 		unsigned endIndex = index + size - 1;
 		unsigned areaBits = Math::floodRight(index ^ endIndex);
@@ -214,7 +217,7 @@ public:
 	  * 1-bits in the parameter correspond with 'X' in the pattern above.
 	  * Or IOW it tests an aligned-power-of-2-sized region.
 	  */
-	[[nodiscard]] inline bool isContinuous(unsigned mask) const {
+	[[nodiscard]] bool isContinuous(unsigned mask) const {
 		assert(isEnabled());
 		assert((mask & ~indexMask)        == mask);
 		return (mask & effectiveBaseMask) == mask;
@@ -225,9 +228,9 @@ public:
 	  * @param index Index in window
 	  */
 	template<size_t size>
-	[[nodiscard]] inline std::span<const byte, size> getReadArea(unsigned index) const {
+	[[nodiscard]] std::span<const uint8_t, size> getReadArea(unsigned index) const {
 		assert(isContinuous(index, size));
-		return std::span<const byte, size>{
+		return std::span<const uint8_t, size>{
 				&data[effectiveBaseMask & (indexMask | index)],
 				size};
 	}
@@ -241,7 +244,7 @@ public:
 	  *    span1: The block of odd  numbered bytes.
 	  */
 	template<size_t size>
-	[[nodiscard]] inline std::pair<std::span<const byte, size / 2>, std::span<const byte, size / 2>>
+	[[nodiscard]] std::pair<std::span<const uint8_t, size / 2>, std::span<const uint8_t, size / 2>>
 			getReadAreaPlanar(unsigned index) const {
 		assert((index & 1) == 0);
 		assert((size & 1) == 0);
@@ -253,16 +256,16 @@ public:
 		assert((areaBits & ~indexMask)        == areaBits);
 		assert(isEnabled());
 		unsigned addr = effectiveBaseMask & (indexMask | (index >> 1));
-		const byte* ptr0 = &data[addr | 0x00000];
-		const byte* ptr1 = &data[addr | 0x10000];
-		return {std::span<const byte, size / 2>{ptr0, size / 2},
-		        std::span<const byte, size / 2>{ptr1, size / 2}};
+		const uint8_t* ptr0 = &data[addr | 0x00000];
+		const uint8_t* ptr1 = &data[addr | 0x10000];
+		return {std::span<const uint8_t, size / 2>{ptr0, size / 2},
+		        std::span<const uint8_t, size / 2>{ptr1, size / 2}};
 	}
 
 	/** Reads a byte from VRAM in its current state.
 	  * @param index Index in table, with unused bits set to 1.
 	  */
-	[[nodiscard]] inline byte readNP(unsigned index) const {
+	[[nodiscard]] uint8_t readNP(unsigned index) const {
 		assert(isEnabled());
 		return data[effectiveBaseMask & index];
 	}
@@ -270,7 +273,7 @@ public:
 	/** Similar to readNP, but now with planar addressing.
 	  * @param index Index in table, with unused bits set to 1.
 	  */
-	[[nodiscard]] inline byte readPlanar(unsigned index) const {
+	[[nodiscard]] uint8_t readPlanar(unsigned index) const {
 		assert(isEnabled());
 		index = ((index & 1) << 16) | ((index & 0x1FFFE) >> 1);
 		unsigned addr = effectiveBaseMask & index;
@@ -279,7 +282,7 @@ public:
 
 	/** Is there an observer registered for this window?
 	  */
-	[[nodiscard]] inline bool hasObserver() const {
+	[[nodiscard]] bool hasObserver() const {
 		return observer != &dummyObserver;
 	}
 
@@ -288,13 +291,13 @@ public:
 	  * There can be only one observer per window at any given time.
 	  * @param newObserver The observer to register.
 	  */
-	inline void setObserver(VRAMObserver* newObserver) {
+	void setObserver(VRAMObserver* newObserver) {
 		observer = newObserver;
 	}
 
 	/** Unregister the observer of this VRAM window.
 	  */
-	inline void resetObserver() {
+	void resetObserver() {
 		observer = &dummyObserver;
 	}
 
@@ -305,7 +308,7 @@ public:
 	  * @param address The address to test.
 	  * @return true iff the address is inside this window.
 	  */
-	[[nodiscard]] inline bool isInside(unsigned address) const {
+	[[nodiscard]] bool isInside(unsigned address) const {
 		return (address & combiMask) == baseAddr;
 	}
 
@@ -314,7 +317,7 @@ public:
 	  * @param address The address to test.
 	  * @param time The moment in emulated time the change occurs.
 	  */
-	inline void notify(unsigned address, EmuTime::param time) {
+	void notify(unsigned address, EmuTime time) {
 		if (isInside(address)) {
 			observer->updateVRAM(address - baseAddr, time);
 		}
@@ -324,7 +327,7 @@ public:
 	  * For the moment this only happens when switching the VR bit in VDP
 	  * register 8 (in VR=0 mode only 32kB VRAM is addressable).
 	  */
-	void setSizeMask(unsigned newSizeMask, EmuTime::param time) {
+	void setSizeMask(unsigned newSizeMask, EmuTime time) {
 		if (isEnabled()) {
 			setMask(origBaseMask, indexMask, newSizeMask, time);
 		}
@@ -336,7 +339,7 @@ public:
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	[[nodiscard]] inline bool isEnabled() const {
+	[[nodiscard]] bool isEnabled() const {
 		return baseAddr != unsigned(-1);
 	}
 
@@ -352,7 +355,7 @@ private:
 
 	/** Pointer to the entire VRAM data.
 	  */
-	byte* data;
+	uint8_t* data;
 
 	/** Observer associated with this VRAM window.
 	  * It will be called when changes occur within the window.
@@ -403,7 +406,7 @@ public:
 	VDPVRAM& operator=(const VDPVRAM&) = delete;
 	VDPVRAM& operator=(VDPVRAM&&) = delete;
 
-	VDPVRAM(VDP& vdp, unsigned size, EmuTime::param time);
+	VDPVRAM(VDP& vdp, unsigned size, EmuTime time);
 
 	/** Initialize VRAM content to power-up state.
 	 */
@@ -413,7 +416,7 @@ public:
 	  * @param time Moment in emulated time to update VRAM to.
 	  * TODO: Replace this method by VRAMWindow::sync().
 	  */
-	inline void sync(EmuTime::param time) {
+	void sync(EmuTime time) {
 		assert(vdp.isInsideFrame(time));
 		cmdEngine->sync(time);
 	}
@@ -424,7 +427,7 @@ public:
 	  *       Note: "cmdSync", because it checks against read windows, unlike
 	  *       the other sync which checks against the cmd write window.
 	  */
-	inline void cmdWrite(unsigned address, byte value, EmuTime::param time) {
+	void cmdWrite(unsigned address, uint8_t value, EmuTime time) {
 		#ifdef DEBUG
 		// Rewriting history is not allowed.
 		assert(time >= vramTime);
@@ -449,7 +452,7 @@ public:
 	  * @param value The value to write.
 	  * @param time The moment in emulated time this write occurs.
 	  */
-	inline void cpuWrite(unsigned address, byte value, EmuTime::param time) {
+	void cpuWrite(unsigned address, uint8_t value, EmuTime time) {
 		#ifdef DEBUG
 		// Rewriting history is not allowed.
 		assert(time >= vramTime);
@@ -485,7 +488,7 @@ public:
 	  * @param time The moment in emulated time this read occurs.
 	  * @return The VRAM contents at the specified address.
 	  */
-	[[nodiscard]] inline byte cpuRead(unsigned address, EmuTime::param time) {
+	[[nodiscard]] uint8_t cpuRead(unsigned address, EmuTime time) {
 		#ifdef DEBUG
 		// VRAM should never get ahead of CPU.
 		assert(time >= vramTime);
@@ -512,7 +515,7 @@ public:
 	  * @param cmdBit Are VDP commands allowed in non-bitmap mode.
 	  * @param time The moment in emulated time this change occurs.
 	  */
-	void updateDisplayMode(DisplayMode mode, bool cmdBit, EmuTime::param time);
+	void updateDisplayMode(DisplayMode mode, bool cmdBit, EmuTime time);
 
 	/** Used by the VDP to signal display enabled changes.
 	  * Both the regular border start/end and forced blanking by clearing
@@ -520,21 +523,21 @@ public:
 	  * @param enabled The new display enabled state.
 	  * @param time The moment in emulated time this change occurs.
 	  */
-	void updateDisplayEnabled(bool enabled, EmuTime::param time);
+	void updateDisplayEnabled(bool enabled, EmuTime time);
 
 	/** Used by the VDP to signal sprites enabled changes.
 	  * @param enabled The new sprites enabled state.
 	  * @param time The moment in emulated time this change occurs.
 	  */
-	void updateSpritesEnabled(bool enabled, EmuTime::param time);
+	void updateSpritesEnabled(bool enabled, EmuTime time);
 
 	/** Change between VR=0 and VR=1 mode.
 	  * @param mode false->VR=0 true->VR=1
 	  * @param time The moment in emulated time this change occurs.
 	  */
-	void updateVRMode(bool mode, EmuTime::param time);
+	void updateVRMode(bool mode, EmuTime time);
 
-	void setRenderer(Renderer* renderer, EmuTime::param time);
+	void setRenderer(Renderer* renderer, EmuTime time);
 
 	/** Returns the size of VRAM in bytes
 	  */
@@ -544,13 +547,13 @@ public:
 
 	/** Necessary because of circular dependencies.
 	  */
-	inline void setSpriteChecker(SpriteChecker* newSpriteChecker) {
+	void setSpriteChecker(SpriteChecker* newSpriteChecker) {
 		spriteChecker = newSpriteChecker;
 	}
 
 	/** Necessary because of circular dependencies.
 	  */
-	inline void setCmdEngine(VDPCmdEngine* newCmdEngine) {
+	void setCmdEngine(VDPCmdEngine* newCmdEngine) {
 		cmdEngine = newCmdEngine;
 	}
 
@@ -571,7 +574,7 @@ public:
 private:
 	/* Common code of cmdWrite() and cpuWrite()
 	 */
-	inline void writeCommon(unsigned address, byte value, EmuTime::param time) {
+	void writeCommon(unsigned address, uint8_t value, EmuTime time) {
 		#ifdef DEBUG
 		assert(time >= vramTime);
 		vramTime = time;
@@ -617,7 +620,7 @@ private:
 		*/
 	}
 
-	void setSizeMask(EmuTime::param time);
+	void setSizeMask(EmuTime time);
 
 private:
 	/** VDP this VRAM belongs to.
@@ -636,8 +639,8 @@ private:
 	class LogicalVRAMDebuggable final : public SimpleDebuggable {
 	public:
 		explicit LogicalVRAMDebuggable(const VDP& vdp);
-		[[nodiscard]] byte read(unsigned address, EmuTime::param time) override;
-		void write(unsigned address, byte value, EmuTime::param time) override;
+		[[nodiscard]] uint8_t read(unsigned address, EmuTime time) override;
+		void write(unsigned address, uint8_t value, EmuTime time) override;
 	private:
 		unsigned transform(unsigned address);
 	} logicalVRAMDebug;
@@ -648,8 +651,8 @@ private:
 	  */
 	struct PhysicalVRAMDebuggable final : SimpleDebuggable {
 		PhysicalVRAMDebuggable(const VDP& vdp, unsigned actualSize);
-		[[nodiscard]] byte read(unsigned address, EmuTime::param time) override;
-		void write(unsigned address, byte value, EmuTime::param time) override;
+		[[nodiscard]] uint8_t read(unsigned address, EmuTime time) override;
+		void write(unsigned address, uint8_t value, EmuTime time) override;
 	} physicalVRAMDebug;
 
 	// TODO: Renderer field can be removed, if updateDisplayMode

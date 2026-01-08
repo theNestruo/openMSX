@@ -4,15 +4,19 @@
  */
 
 #include "TC8566AF.hh"
+
 #include "DiskDrive.hh"
 #include "RawTrack.hh"
+
 #include "Clock.hh"
 #include "MSXCliComm.hh"
 #include "MSXException.hh"
+
 #include "one_of.hh"
 #include "serialize.hh"
-#include "view.hh"
 #include "xrange.hh"
+
+#include <ranges>
 
 namespace openmsx {
 
@@ -63,18 +67,18 @@ static constexpr uint8_t ST3_FLT = 0x80; // Fault
 
 
 TC8566AF::TC8566AF(Scheduler& scheduler_, std::span<std::unique_ptr<DiskDrive>, 4> drv, MSXCliComm& cliComm_,
-                   EmuTime::param time)
+                   EmuTime time)
 	: Schedulable(scheduler_)
 	, cliComm(cliComm_)
 {
 	setDrqRate(RawTrack::STANDARD_SIZE);
 
-	ranges::copy(view::transform(drv, [](auto& p) { return p.get(); }),
-	             drive);
+	copy_to_range(std::views::transform(drv, [](auto& p) { return p.get(); }),
+	              drive);
 	reset(time);
 }
 
-void TC8566AF::reset(EmuTime::param time)
+void TC8566AF::reset(EmuTime time)
 {
 	for (auto* d : drive) {
 		d->setMotor(false, time);
@@ -120,7 +124,7 @@ uint8_t TC8566AF::peekStatus() const
 	return mainStatus | (dma ? STM_NDM : 0);
 }
 
-uint8_t TC8566AF::readStatus(EmuTime::param time)
+uint8_t TC8566AF::readStatus(EmuTime time)
 {
 	if (delayTime.before(time)) {
 		mainStatus |= STM_RQM;
@@ -136,7 +140,7 @@ void TC8566AF::setDrqRate(unsigned trackLength)
 	delayTime.setFreq(trackLength * DiskDrive::ROTATIONS_PER_SECOND);
 }
 
-uint8_t TC8566AF::peekDataPort(EmuTime::param time) const
+uint8_t TC8566AF::peekDataPort(EmuTime time) const
 {
 	switch (phase) {
 	case Phase::DATA_TRANSFER:
@@ -148,7 +152,7 @@ uint8_t TC8566AF::peekDataPort(EmuTime::param time) const
 	}
 }
 
-uint8_t TC8566AF::readDataPort(EmuTime::param time)
+uint8_t TC8566AF::readDataPort(EmuTime time)
 {
 	//interrupt = false;
 	switch (phase) {
@@ -165,7 +169,7 @@ uint8_t TC8566AF::readDataPort(EmuTime::param time)
 	}
 }
 
-uint8_t TC8566AF::executionPhasePeek(EmuTime::param time) const
+uint8_t TC8566AF::executionPhasePeek(EmuTime time) const
 {
 	switch (command) {
 	case Command::READ_DATA:
@@ -180,7 +184,7 @@ uint8_t TC8566AF::executionPhasePeek(EmuTime::param time) const
 	}
 }
 
-uint8_t TC8566AF::executionPhaseRead(EmuTime::param time)
+uint8_t TC8566AF::executionPhaseRead(EmuTime time)
 {
 	switch (command) {
 	case Command::READ_DATA: {
@@ -271,7 +275,7 @@ uint8_t TC8566AF::resultsPhasePeek() const
 	return 0xff;
 }
 
-uint8_t TC8566AF::resultsPhaseRead(EmuTime::param time)
+uint8_t TC8566AF::resultsPhaseRead(EmuTime time)
 {
 	uint8_t result = resultsPhasePeek();
 	switch (command) {
@@ -315,7 +319,7 @@ uint8_t TC8566AF::resultsPhaseRead(EmuTime::param time)
 	return result;
 }
 
-void TC8566AF::writeControlReg0(uint8_t value, EmuTime::param time)
+void TC8566AF::writeControlReg0(uint8_t value, EmuTime time)
 {
 	drive[3]->setMotor((value & 0x80) != 0, time);
 	drive[2]->setMotor((value & 0x40) != 0, time);
@@ -326,7 +330,7 @@ void TC8566AF::writeControlReg0(uint8_t value, EmuTime::param time)
 	driveSelect = value & 0x03;
 }
 
-void TC8566AF::writeControlReg1(uint8_t value, EmuTime::param /*time*/)
+void TC8566AF::writeControlReg1(uint8_t value, EmuTime /*time*/)
 {
 	if (value & 1) { // TC, terminate multi-sector read/write command
 		if (phase == Phase::DATA_TRANSFER) {
@@ -335,7 +339,7 @@ void TC8566AF::writeControlReg1(uint8_t value, EmuTime::param /*time*/)
 	}
 }
 
-void TC8566AF::writeDataPort(uint8_t value, EmuTime::param time)
+void TC8566AF::writeDataPort(uint8_t value, EmuTime time)
 {
 	switch (phase) {
 	case Phase::IDLE:
@@ -355,7 +359,7 @@ void TC8566AF::writeDataPort(uint8_t value, EmuTime::param time)
 	}
 }
 
-void TC8566AF::idlePhaseWrite(uint8_t value, EmuTime::param time)
+void TC8566AF::idlePhaseWrite(uint8_t value, EmuTime time)
 {
 	using enum Command;
 	command = UNKNOWN;
@@ -426,7 +430,7 @@ void TC8566AF::commandPhase1(uint8_t value)
 	           (drive[driveSelect]->isDiskInserted()   ? ST3_RDY : 0);
 }
 
-EmuTime TC8566AF::locateSector(EmuTime::param time, bool readId)
+EmuTime TC8566AF::locateSector(EmuTime time, bool readId)
 {
 	RawTrack::Sector sectorInfo;
 	int lastIdx = -1;
@@ -478,7 +482,7 @@ EmuTime TC8566AF::locateSector(EmuTime::param time, bool readId)
 	return next;
 }
 
-void TC8566AF::commandPhaseWrite(uint8_t value, EmuTime::param time)
+void TC8566AF::commandPhaseWrite(uint8_t value, EmuTime time)
 {
 	switch (command) {
 	using enum Command;
@@ -603,7 +607,7 @@ void TC8566AF::commandPhaseWrite(uint8_t value, EmuTime::param time)
 }
 
 // read/write-sector, but also read-ID
-void TC8566AF::startReadWriteSector(EmuTime::param time)
+void TC8566AF::startReadWriteSector(EmuTime time)
 {
 	phase = Phase::DATA_TRANSFER;
 	phaseStep = 0;
@@ -648,7 +652,7 @@ void TC8566AF::startReadWriteSector(EmuTime::param time)
 	}
 }
 
-void TC8566AF::initTrackHeader(EmuTime::param time)
+void TC8566AF::initTrackHeader(EmuTime time)
 {
 	try {
 		auto* drv = drive[driveSelect];
@@ -769,7 +773,7 @@ void TC8566AF::doSeek(int n)
 	setSyncPoint(si.time);
 }
 
-void TC8566AF::executeUntil(EmuTime::param time)
+void TC8566AF::executeUntil(EmuTime time)
 {
 	for (auto n : xrange(4)) {
 		if ((seekInfo[n].state != Seek::IDLE) &&
@@ -788,7 +792,7 @@ void TC8566AF::writeSector()
 	drv->flushTrack();
 }
 
-void TC8566AF::executionPhaseWrite(uint8_t value, EmuTime::param time)
+void TC8566AF::executionPhaseWrite(uint8_t value, EmuTime time)
 {
 	auto* drv = drive[driveSelect];
 	switch (command) {
@@ -870,7 +874,7 @@ void TC8566AF::resultPhase(bool readId)
 	//interrupt = true;
 }
 
-void TC8566AF::endCommand(EmuTime::param time)
+void TC8566AF::endCommand(EmuTime time)
 {
 	phase       = Phase::IDLE;
 	mainStatus &= ~(STM_CB | STM_DIO);
@@ -893,7 +897,7 @@ bool TC8566AF::peekDiskChanged(unsigned driveNum) const
 }
 
 
-bool TC8566AF::isHeadLoaded(EmuTime::param time) const
+bool TC8566AF::isHeadLoaded(EmuTime time) const
 {
 	return time < headUnloadTime;
 }
@@ -912,7 +916,7 @@ EmuDuration TC8566AF::getSeekDelay() const
 }
 
 
-static constexpr std::initializer_list<enum_string<TC8566AF::Command>> commandInfo = {
+static constexpr auto commandInfo = std::to_array<enum_string<TC8566AF::Command>>({
 	{ "UNKNOWN",                TC8566AF::Command::UNKNOWN                },
 	{ "READ_DATA",              TC8566AF::Command::READ_DATA              },
 	{ "WRITE_DATA",             TC8566AF::Command::WRITE_DATA             },
@@ -928,23 +932,23 @@ static constexpr std::initializer_list<enum_string<TC8566AF::Command>> commandIn
 	{ "RECALIBRATE",            TC8566AF::Command::RECALIBRATE            },
 	{ "SENSE_INTERRUPT_STATUS", TC8566AF::Command::SENSE_INTERRUPT_STATUS },
 	{ "SPECIFY",                TC8566AF::Command::SPECIFY                },
-	{ "SENSE_DEVICE_STATUS",    TC8566AF::Command::SENSE_DEVICE_STATUS    }
-};
+	{ "SENSE_DEVICE_STATUS",    TC8566AF::Command::SENSE_DEVICE_STATUS    },
+});
 SERIALIZE_ENUM(TC8566AF::Command, commandInfo);
 
-static constexpr std::initializer_list<enum_string<TC8566AF::Phase>> phaseInfo = {
+static constexpr auto phaseInfo = std::to_array<enum_string<TC8566AF::Phase>>({
 	{ "IDLE",         TC8566AF::Phase::IDLE         },
 	{ "COMMAND",      TC8566AF::Phase::COMMAND      },
 	{ "DATATRANSFER", TC8566AF::Phase::DATA_TRANSFER },
-	{ "RESULT",       TC8566AF::Phase::RESULT       }
-};
+	{ "RESULT",       TC8566AF::Phase::RESULT       },
+});
 SERIALIZE_ENUM(TC8566AF::Phase, phaseInfo);
 
-static constexpr std::initializer_list<enum_string<TC8566AF::Seek>> seekInfo = {
+static constexpr auto seekInfo = std::to_array<enum_string<TC8566AF::Seek>>({
 	{ "IDLE",        TC8566AF::Seek::IDLE },
 	{ "SEEK",        TC8566AF::Seek::SEEK },
-	{ "RECALIBRATE", TC8566AF::Seek::RECALIBRATE }
-};
+	{ "RECALIBRATE", TC8566AF::Seek::RECALIBRATE },
+});
 SERIALIZE_ENUM(TC8566AF::Seek, seekInfo);
 
 template<typename Archive>

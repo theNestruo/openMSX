@@ -1,76 +1,60 @@
 #ifdef _WIN32
 
 #include "utf8_checked.hh"
-#include "vla.hh"
 #include "MSXException.hh"
 #include <windows.h>
 
 namespace utf8 {
 
-static bool multiByteToUtf16(zstring_view multiByte, UINT cp, DWORD dwFlags, std::wstring& utf16)
+[[nodiscard]] static std::wstring multiByteToUtf16(std::string_view multiByte, UINT cp, DWORD dwFlags)
 {
-	const char* multiByteA = multiByte.c_str();
-	if (int len = MultiByteToWideChar(cp, dwFlags, multiByteA, -1, nullptr, 0)) {
-		VLA(wchar_t, utf16W, len);
-		len = MultiByteToWideChar(cp, dwFlags, multiByteA, -1, utf16W.data(), len);
-		if (len) {
-			utf16 = utf16W.data();
-			return true;
-		}
-	}
-	return false;
-}
+	if (multiByte.empty()) return {};
 
-static bool utf16ToMultiByte(const std::wstring& utf16, UINT cp, std::string& multiByte)
-{
-	const wchar_t* utf16W = utf16.c_str();
-	if (int len = WideCharToMultiByte(cp, 0, utf16W, -1, nullptr, 0, nullptr, nullptr)) {
-		VLA(char, multiByteA, len);
-		len = WideCharToMultiByte(cp, 0, utf16W, -1, multiByteA.data(), len, nullptr, nullptr);
-		if (len) {
-			multiByte = multiByteA.data();
-			return true;
-		}
+	// Get required size for UTF-16 buffer
+	const char* in = multiByte.data();
+	auto inSize = static_cast<int>(multiByte.size());
+	int outSize = MultiByteToWideChar(cp, dwFlags, in, inSize, nullptr, 0);
+	if (outSize == 0) {
+		throw openmsx::FatalError(
+			"MultiByteToWideChar failed: ", GetLastError());
 	}
-	return false;
-}
 
-std::string utf8ToAnsi(zstring_view utf8)
-{
 	std::wstring utf16;
-	if (!multiByteToUtf16(utf8, CP_UTF8, MB_ERR_INVALID_CHARS, utf16)) {
-		throw openmsx::FatalError(
-			"MultiByteToWideChar failed: ", GetLastError());
-	}
-
-	std::string ansi;
-	if (!utf16ToMultiByte(utf16, CP_ACP, ansi)) {
-		throw openmsx::FatalError(
-			"MultiByteToWideChar failed: ", GetLastError());
-	}
-	return ansi;
-}
-
-std::wstring utf8to16(zstring_view utf8)
-{
-	std::wstring utf16;
-	if (!multiByteToUtf16(utf8, CP_UTF8, MB_ERR_INVALID_CHARS, utf16))
-	{
-		throw openmsx::FatalError(
-			"MultiByteToWideChar failed: ", GetLastError());
-	}
+	utf16.resize_and_overwrite(outSize, [&](wchar_t* out, size_t) -> size_t {
+		return MultiByteToWideChar(cp, dwFlags, in, inSize, out, outSize);
+	});
 	return utf16;
 }
 
-std::string utf16to8(const std::wstring& utf16)
+
+[[nodiscard]] static std::string utf16ToMultiByte(std::wstring_view utf16, UINT cp)
 {
-	std::string utf8;
-	if (!utf16ToMultiByte(utf16, CP_UTF8, utf8))
-	{
+	if (utf16.empty()) return {};
+
+	// Get required size for multiByte buffer
+	const wchar_t* in = utf16.data();
+	auto inSize = static_cast<int>(utf16.size());
+	int outSize = WideCharToMultiByte(cp, 0, in, inSize, nullptr, 0, nullptr, nullptr);
+	if (outSize == 0) {
 		throw openmsx::FatalError(
-			"MultiByteToWideChar failed: ", GetLastError());
+			"WideCharToMultiByte failed: ", GetLastError());
 	}
-	return utf8;
+
+	std::string multiByte;
+	multiByte.resize_and_overwrite(outSize, [&](char* out, size_t) -> size_t {
+		return WideCharToMultiByte(cp, 0, in, inSize, out, outSize, nullptr, nullptr);
+	});
+	return multiByte;
+}
+
+std::wstring utf8to16(std::string_view utf8)
+{
+	return multiByteToUtf16(utf8, CP_UTF8, MB_ERR_INVALID_CHARS);
+}
+
+std::string utf16to8(std::wstring_view utf16)
+{
+	return utf16ToMultiByte(utf16, CP_UTF8);
 }
 
 } // namespace utf8

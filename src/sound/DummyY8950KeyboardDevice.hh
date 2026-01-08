@@ -8,12 +8,12 @@ namespace openmsx {
 class DummyY8950KeyboardDevice final : public Y8950KeyboardDevice
 {
 public:
-	void write(byte data, EmuTime::param time) override;
-	[[nodiscard]] byte read(EmuTime::param time) override;
+	void write(uint8_t data, EmuTime time) override;
+	[[nodiscard]] uint8_t read(EmuTime time) override;
 
-	[[nodiscard]] std::string_view getDescription() const override;
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
+	[[nodiscard]] zstring_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
 };
 
 } // namespace openmsx

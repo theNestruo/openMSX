@@ -1,7 +1,9 @@
 #include "HDImageCLI.hh"
+
 #include "CommandLineParser.hh"
 #include "MSXException.hh"
-#include "ranges.hh"
+
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -9,9 +11,6 @@ namespace openmsx {
 
 namespace {
 	struct IdImage {
-		IdImage(int i, std::string m)
-			: id(i), image(std::move(m)) {} // clang-15 workaround
-
 		int id;
 		std::string image;
 	};
@@ -21,7 +20,7 @@ static std::vector<IdImage> images;
 HDImageCLI::HDImageCLI(CommandLineParser& parser_)
 	: parser(parser_)
 {
-	parser.registerOption("-hda", *this, CommandLineParser::PHASE_BEFORE_MACHINE);
+	parser.registerOption("-hda", *this, CommandLineParser::Phase::BEFORE_MACHINE);
 	// TODO: offer more options in case you want to specify 2 hard disk images?
 }
 
@@ -37,7 +36,7 @@ std::string HDImageCLI::getImageForId(int id)
 	// HD queries image. Return (and clear) the remembered value, or return
 	// an empty string.
 	std::string result;
-	if (auto it = ranges::find(images, id, &IdImage::id);
+	if (auto it = std::ranges::find(images, id, &IdImage::id);
 	    it != end(images)) {
 		result = std::move(it->image);
 		images.erase(it);

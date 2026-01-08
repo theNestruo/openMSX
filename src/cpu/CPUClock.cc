@@ -1,15 +1,16 @@
 #include "CPUClock.hh"
+
 #include "serialize.hh"
 
 namespace openmsx {
 
-CPUClock::CPUClock(EmuTime::param time, Scheduler& scheduler_)
+CPUClock::CPUClock(EmuTime time, Scheduler& scheduler_)
 	: clock(time)
 	, scheduler(scheduler_)
 {
 }
 
-void CPUClock::advanceTime(EmuTime::param time)
+void CPUClock::advanceTime(EmuTime time)
 {
 	remaining = limit;
 	clock.advance(time);

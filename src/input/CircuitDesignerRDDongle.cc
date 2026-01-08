@@ -25,33 +25,33 @@
 namespace openmsx {
 
 // Pluggable
-std::string_view CircuitDesignerRDDongle::getName() const
+zstring_view CircuitDesignerRDDongle::getName() const
 {
 	return "circuit-designer-rd-dongle";
 }
 
-std::string_view CircuitDesignerRDDongle::getDescription() const
+zstring_view CircuitDesignerRDDongle::getDescription() const
 {
 	return "Circuit Designer RD dongle";
 }
 
 void CircuitDesignerRDDongle::plugHelper(
-	Connector& /*connector*/, EmuTime::param /*time*/)
+	Connector& /*connector*/, EmuTime /*time*/)
 {
 }
 
-void CircuitDesignerRDDongle::unplugHelper(EmuTime::param /*time*/)
+void CircuitDesignerRDDongle::unplugHelper(EmuTime /*time*/)
 {
 }
 
 
 // JoystickDevice
-uint8_t CircuitDesignerRDDongle::read(EmuTime::param /*time*/)
+uint8_t CircuitDesignerRDDongle::read(EmuTime /*time*/)
 {
 	return status;
 }
 
-void CircuitDesignerRDDongle::write(uint8_t value, EmuTime::param /*time*/)
+void CircuitDesignerRDDongle::write(uint8_t value, EmuTime /*time*/)
 {
 	if (!(value & WR_PIN7) && (value & WR_PIN6)) {
 		status |=  JOY_UP;

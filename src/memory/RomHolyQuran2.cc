@@ -7,13 +7,16 @@
 // sharing his implementation with us (and pointing us to it).
 
 #include "RomHolyQuran2.hh"
+
 #include "MSXCPU.hh"
 #include "MSXException.hh"
+
 #include "enumerate.hh"
 #include "narrow.hh"
 #include "outer.hh"
-#include "ranges.hh"
 #include "serialize.hh"
+
+#include <algorithm>
 #include <array>
 
 namespace openmsx {
@@ -44,13 +47,13 @@ RomHolyQuran2::RomHolyQuran2(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomHolyQuran2::reset(EmuTime::param /*time*/)
+void RomHolyQuran2::reset(EmuTime /*time*/)
 {
-	ranges::fill(bank, &rom[0]);
+	std::ranges::fill(bank, &rom[0]);
 	decrypt = false;
 }
 
-byte RomHolyQuran2::readMem(word address, EmuTime::param time)
+byte RomHolyQuran2::readMem(uint16_t address, EmuTime time)
 {
 	byte result = RomHolyQuran2::peekMem(address, time);
 	if (!decrypt) [[unlikely]] {
@@ -62,7 +65,7 @@ byte RomHolyQuran2::readMem(word address, EmuTime::param time)
 	return result;
 }
 
-byte RomHolyQuran2::peekMem(word address, EmuTime::param /*time*/) const
+byte RomHolyQuran2::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	if ((0x4000 <= address) && (address < 0xc000)) {
 		unsigned b = (address - 0x4000) >> 13;
@@ -73,7 +76,7 @@ byte RomHolyQuran2::peekMem(word address, EmuTime::param /*time*/) const
 	}
 }
 
-void RomHolyQuran2::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomHolyQuran2::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	// TODO are switch addresses mirrored?
 	if ((0x5000 <= address) && (address < 0x6000)) {
@@ -82,7 +85,7 @@ void RomHolyQuran2::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-const byte* RomHolyQuran2::getReadCacheLine(word address) const
+const byte* RomHolyQuran2::getReadCacheLine(uint16_t address) const
 {
 	if ((0x4000 <= address) && (address < 0xc000)) {
 		return nullptr;
@@ -91,7 +94,7 @@ const byte* RomHolyQuran2::getReadCacheLine(word address) const
 	}
 }
 
-byte* RomHolyQuran2::getWriteCacheLine(word address)
+byte* RomHolyQuran2::getWriteCacheLine(uint16_t address)
 {
 	if ((0x5000 <= address) && (address < 0x6000)) {
 		return nullptr;
@@ -130,12 +133,12 @@ RomHolyQuran2::Blocks::Blocks(const RomHolyQuran2& device_)
 {
 }
 
-byte RomHolyQuran2::Blocks::read(unsigned address)
+unsigned RomHolyQuran2::Blocks::readExt(unsigned address)
 {
-	if ((address < 0x4000) || (address >= 0xc000)) return 255;
+	if ((address < 0x4000) || (address >= 0xc000)) return unsigned(-1);
 	unsigned page = (address - 0x4000) / 0x2000;
 	auto& device = OUTER(RomHolyQuran2, romBlocks);
-	return narrow<byte>((device.bank[page] - &device.rom[0]) / 0x2000);
+	return narrow<unsigned>(device.bank[page] - &device.rom[0]) / 0x2000;
 }
 
 } // namespace openmsx

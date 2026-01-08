@@ -1,7 +1,9 @@
 #include "ROMHunterMk2.hh"
+
 #include "narrow.hh"
-#include "ranges.hh"
 #include "serialize.hh"
+
+#include <algorithm>
 #include <cassert>
 
 /*
@@ -34,10 +36,10 @@ ROMHunterMk2::ROMHunterMk2(const DeviceConfig& config, Rom&& rom_)
 	reset(getCurrentTime());
 }
 
-void ROMHunterMk2::reset(EmuTime::param /*time*/)
+void ROMHunterMk2::reset(EmuTime /*time*/)
 {
 	configReg = 0;
-	ranges::fill(bankRegs, 0);
+	std::ranges::fill(bankRegs, 0);
 	invalidateDeviceRCache(); // flush all to be sure
 }
 
@@ -49,7 +51,7 @@ unsigned ROMHunterMk2::getRamAddr(unsigned addr) const
 	return (bank * 0x2000) + (addr & 0x1FFF);
 }
 
-const byte* ROMHunterMk2::getReadCacheLine(word addr) const
+const byte* ROMHunterMk2::getReadCacheLine(uint16_t addr) const
 {
 	// reads outside [0x4000, 0xC000) return 0xFF
 	if ((addr < 0x4000) || (0xC000 <= addr)) {
@@ -64,17 +66,17 @@ const byte* ROMHunterMk2::getReadCacheLine(word addr) const
 	}
 }
 
-byte ROMHunterMk2::peekMem(word addr, EmuTime::param /*time*/) const
+byte ROMHunterMk2::peekMem(uint16_t addr, EmuTime /*time*/) const
 {
 	return *getReadCacheLine(addr);
 }
 
-byte ROMHunterMk2::readMem(word addr, EmuTime::param time)
+byte ROMHunterMk2::readMem(uint16_t addr, EmuTime time)
 {
 	return peekMem(addr, time); // reads have no side effects
 }
 
-void ROMHunterMk2::writeMem(word addr, byte value, EmuTime::param /*time*/)
+void ROMHunterMk2::writeMem(uint16_t addr, byte value, EmuTime /*time*/)
 {
 	// config register at address 0x3FFF
 	if (addr == 0x3FFF) {
@@ -149,7 +151,7 @@ void ROMHunterMk2::writeMem(word addr, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* ROMHunterMk2::getWriteCacheLine(word /*addr*/)
+byte* ROMHunterMk2::getWriteCacheLine(uint16_t /*addr*/)
 {
 	return nullptr;
 }

@@ -1,17 +1,16 @@
 #include "CasImage.hh"
 
+#include "CliComm.hh"
 #include "File.hh"
 #include "FilePool.hh"
 #include "Filename.hh"
-#include "CliComm.hh"
 #include "MSXException.hh"
 
 #include "narrow.hh"
-#include "ranges.hh"
 #include "stl.hh"
 #include "xrange.hh"
 
-#include <memory>
+#include <algorithm>
 #include <span>
 
 static constexpr std::array<uint8_t, 10> ASCII_HEADER  = { 0xEA,0xEA,0xEA,0xEA,0xEA,0xEA,0xEA,0xEA,0xEA,0xEA };
@@ -47,7 +46,7 @@ static void writeSilence(std::vector<int8_t>& wave, unsigned s)
 
 static bool compare(const uint8_t* p, std::span<const uint8_t> rhs)
 {
-	return ranges::equal(std::span{p, rhs.size()}, rhs);
+	return std::ranges::equal(std::span{p, rhs.size()}, rhs);
 }
 
 namespace MSX_CAS {
@@ -149,20 +148,21 @@ static CasImage::Data convert(std::span<const uint8_t> cas, const std::string& f
 			writeHeader(wave, LONG_HEADER);
 			if ((pos + ASCII_HEADER.size()) <= cas.size()) {
 				// determine file type
+				using enum CassetteImage::FileType;
 				auto type = [&] {
 					if (compare(&cas[pos], ASCII_HEADER)) {
-						return CassetteImage::ASCII;
+						return ASCII;
 					} else if (compare(&cas[pos], BINARY_HEADER)) {
-						return CassetteImage::BINARY;
+						return BINARY;
 					} else if (compare(&cas[pos], BASIC_HEADER)) {
-						return CassetteImage::BASIC;
+						return BASIC;
 					} else {
-						return CassetteImage::UNKNOWN;
+						return UNKNOWN;
 					}
 				}();
 				if (firstFile) firstFileType = type;
 				switch (type) {
-					case CassetteImage::ASCII:
+					case ASCII:
 						writeData(wave, cas, pos);
 						do {
 							pos += CAS_HEADER.size();
@@ -172,8 +172,8 @@ static CasImage::Data convert(std::span<const uint8_t> cas, const std::string& f
 							if (eof) break;
 						} while ((pos + CAS_HEADER.size()) <= cas.size());
 						break;
-					case CassetteImage::BINARY:
-					case CassetteImage::BASIC:
+					case BINARY:
+					case BASIC:
 						writeData(wave, cas, pos);
 						writeSilence(wave, SHORT_SILENCE);
 						writeHeader(wave, SHORT_HEADER);
@@ -248,12 +248,13 @@ static CasImage::Data convert(std::span<const uint8_t> cas, CassetteImage::FileT
 	data.frequency = 4800;
 
 	if (cas.size() >= (header.size() + ASCII_HEADER.size())) {
+		using enum CassetteImage::FileType;
 		if (compare(&cas[header.size()], ASCII_HEADER)) {
-			firstFileType = CassetteImage::ASCII;
+			firstFileType = ASCII;
 		} else if (compare(&cas[header.size()], BINARY_HEADER)) {
-			firstFileType = CassetteImage::BINARY;
+			firstFileType = BINARY;
 		} else if (compare(&cas[header.size()], BASIC_HEADER)) {
-			firstFileType = CassetteImage::BASIC;
+			firstFileType = BASIC;
 		}
 	}
 
@@ -273,10 +274,11 @@ static CasImage::Data convert(std::span<const uint8_t> cas, CassetteImage::FileT
 CasImage::Data CasImage::init(const Filename& filename, FilePool& filePool, CliComm& cliComm)
 {
 	File file(filename);
-	auto cas = file.mmap();
+	auto cas = file.mmap<const uint8_t>();
 
-	auto fileType = CassetteImage::UNKNOWN;
+	auto fileType = CassetteImage::FileType::UNKNOWN;
 	auto result = [&] {
+		// TODO c++23 std::ranges::starts_with()
 		if ((cas.size() >= SVI_CAS::header.size()) &&
 		    (compare(cas.data(), SVI_CAS::header))) {
 			return SVI_CAS::convert(cas, fileType);
@@ -284,7 +286,7 @@ CasImage::Data CasImage::init(const Filename& filename, FilePool& filePool, CliC
 			return MSX_CAS::convert(cas, filename.getOriginal(), cliComm, fileType);
 		}
 	}();
-	setFirstFileType(fileType);
+	setFirstFileType(fileType, filename);
 
 	// conversion successful, now calc sha1sum
 	setSha1Sum(filePool.getSha1Sum(file));
@@ -297,7 +299,7 @@ CasImage::CasImage(const Filename& filename, FilePool& filePool, CliComm& cliCom
 {
 }
 
-int16_t CasImage::getSampleAt(EmuTime::param time) const
+int16_t CasImage::getSampleAt(EmuTime time) const
 {
 	EmuDuration d = time - EmuTime::zero();
 	unsigned pos = d.getTicksAt(data.frequency);

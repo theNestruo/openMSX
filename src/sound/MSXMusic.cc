@@ -1,14 +1,16 @@
 #include "MSXMusic.hh"
+
 #include "CacheLine.hh"
 #include "MSXException.hh"
 #include "serialize.hh"
+
 #include <bit>
 
 namespace openmsx {
 
 // class MSXMusicBase
 
-MSXMusicBase::MSXMusicBase(const DeviceConfig& config)
+MSXMusicBase::MSXMusicBase(DeviceConfig& config)
 	: MSXDevice(config)
 	, rom(getName() + " ROM", "rom", config)
 	, ym2413(getName(), config)
@@ -19,32 +21,32 @@ MSXMusicBase::MSXMusicBase(const DeviceConfig& config)
 	MSXMusicBase::reset(getCurrentTime());
 }
 
-void MSXMusicBase::reset(EmuTime::param time)
+void MSXMusicBase::reset(EmuTime time)
 {
 	ym2413.reset(time);
 }
 
-void MSXMusicBase::writeIO(word port, byte value, EmuTime::param time)
+void MSXMusicBase::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	writePort(port & 1, value, time);
 }
 
-void MSXMusicBase::writePort(bool port, byte value, EmuTime::param time)
+void MSXMusicBase::writePort(bool port, byte value, EmuTime time)
 {
 	ym2413.writePort(port, value, time);
 }
 
-byte MSXMusicBase::peekMem(word address, EmuTime::param /*time*/) const
+byte MSXMusicBase::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	return *MSXMusicBase::getReadCacheLine(address);
 }
 
-byte MSXMusicBase::readMem(word address, EmuTime::param time)
+byte MSXMusicBase::readMem(uint16_t address, EmuTime time)
 {
 	return peekMem(address, time);
 }
 
-const byte* MSXMusicBase::getReadCacheLine(word start) const
+const byte* MSXMusicBase::getReadCacheLine(uint16_t start) const
 {
 	return &rom[start & (rom.size() - 1)];
 }
@@ -71,7 +73,7 @@ INSTANTIATE_SERIALIZE_METHODS(MSXMusicBase);
 
 // class MSXMusic
 
-MSXMusic::MSXMusic(const DeviceConfig& config)
+MSXMusic::MSXMusic(DeviceConfig& config)
 	: MSXMusicBase(config)
 {
 }
@@ -100,19 +102,19 @@ REGISTER_MSXDEVICE(MSXMusic, "MSX-Music");
 //    reads return 0xff
 //  - reading any other memory location returns 0xff
 
-MSXMusicWX::MSXMusicWX(const DeviceConfig& config)
+MSXMusicWX::MSXMusicWX(DeviceConfig& config)
 	: MSXMusicBase(config)
 {
 	reset(getCurrentTime());
 }
 
-void MSXMusicWX::reset(EmuTime::param time)
+void MSXMusicWX::reset(EmuTime time)
 {
 	MSXMusicBase::reset(time);
 	control = 0;
 }
 
-byte MSXMusicWX::peekMem(word address, EmuTime::param time) const
+byte MSXMusicWX::peekMem(uint16_t address, EmuTime time) const
 {
 	if ((0x7FF0 <= address) && (address < 0x8000)) {
 		return control | 0xFC;
@@ -123,12 +125,12 @@ byte MSXMusicWX::peekMem(word address, EmuTime::param time) const
 	}
 }
 
-byte MSXMusicWX::readMem(word address, EmuTime::param time)
+byte MSXMusicWX::readMem(uint16_t address, EmuTime time)
 {
 	return peekMem(address, time);
 }
 
-const byte* MSXMusicWX::getReadCacheLine(word start) const
+const byte* MSXMusicWX::getReadCacheLine(uint16_t start) const
 {
 	if ((0x7FF0 & CacheLine::HIGH) == start) {
 		return nullptr;
@@ -139,7 +141,7 @@ const byte* MSXMusicWX::getReadCacheLine(word start) const
 	}
 }
 
-void MSXMusicWX::writeMem(word address, byte value, EmuTime::param /*time*/)
+void MSXMusicWX::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if ((0x7FF0 <= address) && (address < 0x8000)) {
 		control = value & 3;
@@ -147,7 +149,7 @@ void MSXMusicWX::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* MSXMusicWX::getWriteCacheLine(word start)
+byte* MSXMusicWX::getWriteCacheLine(uint16_t start)
 {
 	if ((0x7FF0 & CacheLine::HIGH) == start) {
 		return nullptr;

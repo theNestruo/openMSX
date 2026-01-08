@@ -1,6 +1,8 @@
 #include "catch.hpp"
 #include "circular_buffer.hh"
+
 #include "xrange.hh"
+
 #include <memory>
 #include <vector>
 
@@ -16,6 +18,9 @@ static void check_buf(
 	CHECK(buf.reserve() == expectedCapacity - expectedSize);
 	CHECK(buf.empty() == (expectedSize == 0));
 	CHECK(buf.full()  == (expectedCapacity == expectedSize));
+
+	auto iter_diff = buf.end() - buf.begin();
+	CHECK(ptrdiff_t(buf.size()) == iter_diff);
 
 	if (expectedSize != 0) {
 		CHECK(buf.front() == expectedElements.front());
@@ -64,6 +69,9 @@ static void check_buf(
 	CHECK(buf.reserve() == expectedCapacity - expectedSize);
 	CHECK(buf.empty() == (expectedSize == 0));
 	CHECK(buf.full()  == (expectedCapacity == expectedSize));
+
+	auto iter_diff = buf.end() - buf.begin();
+	CHECK(ptrdiff_t(buf.size()) == iter_diff);
 
 	if (expectedSize != 0) {
 		CHECK(*buf.front() == expectedElements.front());

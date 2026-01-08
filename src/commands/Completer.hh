@@ -1,9 +1,11 @@
 #ifndef COMPLETER_HH
 #define COMPLETER_HH
 
-#include "inline.hh"
+#include "CompletionCandidate.hh"
 
+#include <algorithm>
 #include <concepts>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -39,20 +41,14 @@ public:
 
 	[[nodiscard]] virtual Interpreter& getInterpreter() const = 0;
 
-	template<typename ITER>
+	template<std::ranges::forward_range Range>
 	static void completeString(std::vector<std::string>& tokens,
-	                           ITER begin, ITER end,
+	                           Range&& possibleValues,
 	                           bool caseSensitive = true);
-	template<typename RANGE>
-	static void completeString(std::vector<std::string>& tokens,
-	                           RANGE&& possibleValues,
-	                           bool caseSensitive = true);
-	template<typename RANGE>
+	template<std::ranges::forward_range Range = std::vector<CompletionCandidate>>
 	static void completeFileName(std::vector<std::string>& tokens,
 	                             const FileContext& context,
-	                             const RANGE& extra);
-	static void completeFileName(std::vector<std::string>& tokens,
-	                             const FileContext& context);
+	                             const Range& extra = {});
 
 	static std::vector<std::string> formatListInColumns(
 		std::span<const std::string_view> input);
@@ -82,79 +78,59 @@ protected:
 	~Completer() = default;
 
 private:
-	static bool equalHead(std::string_view s1, std::string_view s2, bool caseSensitive);
-	template<typename ITER>
-	static std::vector<std::string_view> filter(
-		std::string_view str, ITER begin, ITER end, bool caseSensitive);
-	template<typename RANGE>
-	static std::vector<std::string_view> filter(
-		std::string_view str, RANGE&& range, bool caseSensitive);
-	static bool completeImpl(std::string& str, std::vector<std::string_view> matches,
-	                         bool caseSensitive);
+	static bool equalHead(std::string_view s, const CompletionCandidate& c);
+	template<std::ranges::forward_range Range>
+	static std::vector<CompletionCandidate> filter(
+		std::string_view str, Range&& range, bool caseSensitive = true);
+	static void completeImpl(std::vector<std::string>& tokens, std::vector<CompletionCandidate> matches);
 	static void completeFileNameImpl(std::vector<std::string>& tokens,
 	                                 const FileContext& context,
-	                                 std::vector<std::string_view> matches);
+	                                 std::vector<CompletionCandidate> matches);
 
 	const std::string theName;
 	static inline InterpreterOutput* output = nullptr;
 };
 
-
-template<typename ITER>
-NEVER_INLINE std::vector<std::string_view> Completer::filter(
-	std::string_view str, ITER begin, ITER end, bool caseSensitive)
+template<std::ranges::forward_range Range>
+std::vector<CompletionCandidate> Completer::filter(
+	std::string_view str, Range&& range, bool caseSensitive)
 {
-	std::vector<std::string_view> result;
-	for (auto it = begin; it != end; ++it) {
-		if (equalHead(str, *it, caseSensitive)) {
-			result.push_back(*it);
+	struct MakeCompletionCandidate {
+		CompletionCandidate operator()(std::string_view s, bool caseSensitive) const {
+			return {.text = std::string(s), .caseSensitive = caseSensitive};
+		}
+		CompletionCandidate operator()(CompletionCandidate c, bool /*caseSensitive*/) const {
+			return c;
+		}
+	} make;
+
+	std::vector<CompletionCandidate> result;
+	for (auto&& value : range) {
+		CompletionCandidate c = make(std::forward<decltype(value)>(value), caseSensitive);
+		if (equalHead(str, c)) {
+			result.push_back(std::move(c));
 		}
 	}
 	return result;
 }
 
-template<typename RANGE>
-inline std::vector<std::string_view> Completer::filter(
-	std::string_view str, RANGE&& range, bool caseSensitive)
-{
-	return filter(str, std::begin(range), std::end(range), caseSensitive);
-}
-
-template<typename RANGE>
+template<std::ranges::forward_range Range>
 void Completer::completeString(
 	std::vector<std::string>& tokens,
-	RANGE&& possibleValues,
+	Range&& possibleValues,
 	bool caseSensitive)
 {
-	auto& str = tokens.back();
-	if (completeImpl(str,
-	                 filter(str, std::forward<RANGE>(possibleValues), caseSensitive),
-	                 caseSensitive)) {
-		tokens.emplace_back();
-	}
+	completeImpl(tokens,
+	             filter(tokens.back(), std::forward<Range>(possibleValues), caseSensitive));
 }
 
-template<typename ITER>
-void Completer::completeString(
-	std::vector<std::string>& tokens,
-	ITER begin, ITER end,
-	bool caseSensitive)
-{
-	auto& str = tokens.back();
-	if (completeImpl(str,
-	                 filter(str, begin, end, caseSensitive),
-	                 caseSensitive)) {
-		tokens.emplace_back();
-	}
-}
-
-template<typename RANGE>
+template<std::ranges::forward_range Range>
 void Completer::completeFileName(
 	std::vector<std::string>& tokens,
 	const FileContext& context,
-	const RANGE& extra)
+	const Range& extra)
 {
-	completeFileNameImpl(tokens, context, filter(tokens.back(), extra, true));
+	completeFileNameImpl(tokens, context, filter(tokens.back(), extra));
 }
 
 } // namespace openmsx

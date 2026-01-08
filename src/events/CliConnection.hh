@@ -1,16 +1,15 @@
 #ifndef CLICONNECTION_HH
 #define CLICONNECTION_HH
 
+#include "AdhocCliCommParser.hh"
+#include "CliComm.hh"
 #include "CliListener.hh"
 #include "EventListener.hh"
 #include "Socket.hh"
-#include "CliComm.hh"
-#include "AdhocCliCommParser.hh"
-#include "Poller.hh"
 
+#include "Poller.hh"
 #include "stl.hh"
 
-#include <array>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -129,6 +128,9 @@ public:
 	~SocketConnection() override;
 
 	void output(std::string_view message) override;
+
+	// Closed from the client side.
+	[[nodiscard]] bool isClosed();
 
 private:
 	void close() override;

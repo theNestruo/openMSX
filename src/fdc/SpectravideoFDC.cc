@@ -1,7 +1,9 @@
 #include "SpectravideoFDC.hh"
-#include "CacheLine.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
+#include "CacheLine.hh"
 #include "MSXException.hh"
 #include "serialize.hh"
 
@@ -20,7 +22,7 @@
 
 namespace openmsx {
 
-SpectravideoFDC::SpectravideoFDC(const DeviceConfig& config)
+SpectravideoFDC::SpectravideoFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config, "msxdos")
 	, cpmRom(getName() + " CP/M ROM", "rom", config, "cpm")
 {
@@ -30,12 +32,13 @@ SpectravideoFDC::SpectravideoFDC(const DeviceConfig& config)
 	reset(getCurrentTime());
 }
 
-void SpectravideoFDC::reset(EmuTime::param /*time*/)
+void SpectravideoFDC::reset(EmuTime /*time*/)
 {
 	cpmRomEnabled = true;
+	invalidateDeviceRCache(0x4000, 0x4000);
 }
 
-byte SpectravideoFDC::readMem(word address, EmuTime::param time)
+byte SpectravideoFDC::readMem(uint16_t address, EmuTime time)
 {
 	switch (address & 0x3FFF) {
 	case 0x3FB8:
@@ -55,17 +58,19 @@ byte SpectravideoFDC::readMem(word address, EmuTime::param time)
 	case 0x3FBE: // Software switch to turn on CP/M,
 	             // boot ROM and turn off MSX DOS ROM.
 		cpmRomEnabled = true;
+		invalidateDeviceRCache(0x4000, 0x4000);
 		return 0xFF;
 	case 0x3FBF: // Software switch to turn off CP/M,
 	             // boot ROM and turn on MSX DOS ROM.
 		cpmRomEnabled = false;
+		invalidateDeviceRCache(0x4000, 0x4000);
 		return 0xFF;
 	default:
 		return SpectravideoFDC::peekMem(address, time);
 	}
 }
 
-byte SpectravideoFDC::peekMem(word address, EmuTime::param time) const
+byte SpectravideoFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	switch (address & 0x3FFF) {
 	case 0x3FB8:
@@ -99,7 +104,7 @@ byte SpectravideoFDC::peekMem(word address, EmuTime::param time) const
 	}
 }
 
-const byte* SpectravideoFDC::getReadCacheLine(word start) const
+const byte* SpectravideoFDC::getReadCacheLine(uint16_t start) const
 {
 	if ((start & 0x3FFF & CacheLine::HIGH) == (0x3FB8 & CacheLine::HIGH)) {
 		// FDC at 0x7FB8-0x7FBF, and mirrored in other pages
@@ -115,7 +120,7 @@ const byte* SpectravideoFDC::getReadCacheLine(word start) const
 	}
 }
 
-void SpectravideoFDC::writeMem(word address, byte value, EmuTime::param time)
+void SpectravideoFDC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	switch (address & 0x3FFF) {
 	case 0x3FB8:
@@ -140,16 +145,18 @@ void SpectravideoFDC::writeMem(word address, byte value, EmuTime::param time)
 		break;
 	case 0x3FBE: // Software switch to turn on CP/M,
 	             // boot ROM and turn off MSX DOS ROM.
+		invalidateDeviceRCache(0x4000, 0x4000);
 		cpmRomEnabled = true;
 		break;
 	case 0x3FBF: // Software switch to turn off CP/M,
 	             // boot ROM and turn on MSX DOS ROM.
+		invalidateDeviceRCache(0x4000, 0x4000);
 		cpmRomEnabled = false;
 		break;
 	}
 }
 
-byte* SpectravideoFDC::getWriteCacheLine(word address)
+byte* SpectravideoFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address & 0x3FFF & CacheLine::HIGH) == (0x3FB8 & CacheLine::HIGH)) {
 		// FDC at 0x7FB8-0x7FBF - mirrored

@@ -1,13 +1,15 @@
 #ifndef IMGUI_SETTINGS_HH
 #define IMGUI_SETTINGS_HH
 
+#include "FileListWidget.hh"
 #include "ImGuiPart.hh"
+#include "ImGuiUtils.hh"
+#include "freetype_utils.hh"
 
 #include "Shortcuts.hh"
 
 #include "EventListener.hh"
 
-#include <functional>
 #include <span>
 #include <string>
 #include <vector>
@@ -17,7 +19,7 @@ namespace openmsx {
 class ImGuiSettings final : public ImGuiPart, private EventListener
 {
 public:
-	using ImGuiPart::ImGuiPart;
+	explicit ImGuiSettings(ImGuiManager& manager);
 	~ImGuiSettings();
 
 	[[nodiscard]] zstring_view iniName() const override { return "settings"; }
@@ -39,7 +41,12 @@ private:
 	void paintShortcut();
 	void paintEditShortcut();
 
-	std::span<const std::string> getAvailableFonts();
+	struct FontInfo {
+		std::string filename;
+		std::string displayName;
+		int faceIndex = 0;
+	};
+	std::span<const FontInfo> getAvailableFonts();
 
 private:
 	bool showConfigureJoystick = false;
@@ -55,10 +62,11 @@ private:
 	int selectedStyle = -1; // no style loaded yet
 	std::string saveLayoutName;
 
-	std::string confirmText;
-	std::function<void()> confirmAction;
+	FileListWidget saveLayout;
+	FileListWidget loadLayout;
+	ConfirmDialog confirmOverwrite;
 
-	std::vector<std::string> availableFonts;
+	std::vector<FontInfo> availableFonts;
 
 	static constexpr auto persistentElements = std::tuple{
 		PersistentElement{"style", &ImGuiSettings::selectedStyle},

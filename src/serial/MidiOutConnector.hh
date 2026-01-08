@@ -17,14 +17,14 @@ public:
 	[[nodiscard]] MidiOutDevice& getPluggedMidiOutDev() const;
 
 	// Connector
-	[[nodiscard]] std::string_view getDescription() const override;
-	[[nodiscard]] std::string_view getClass() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
+	[[nodiscard]] zstring_view getClass() const override;
 
 	// SerialDataInterface
 	void setDataBits(DataBits bits) override;
 	void setStopBits(StopBits bits) override;
 	void setParityBit(bool enable, Parity parity) override;
-	void recvByte(byte value, EmuTime::param time) override;
+	void recvByte(uint8_t value, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

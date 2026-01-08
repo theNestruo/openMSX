@@ -8,11 +8,11 @@ namespace openmsx {
 class MSXMultiDevice : public MSXDevice
 {
 public:
-	explicit MSXMultiDevice(const HardwareConfig& hwConf);
+	explicit MSXMultiDevice(HardwareConfig& hwConf);
 
-	void reset(EmuTime::param time) override;
-	void powerUp(EmuTime::param time) override;
-	void powerDown(EmuTime::param time) override;
+	void reset(EmuTime time) override;
+	void powerUp(EmuTime time) override;
+	void powerDown(EmuTime time) override;
 };
 
 } // namespace openmsx

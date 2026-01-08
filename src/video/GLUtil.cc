@@ -5,7 +5,6 @@
 #include "FileException.hh"
 #include "InitException.hh"
 
-#include "vla.hh"
 #include "Version.hh"
 
 #include <bit>
@@ -13,6 +12,8 @@
 #include <iostream>
 
 using namespace openmsx;
+
+using namespace std::literals;
 
 namespace gl {
 
@@ -157,22 +158,14 @@ void Shader::init(GLenum type, std::string_view header, std::string_view filenam
 		source += "#version 110\n";
 	}
 	source += header;
-	try {
-		File file(systemFileContext().resolve(tmpStrCat("shaders/", filename)));
-		auto mmap = file.mmap();
-		source.append(std::bit_cast<const char*>(mmap.data()),
-		              mmap.size());
-	} catch (FileException& e) {
-		std::cerr << "Cannot find shader: " << e.getMessage() << '\n';
-		handle = 0;
-		return;
-	}
+	auto mmap = File(systemFileContext().resolve(tmpStrCat("shaders/", filename)))
+	           .mmap<const char>();
+	source.append(std::bit_cast<const char*>(mmap.data()), mmap.size());
 
 	// Allocate shader handle.
 	handle = glCreateShader(type);
 	if (handle == 0) {
-		std::cerr << "Failed to allocate shader\n";
-		return;
+		throw MSXException("Failed to allocate shader");
 	}
 
 	// Set shader source.
@@ -181,16 +174,25 @@ void Shader::init(GLenum type, std::string_view header, std::string_view filenam
 
 	// Compile shader and print any errors and warnings.
 	glCompileShader(handle);
-	const bool ok = isOK();
+
+	GLint compileStatus = GL_FALSE;
+	glGetShaderiv(handle, GL_COMPILE_STATUS, &compileStatus);
+	bool ok = compileStatus == GL_TRUE;
+
 	GLint infoLogLength = 0;
 	glGetShaderiv(handle, GL_INFO_LOG_LENGTH, &infoLogLength);
 	// note: the null terminator is included, so empty string has length 1
 	if (!ok || (!Version::RELEASE && infoLogLength > 1)) {
-		VLA(GLchar, infoLog, infoLogLength);
+		std::string infoLog(infoLogLength - 1, '\0');
 		glGetShaderInfoLog(handle, infoLogLength, nullptr, infoLog.data());
-		std::cerr << (ok ? "Warning" : "Error") << "(s) compiling shader \""
-		          << filename << "\":\n"
-			  << (infoLogLength > 1 ? infoLog.data() : "(no details available)\n");
+		auto message = strCat((ok ? "Warning"sv : "Error"sv),
+			"(s) compiling shader \"", filename, "\":\n",
+			(infoLogLength > 1 ? infoLog.data() : "(no details available)\n"));
+		if (ok) {
+			std::cerr << message;
+		} else {
+			throw MSXException(message);
+		}
 	}
 }
 
@@ -199,37 +201,24 @@ Shader::~Shader()
 	glDeleteShader(handle); // ok to delete '0'
 }
 
-bool Shader::isOK() const
-{
-	if (handle == 0) return false;
-	GLint compileStatus = GL_FALSE;
-	glGetShaderiv(handle, GL_COMPILE_STATUS, &compileStatus);
-	return compileStatus == GL_TRUE;
-}
-
 
 // class ShaderProgram
 
-void ShaderProgram::allocate()
+ShaderProgram::ShaderProgram()
+	: handle(glCreateProgram())
 {
-	handle = glCreateProgram();
 	if (handle == 0) {
-		std::cerr << "Failed to allocate program\n";
+		throw MSXException("Failed to allocate program");
 	}
 }
 
-void ShaderProgram::reset()
+ShaderProgram::~ShaderProgram()
 {
-	// ok to delete '0', but see comment in Texture::reset()
-	if (handle) {
-		glDeleteProgram(handle);
-		handle = 0;
-	}
+	glDeleteProgram(handle);
 }
 
 bool ShaderProgram::isOK() const
 {
-	if (handle == 0) return false;
 	GLint linkStatus = GL_FALSE;
 	glGetProgramiv(handle, GL_LINK_STATUS, &linkStatus);
 	return linkStatus == GL_TRUE;
@@ -237,33 +226,28 @@ bool ShaderProgram::isOK() const
 
 void ShaderProgram::attach(const Shader& shader)
 {
-	// Sanity check on this program.
-	if (handle == 0) return;
-
-	// Sanity check on the shader.
-	if (!shader.isOK()) return;
-
-	// Attach it.
 	glAttachShader(handle, shader.handle);
 }
 
 void ShaderProgram::link()
 {
-	// Sanity check on this program.
-	if (handle == 0) return;
-
 	// Link the program and print any errors and warnings.
 	glLinkProgram(handle);
 	const bool ok = isOK();
+
 	GLint infoLogLength = 0;
 	glGetProgramiv(handle, GL_INFO_LOG_LENGTH, &infoLogLength);
 	// note: the null terminator is included, so empty string has length 1
 	if (!ok || (!Version::RELEASE && infoLogLength > 1)) {
-		VLA(GLchar, infoLog, infoLogLength);
+		std::string infoLog(infoLogLength - 1, '\0');
 		glGetProgramInfoLog(handle, infoLogLength, nullptr, infoLog.data());
-		fprintf(stderr, "%s(s) linking shader program:\n%s\n",
-			ok ? "Warning" : "Error",
-			infoLogLength > 1 ? infoLog.data() : "(no details available)\n");
+		auto message = strCat((ok ? "Warning" : "Error"), "(s) linking shader program:\n",
+			(infoLogLength > 1 ? infoLog.data() : "(no details available)\n"));
+		if (ok) {
+			std::cerr << message;
+		} else {
+			throw MSXException(message);
+		}
 	}
 }
 
@@ -294,10 +278,10 @@ void ShaderProgram::validate() const
 	GLint infoLogLength = 0;
 	glGetProgramiv(handle, GL_INFO_LOG_LENGTH, &infoLogLength);
 	// note: the null terminator is included, so empty string has length 1
-	VLA(GLchar, infoLog, infoLogLength);
+	std::string infoLog(infoLogLength - 1, '\0');
 	glGetProgramInfoLog(handle, infoLogLength, nullptr, infoLog.data());
 	std::cout << "Validate "
-	          << ((validateStatus == GL_TRUE) ? "OK" : "FAIL")
+	          << ((validateStatus == GL_TRUE) ? "OK"sv : "FAIL"sv)
 	          << ": " << infoLog.data() << '\n';
 }
 

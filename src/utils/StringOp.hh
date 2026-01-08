@@ -3,10 +3,13 @@
 
 #include "IterableBitSet.hh"
 #include "stringsp.hh"
+
 #include <algorithm>
 #include <charconv>
 #include <concepts>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <iomanip>
 #include <limits>
 #include <optional>
@@ -15,7 +18,8 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
-#if defined(__APPLE__)
+
+#ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
@@ -75,14 +79,12 @@ namespace StringOp
 
 	//[[nodiscard]] std::vector<std::string_view> split(std::string_view str, char chars);
 
-	enum class EmptyParts {
+	enum class EmptyParts : uint8_t {
 		KEEP,  // "a,b,,c" -> "a", "b", "", "c"
 		REMOVE // "a,b,,c" -> "a", "b", "c"       BUT  ",,a,b" -> "", "a", "b"  (keeps one empty part in front)
 	};
 	template<EmptyParts keepOrRemove = EmptyParts::KEEP, typename Separators>
 	[[nodiscard]] inline auto split_view(std::string_view str, Separators separators) {
-		struct Sentinel {};
-
 		struct Iterator {
 			using value_type      = std::string_view;
 			using difference_type = ptrdiff_t;
@@ -114,14 +116,14 @@ namespace StringOp
 			Iterator operator++(int) { auto copy = *this; ++(*this); return copy; }
 
 			[[nodiscard]] bool operator==(const Iterator&) const = default;
-			[[nodiscard]] bool operator==(Sentinel) const { return str.empty(); }
+			[[nodiscard]] bool operator==(std::default_sentinel_t) const { return str.empty(); }
 
 		private:
 			static bool isSeparator(char c, char separators) {
 				return c == separators;
 			}
 			static bool isSeparator(char c, std::string_view separators) {
-				return separators.find(c) != std::string_view::npos;
+				return separators.contains(c);
 			}
 
 			void next_p() {
@@ -129,7 +131,7 @@ namespace StringOp
 				while ((p < str.size()) && !isSeparator(str[p], separators)) ++p;
 			}
 
-			std::string_view::size_type skipSeparators(std::string_view::size_type pos) const {
+			[[nodiscard]] std::string_view::size_type skipSeparators(std::string_view::size_type pos) const {
 				if (keepOrRemove == EmptyParts::REMOVE) {
 					while ((pos < str.size()) && isSeparator(str[pos], separators)) ++pos;
 				}
@@ -142,14 +144,14 @@ namespace StringOp
 			Separators separators;
 		};
 		static_assert(std::forward_iterator<Iterator>);
-		static_assert(std::sentinel_for<Sentinel, Iterator>);
+		static_assert(std::sentinel_for<std::default_sentinel_t, Iterator>);
 
 		struct Splitter {
 			std::string_view str;
 			Separators separators;
 
 			[[nodiscard]] auto begin() const { return Iterator{str, separators}; }
-			[[nodiscard]] auto end()   const { return Sentinel{}; }
+			[[nodiscard]] auto end()   const { return std::default_sentinel_t{}; }
 		};
 
 		return Splitter{str, separators};
@@ -180,13 +182,12 @@ namespace StringOp
 
 	[[nodiscard]] inline bool containsCaseInsensitive(std::string_view haystack, std::string_view needle)
 	{
-		return std::search(haystack.begin(), haystack.end(),
-		                   needle.begin(), needle.end(),
-		                   [](char x, char y) { return toupper(x) == toupper(y); })
-			!= haystack.end();
+		return !std::ranges::search(haystack, needle,
+		                   [](char x, char y) { return toupper(x) == toupper(y); }
+		        ).empty();
 	}
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
 	[[nodiscard]] std::string fromCFString(CFStringRef str);
 #endif
 
@@ -194,8 +195,8 @@ namespace StringOp
 	[[nodiscard]] std::optional<T> stringToBase(std::string_view s)
 	{
 		T result = {}; // dummy init to avoid warning
-		auto b = s.data();
-		auto e = s.data() + s.size();
+		const auto* b = s.data();
+		const auto* e = s.data() + s.size();
 		if (auto [p, ec] = std::from_chars(b, e, result, BASE);
 		    (ec == std::errc()) && (p == e)) {
 			return result;
@@ -243,6 +244,41 @@ namespace StringOp
 			}
 		}
 	}
+
+	#if 0
+	// Doesn't work yet in MacOS :(
+	template<std::floating_point T>
+	[[nodiscard]] std::optional<T> stringTo(std::string_view s)
+	{
+		T result{}; // dummy init
+		const char* b = s.data();
+		const char* e = s.data() + s.size();
+		if (auto [p, ec] = std::from_chars(b, e, result);
+		    (ec == std::errc{}) && (p == e)) {
+			return result;
+		}
+		return std::nullopt;
+	}
+	#else
+	template<typename T>
+		requires std::is_same_v<T, double>
+	[[nodiscard]] std::optional<T> stringTo(std::string_view s)
+	{
+		// strtod expects a null-terminated string
+		char buf[128];
+		if (s.size() >= sizeof(buf)) return std::nullopt;
+		memcpy(buf, s.data(), s.size());
+		buf[s.size()] = '\0';
+
+		errno = 0;
+		char* end = nullptr;
+		double value = strtod(buf, &end);
+
+		if (errno != 0) return std::nullopt;
+		if (end != (buf + s.size())) return std::nullopt;
+		return value;
+	}
+	#endif
 }
 
 #endif

@@ -2,21 +2,21 @@
 
 namespace openmsx {
 
-std::string_view DummyAudioInputDevice::getDescription() const
+zstring_view DummyAudioInputDevice::getDescription() const
 {
 	return {};
 }
 
 void DummyAudioInputDevice::plugHelper(Connector& /*connector*/,
-                                       EmuTime::param /*time*/)
+                                       EmuTime /*time*/)
 {
 }
 
-void DummyAudioInputDevice::unplugHelper(EmuTime::param /*time*/)
+void DummyAudioInputDevice::unplugHelper(EmuTime /*time*/)
 {
 }
 
-int16_t DummyAudioInputDevice::readSample(EmuTime::param /*time*/)
+int16_t DummyAudioInputDevice::readSample(EmuTime /*time*/)
 {
 	return 0; // silence
 }

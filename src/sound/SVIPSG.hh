@@ -1,9 +1,11 @@
 #ifndef SVIPSG_HH
 #define SVIPSG_HH
 
-#include "MSXDevice.hh"
 #include "AY8910.hh"
 #include "AY8910Periphery.hh"
+
+#include "MSXDevice.hh"
+
 #include <array>
 
 namespace openmsx {
@@ -16,19 +18,19 @@ public:
 	explicit SVIPSG(const DeviceConfig& config);
 	~SVIPSG() override;
 
-	void reset(EmuTime::param time) override;
-	void powerDown(EmuTime::param time) override;
-	[[nodiscard]] byte readIO(word port, EmuTime::param time) override;
-	[[nodiscard]] byte peekIO(word port, EmuTime::param time) const override;
-	void writeIO(word port, byte value, EmuTime::param time) override;
+	void reset(EmuTime time) override;
+	void powerDown(EmuTime time) override;
+	[[nodiscard]] byte readIO(uint16_t port, EmuTime time) override;
+	[[nodiscard]] byte peekIO(uint16_t port, EmuTime time) const override;
+	void writeIO(uint16_t port, byte value, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
 	// AY8910Periphery: port A input, port B output
-	[[nodiscard]] byte readA(EmuTime::param time) override;
-	void writeB(byte value, EmuTime::param time) override;
+	[[nodiscard]] byte readA(EmuTime time) override;
+	void writeB(byte value, EmuTime time) override;
 
 private:
 	std::array<JoystickPortIf*, 2> ports;

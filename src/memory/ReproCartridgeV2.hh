@@ -1,10 +1,11 @@
 #ifndef REPROCARTRIDGEV2_HH
 #define REPROCARTRIDGEV2_HH
 
-#include "MSXRom.hh"
 #include "AmdFlash.hh"
-#include "SCC.hh"
+#include "MSXRom.hh"
+
 #include "AY8910.hh"
+#include "SCC.hh"
 
 #include <array>
 
@@ -13,26 +14,26 @@ namespace openmsx {
 class ReproCartridgeV2 final : public MSXRom
 {
 public:
-	ReproCartridgeV2(const DeviceConfig& config, Rom&& rom);
+	ReproCartridgeV2(DeviceConfig& config, Rom&& rom);
 	~ReproCartridgeV2() override;
 
-	void powerUp(EmuTime::param time) override;
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word address) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	void powerUp(EmuTime time) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t address) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 
-	void writeIO(word port, byte value, EmuTime::param time) override;
+	void writeIO(uint16_t port, byte value, EmuTime time) override;
 
-	void setVolume(EmuTime::param time, byte value);
+	void setVolume(EmuTime time, byte value);
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	[[nodiscard]] bool isSCCAccess(word addr) const;
+	[[nodiscard]] bool isSCCAccess(uint16_t addr) const;
 	[[nodiscard]] unsigned getFlashAddr(unsigned addr) const;
 
 private:

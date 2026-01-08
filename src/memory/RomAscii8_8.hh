@@ -2,22 +2,24 @@
 #define ROMASCII8_8_HH
 
 #include "RomBlocks.hh"
+
 #include <array>
+#include <cstdint>
 
 namespace openmsx {
 
 class RomAscii8_8 final : public Rom8kBBlocks
 {
 public:
-	enum class SubType { ASCII8_8, KOEI_8, KOEI_32, WIZARDRY, ASCII8_2, ASCII8_32 };
+	enum class SubType : uint8_t { ASCII8_8, KOEI_8, KOEI_32, WIZARDRY, ASCII8_2, ASCII8_32 };
 	RomAscii8_8(const DeviceConfig& config,
 	            Rom&& rom, SubType subType);
 
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word address) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t address) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

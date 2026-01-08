@@ -1,41 +1,42 @@
 #include "Display.hh"
 
-#include "RendererFactory.hh"
 #include "ImGuiManager.hh"
 #include "Layer.hh"
 #include "OutputSurface.hh"
+#include "RendererFactory.hh"
 #include "VideoLayer.hh"
 #include "VideoSystem.hh"
 #include "VideoSystemChangeListener.hh"
 
 #include "BooleanSetting.hh"
-#include "CommandException.hh"
-#include "EventDistributor.hh"
-#include "Event.hh"
-#include "FileOperations.hh"
-#include "FileContext.hh"
 #include "CliComm.hh"
-#include "Timer.hh"
-#include "IntegerSetting.hh"
+#include "CommandException.hh"
 #include "EnumSetting.hh"
-#include "Reactor.hh"
-#include "MSXMotherBoard.hh"
+#include "Event.hh"
+#include "EventDistributor.hh"
+#include "FileContext.hh"
+#include "FileOperations.hh"
 #include "HardwareConfig.hh"
+#include "IntegerSetting.hh"
+#include "MSXMotherBoard.hh"
+#include "Reactor.hh"
 #include "TclArgParser.hh"
-#include "XMLElement.hh"
+#include "Timer.hh"
 #include "Version.hh"
+#include "XMLElement.hh"
 
+#include "join.hh"
 #include "narrow.hh"
 #include "outer.hh"
-#include "ranges.hh"
 #include "stl.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
 
+#include "build-info.hh"
+
+#include <algorithm>
 #include <array>
 #include <cassert>
-
-using std::string;
 
 namespace openmsx {
 
@@ -49,7 +50,7 @@ Display::Display(Reactor& reactor_)
 {
 	frameDurationSum = 0;
 	repeat(NUM_FRAME_DURATIONS, [&] {
-		frameDurations.addFront(20);
+		frameDurations.push_front(20);
 		frameDurationSum += 20;
 	});
 	prevTimeStamp = Timer::getTime();
@@ -83,9 +84,8 @@ void Display::createVideoSystem()
 	assert(!videoSystem);
 	assert(currentRenderer == RenderSettings::RendererID::UNINITIALIZED);
 	assert(!switchInProgress);
-	currentRenderer = renderSettings.getRenderer();
 	switchInProgress = true;
-	doRendererSwitch();
+	doRendererSwitch(renderSettings.getRenderer());
 }
 
 VideoSystem& Display::getVideoSystem()
@@ -125,7 +125,7 @@ void Display::detach(VideoSystemChangeListener& listener)
 
 Layer* Display::findActiveLayer() const
 {
-	auto it = ranges::find_if(layers, &Layer::isActive);
+	auto it = std::ranges::find_if(layers, &Layer::isActive);
 	return (it != layers.end()) ? *it : nullptr;
 }
 
@@ -162,8 +162,8 @@ bool Display::signalEvent(const Event& event)
 				reactor.getEventDistributor().distributeEvent(FrameDrawnEvent());
 			}
 		},
-		[&](const SwitchRendererEvent& /*e*/) {
-			doRendererSwitch(); // might throw
+		[&](const SwitchRendererEvent& e) {
+			doRendererSwitch(e.getRenderer()); // might throw
 		},
 		[&](const MachineLoadedEvent& /*e*/) {
 			videoSystem->updateWindowTitle();
@@ -193,7 +193,6 @@ bool Display::signalEvent(const Event& event)
 				//  the renderFrozen flag is still false
 				repaint();
 				bool lost = evt.event == SDL_WINDOWEVENT_FOCUS_LOST;
-				ad_printf("Setting renderFrozen to %d", lost);
 				renderFrozen = lost;
 			}
 		},
@@ -202,9 +201,9 @@ bool Display::signalEvent(const Event& event)
 	return false;
 }
 
-string Display::getWindowTitle()
+std::string Display::getWindowTitle()
 {
-	string title = Version::full();
+	std::string title = Version::full();
 	if (!Version::RELEASE) {
 		strAppend(title, " [", BUILD_FLAVOUR, ']');
 	}
@@ -270,27 +269,26 @@ void Display::checkRendererSwitch()
 	}
 	auto newRenderer = renderSettings.getRenderer();
 	if (newRenderer != currentRenderer) {
-		currentRenderer = newRenderer;
 		// don't do the actual switching in the Tcl callback
 		// it seems creating and destroying Settings (= Tcl vars)
 		// causes problems???
 		switchInProgress = true;
-		reactor.getEventDistributor().distributeEvent(SwitchRendererEvent());
+		reactor.getEventDistributor().distributeEvent(SwitchRendererEvent(newRenderer));
 	}
 }
 
-void Display::doRendererSwitch()
+void Display::doRendererSwitch(RenderSettings::RendererID newRenderer)
 {
 	assert(switchInProgress);
 
 	bool success = false;
 	while (!success) {
 		try {
-			doRendererSwitch2();
+			doRendererSwitch2(newRenderer);
 			success = true;
 		} catch (MSXException& e) {
 			auto& rendererSetting = renderSettings.getRendererSetting();
-			string errorMsg = strCat(
+			std::string errorMsg = strCat(
 				"Couldn't activate renderer ",
 				rendererSetting.getString(),
 				": ", e.getMessage());
@@ -312,13 +310,14 @@ void Display::doRendererSwitch()
 	switchInProgress = false;
 }
 
-void Display::doRendererSwitch2()
+void Display::doRendererSwitch2(RenderSettings::RendererID newRenderer)
 {
 	for (auto& l : listeners) {
 		l->preVideoSystemChange();
 	}
 
 	resetVideoSystem();
+	currentRenderer = newRenderer;
 	videoSystem = RendererFactory::createVideoSystem(reactor);
 
 	for (auto& l : listeners) {
@@ -353,8 +352,8 @@ void Display::repaintImpl()
 	auto now = Timer::getTime();
 	auto duration = now - prevTimeStamp;
 	prevTimeStamp = now;
-	frameDurationSum += duration - frameDurations.removeBack();
-	frameDurations.addFront(duration);
+	frameDurationSum += duration - frameDurations.pop_back();
+	frameDurations.push_front(duration);
 
 	// TODO maybe revisit this later (and/or simplify other calls to repaintDelayed())
 	// This ensures a minimum framerate for ImGui
@@ -389,7 +388,7 @@ void Display::repaintDelayed(uint64_t delta)
 void Display::addLayer(Layer& layer)
 {
 	auto z = layer.getZ();
-	auto it = ranges::find_if(layers, [&](const Layer* l) { return l->getZ() > z; });
+	auto it = std::ranges::find_if(layers, [&](const Layer* l) { return l->getZ() > z; });
 	layers.insert(it, &layer);
 	layer.setDisplay(*this);
 }
@@ -403,7 +402,7 @@ void Display::updateZ(Layer& layer)
 {
 	auto oldPos = rfind_unguarded(layers, &layer);
 	auto z = layer.getZ();
-	auto newPos = ranges::find_if(layers, [&](const Layer* l) { return l->getZ() >= z; });
+	auto newPos = std::ranges::find_if(layers, [&](const Layer* l) { return l->getZ() >= z; });
 
 	if (oldPos == newPos) {
 		return;
@@ -418,7 +417,7 @@ void Display::updateZ(Layer& layer)
 // ScreenShotCmd
 
 Display::ScreenShotCmd::ScreenShotCmd(CommandController& commandController_)
-	: Command(commandController_, "screenshot")
+	: Command(commandController_, "openmsx::internal_screenshot")
 {
 }
 
@@ -426,26 +425,19 @@ void Display::ScreenShotCmd::execute(std::span<const TclObject> tokens, TclObjec
 {
 	std::string_view prefix = "openmsx";
 	bool rawShot = false;
-	bool msxOnly = false;
 	bool doubleSize = false;
 	bool withOsd = false;
+	std::string size;
 	std::array info = {
 		valueArg("-prefix", prefix),
 		flagArg("-raw", rawShot),
-		flagArg("-msxonly", msxOnly),
-		flagArg("-doublesize", doubleSize),
-		flagArg("-with-osd", withOsd)
+		flagArg("-doublesize", doubleSize), // bwcompat, alias for -size 640
+		flagArg("-with-osd", withOsd),
+		valueArg("-size", size)
 	};
 	auto arguments = parseTclArgs(getInterpreter(), tokens.subspan(1), info);
 
 	auto& display = OUTER(Display, screenShotCmd);
-	if (msxOnly) {
-		display.getCliComm().printWarning(
-			"The -msxonly option has been deprecated and will "
-			"be removed in a future release. Instead, use the "
-			"-raw option for the same effect.");
-		rawShot = true;
-	}
 	if (doubleSize && !rawShot) {
 		throw CommandException("-doublesize option can only be used in "
 		                       "combination with -raw");
@@ -453,6 +445,28 @@ void Display::ScreenShotCmd::execute(std::span<const TclObject> tokens, TclObjec
 	if (rawShot && withOsd) {
 		throw CommandException("-with-osd cannot be used in "
 		                       "combination with -raw");
+	}
+	if (!size.empty()) {
+		if (!rawShot) {
+			throw CommandException("-size option can only be used in "
+			                       "combination with -raw");
+		}
+		static constexpr std::array<std::string_view, 3> validSizes = { "auto", "320", "640" };
+		if (!contains(validSizes, size)) {
+			throw CommandException(strCat("-size option must specify one of: ", join(validSizes, ", ")));
+		}
+		if (doubleSize) {
+			throw CommandException("Only specify either -size or -doublesize");
+		}
+	}
+
+	// backwards compatiblity
+	if (doubleSize) {
+		size = "640";
+	}
+	// default size for raw
+	if (rawShot && size.empty()) {
+		size = "auto";
 	}
 
 	std::string_view fname;
@@ -466,7 +480,7 @@ void Display::ScreenShotCmd::execute(std::span<const TclObject> tokens, TclObjec
 	default:
 		throw SyntaxError();
 	}
-	string filename = FileOperations::parseCommandFileArgument(
+	std::string filename = FileOperations::parseCommandFileArgument(
 		fname, SCREENSHOT_DIR, prefix, SCREENSHOT_EXTENSION);
 
 	if (!rawShot) {
@@ -484,7 +498,7 @@ void Display::ScreenShotCmd::execute(std::span<const TclObject> tokens, TclObjec
 			throw CommandException(
 				"Current renderer doesn't support taking screenshots.");
 		}
-		unsigned height = doubleSize ? 480 : 240;
+		std::optional<unsigned> height = size == "auto" ? std::nullopt : size == "640" ? std::optional(480) : std::optional(240);
 		try {
 			videoLayer->takeRawScreenShot(height, filename);
 		} catch (MSXException& e) {
@@ -493,32 +507,12 @@ void Display::ScreenShotCmd::execute(std::span<const TclObject> tokens, TclObjec
 		}
 	}
 
-	display.getCliComm().printInfo("Screen saved to ", filename);
 	result = filename;
 }
 
-string Display::ScreenShotCmd::help(std::span<const TclObject> /*tokens*/) const
+std::string Display::ScreenShotCmd::help(std::span<const TclObject> /*tokens*/) const
 {
-	// Note: -no-sprites and -guess-name options are implemented in Tcl.
-	// TODO: find a way to extend the help and completion for a command
-	// when extending it in Tcl
-	return "screenshot                   Write screenshot to file \"openmsxNNNN.png\"\n"
-	       "screenshot <filename>        Write screenshot to indicated file\n"
-	       "screenshot -prefix foo       Write screenshot to file \"fooNNNN.png\"\n"
-	       "screenshot -raw              320x240 raw screenshot (of MSX screen only)\n"
-	       "screenshot -raw -doublesize  640x480 raw screenshot (of MSX screen only)\n"
-	       "screenshot -with-osd         Include OSD elements in the screenshot\n"
-	       "screenshot -no-sprites       Don't include sprites in the screenshot\n"
-	       "screenshot -guess-name       Guess the name of the running software and use it as prefix\n";
-}
-
-void Display::ScreenShotCmd::tabCompletion(std::vector<string>& tokens) const
-{
-	using namespace std::literals;
-	static constexpr std::array extra = {
-		"-prefix"sv, "-raw"sv, "-doublesize"sv, "-with-osd"sv, "-no-sprites"sv, "-guess-name"sv,
-	};
-	completeFileName(tokens, userFileContext(), extra);
+	return "This is a low-level internal command, you probably want to use 'screenshot' instead.";
 }
 
 
@@ -536,7 +530,7 @@ void Display::FpsInfoTopic::execute(std::span<const TclObject> /*tokens*/,
 	result = display.getFps();
 }
 
-string Display::FpsInfoTopic::help(std::span<const TclObject> /*tokens*/) const
+std::string Display::FpsInfoTopic::help(std::span<const TclObject> /*tokens*/) const
 {
 	return "Returns the current rendering speed in frames per second.";
 }

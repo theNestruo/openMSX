@@ -1,8 +1,9 @@
 #ifndef RASTERIZER_HH
 #define RASTERIZER_HH
 
-#include "EmuTime.hh"
 #include "DisplayMode.hh"
+
+#include "EmuTime.hh"
 
 namespace openmsx {
 
@@ -16,6 +17,10 @@ public:
 
 	/** See VDP::getPostProcessor(). */
 	[[nodiscard]] virtual PostProcessor* getPostProcessor() const = 0;
+
+	/** See VDP::getWorkingFrame() and VDP::getLastFrame() */
+	[[nodiscard]] virtual const RawFrame* getWorkingFrame() const = 0;
+	[[nodiscard]] virtual const RawFrame* getLastFrame() const = 0;
 
 	/** Will the output of this Rasterizer be displayed?
 	  * There is no point in producing a frame that will not be displayed.
@@ -31,7 +36,7 @@ public:
 	/** Indicates the start of a new frame.
 	  * The rasterizer can fetch per-frame settings from the VDP.
 	  */
-	virtual void frameStart(EmuTime::param time) = 0;
+	virtual void frameStart(EmuTime time) = 0;
 
 	/** Indicates the end of the current frame.
 	  * The rasterizer can perform image post processing.
@@ -54,10 +59,10 @@ public:
 	/** Changes the background color.
 	  * @param index Palette index of the new background color.
 	  */
-	virtual void setBackgroundColor(byte index) = 0;
+	virtual void setBackgroundColor(uint8_t index) = 0;
 
 	virtual void setHorizontalAdjust(int adjust) = 0;
-	virtual void setHorizontalScrollLow(byte scroll) = 0;
+	virtual void setHorizontalScrollLow(uint8_t scroll) = 0;
 	virtual void setBorderMask(bool masked) = 0;
 	virtual void setTransparency(bool enabled) = 0;
 	virtual void setSuperimposeVideoFrame(const RawFrame* videoSource) = 0;

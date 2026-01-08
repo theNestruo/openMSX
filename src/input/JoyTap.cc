@@ -1,10 +1,12 @@
 #include "JoyTap.hh"
+
 #include "PluggingController.hh"
-#include "enumerate.hh"
 #include "serialize.hh"
+
+#include "enumerate.hh"
 #include "strCat.hh"
+
 #include <array>
-#include <memory>
 
 namespace openmsx {
 
@@ -14,7 +16,7 @@ JoyTap::JoyTap(PluggingController& pluggingController_, std::string name_)
 {
 }
 
-void JoyTap::createPorts(std::string_view description, EmuTime::param time)
+void JoyTap::createPorts(std::string_view description, EmuTime time)
 {
 	for (auto [i, slave] : enumerate(slaves)) {
 		slave.emplace(
@@ -25,22 +27,22 @@ void JoyTap::createPorts(std::string_view description, EmuTime::param time)
 	}
 }
 
-std::string_view JoyTap::getDescription() const
+zstring_view JoyTap::getDescription() const
 {
 	return "MSX Joy Tap device";
 }
 
-std::string_view JoyTap::getName() const
+zstring_view JoyTap::getName() const
 {
 	return name;
 }
 
-void JoyTap::plugHelper(Connector& /*connector*/, EmuTime::param time)
+void JoyTap::plugHelper(Connector& /*connector*/, EmuTime time)
 {
 	createPorts("Joy Tap port", time);
 }
 
-void JoyTap::unplugHelper(EmuTime::param time)
+void JoyTap::unplugHelper(EmuTime time)
 {
 	for (auto& s : slaves) {
 		s->unplug(time);
@@ -48,7 +50,7 @@ void JoyTap::unplugHelper(EmuTime::param time)
 	}
 }
 
-uint8_t JoyTap::read(EmuTime::param time)
+uint8_t JoyTap::read(EmuTime time)
 {
 	uint8_t value = 255;
 	for (auto& s : slaves) {
@@ -57,7 +59,7 @@ uint8_t JoyTap::read(EmuTime::param time)
 	return value;
 }
 
-void JoyTap::write(uint8_t value, EmuTime::param time)
+void JoyTap::write(uint8_t value, EmuTime time)
 {
 	for (auto& s : slaves) {
 		s->write(value, time);

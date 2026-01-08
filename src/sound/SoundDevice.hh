@@ -70,7 +70,7 @@ public:
 	};
 	[[nodiscard]] AmplificationFactors getAmplificationFactor() const {
 		auto f = getAmplificationFactorImpl();
-		return {f * softwareVolumeLeft, f * softwareVolumeRight};
+		return {.left = f * softwareVolumeLeft, .right = f * softwareVolumeRight};
 	}
 
 	/** Change the 'software volume' of this sound device.
@@ -83,11 +83,20 @@ public:
 	  *
 	  * This method allows to change that per-chip volume.
 	  */
-	void setSoftwareVolume(float volume, EmuTime::param time);
-	void setSoftwareVolume(float left, float right, EmuTime::param time);
+	void setSoftwareVolume(float volume, EmuTime time);
+	void setSoftwareVolume(float left, float right, EmuTime time);
 
 	void recordChannel(unsigned channel, const Filename& filename);
 	void muteChannel  (unsigned channel, bool muted);
+
+	/** Change the balance of a single channel.
+	 * @param channel [0, numChannels)
+	 * @param balance [-1, +1], -1: fully left, 0: center, +1: fully right
+	 *                 The sum of the energy of the left and right channel is kept constant.
+	 * NOTE: after calling setBalance() a number of times you must also call postSetBalance() once.
+	 */
+	void setBalance(unsigned channel, float balance);
+	virtual void postSetBalance();
 
 	/** Query the last generated audio signal for a specific channel.
 	  * The length of this buffer is fixed (for a specific sound device),
@@ -161,7 +170,7 @@ protected:
 	void unregisterSound();
 
 	/** @see Mixer::updateStream */
-	void updateStream(EmuTime::param time);
+	void updateStream(EmuTime time);
 
 	void setInputRate(unsigned sampleRate) { inputSampleRate = sampleRate; }
 	[[nodiscard]] unsigned getInputRate() const { return inputSampleRate; }
@@ -193,7 +202,7 @@ public: // Will be called by Mixer:
 	  * buffer has enough space to hold them.
 	  */
 	[[nodiscard]] virtual bool updateBuffer(size_t length, float* buffer,
-	                                        EmuTime::param time) = 0;
+	                                        EmuTime time) = 0;
 
 protected:
 	/** Adds a number of samples that all have the same value.
@@ -240,6 +249,10 @@ protected:
 	[[nodiscard]] double getEffectiveSpeed() const;
 
 private:
+	struct Balance { // amplitude multiplication factors
+		float left, right;
+	};
+
 	MSXMixer& mixer;
 	const std::string name;
 	const static_string_view description;
@@ -252,7 +265,7 @@ private:
 	const unsigned numChannels;
 	const unsigned stereo;
 	unsigned numRecordChannels = 0;
-	std::array<int,  MAX_CHANNELS> channelBalance;
+	std::array<Balance,  MAX_CHANNELS> channelBalance;
 	std::array<bool, MAX_CHANNELS> channelMuted;
 	bool balanceCenter = true;
 

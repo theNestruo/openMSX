@@ -1,4 +1,5 @@
 #include "MSXResetStatusRegister.hh"
+
 #include "serialize.hh"
 
 namespace openmsx {
@@ -10,22 +11,22 @@ MSXResetStatusRegister::MSXResetStatusRegister(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void MSXResetStatusRegister::reset(EmuTime::param /*time*/)
+void MSXResetStatusRegister::reset(EmuTime /*time*/)
 {
 	status = inverted ? 0xFF : 0x00;
 }
 
-byte MSXResetStatusRegister::readIO(word port, EmuTime::param time)
+byte MSXResetStatusRegister::readIO(uint16_t port, EmuTime time)
 {
 	return peekIO(port, time);
 }
 
-byte MSXResetStatusRegister::peekIO(word /*port*/, EmuTime::param /*time*/) const
+byte MSXResetStatusRegister::peekIO(uint16_t /*port*/, EmuTime /*time*/) const
 {
 	return status;
 }
 
-void MSXResetStatusRegister::writeIO(word /*port*/, byte value, EmuTime::param /*time*/)
+void MSXResetStatusRegister::writeIO(uint16_t /*port*/, byte value, EmuTime /*time*/)
 {
 	if (inverted) {
 		status = value | 0x7F;

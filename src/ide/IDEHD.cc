@@ -1,14 +1,17 @@
 #include "IDEHD.hh"
-#include "MSXException.hh"
+
 #include "DeviceConfig.hh"
+#include "DiskManipulator.hh"
+#include "MSXException.hh"
 #include "MSXMotherBoard.hh"
 #include "Reactor.hh"
-#include "DiskManipulator.hh"
+#include "serialize.hh"
+
 #include "endian.hh"
 #include "narrow.hh"
-#include "serialize.hh"
 #include "strCat.hh"
 #include "xrange.hh"
+
 #include <cassert>
 
 namespace openmsx {
@@ -88,7 +91,7 @@ void IDEHD::writeBlockComplete(AlignedBuffer& buf, unsigned count)
 	}
 }
 
-void IDEHD::executeCommand(byte cmd)
+void IDEHD::executeCommand(uint8_t cmd)
 {
 	if (0x10 <= cmd && cmd < 0x20) {
 		// Recalibrate

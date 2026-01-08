@@ -97,14 +97,17 @@
 //-----------------------------------------------------------------------------
 
 #include "SCC.hh"
+
 #include "DeviceConfig.hh"
+
 #include "cstd.hh"
 #include "enumerate.hh"
 #include "outer.hh"
-#include "ranges.hh"
 #include "serialize.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
+
+#include <algorithm>
 #include <array>
 #include <cmath>
 
@@ -119,7 +122,7 @@ static constexpr auto calcDescription(SCC::Mode mode)
 }
 
 SCC::SCC(const std::string& name_, const DeviceConfig& config,
-         EmuTime::param time, Mode mode)
+         EmuTime time, Mode mode)
 	: ResampledSoundDevice(
 		config.getMotherBoard(), name_, calcDescription(mode), 5, INPUT_RATE, false)
 	, debuggable(config.getMotherBoard(), getName())
@@ -127,7 +130,7 @@ SCC::SCC(const std::string& name_, const DeviceConfig& config,
 	, currentMode(mode)
 {
 	// Make valgrind happy
-	ranges::fill(orgPeriod, 0);
+	std::ranges::fill(orgPeriod, 0);
 
 	powerUp(time);
 	registerSound(config);
@@ -138,7 +141,7 @@ SCC::~SCC()
 	unregisterSound();
 }
 
-void SCC::powerUp(EmuTime::param time)
+void SCC::powerUp(EmuTime time)
 {
 	// Power on values, tested by enen (log from IRC #openmsx):
 	//
@@ -154,7 +157,7 @@ void SCC::powerUp(EmuTime::param time)
 
 	// Initialize waveforms (initialize before volumes)
 	for (auto& w1 : wave) {
-		ranges::fill(w1, ~0);
+		std::ranges::fill(w1, ~0);
 	}
 	// Initialize volume (initialize this before period)
 	for (auto i : xrange(5)) {
@@ -162,7 +165,7 @@ void SCC::powerUp(EmuTime::param time)
 	}
 	// Actual initial value is difficult to measure, assume zero
 	// (initialize before period)
-	ranges::fill(pos, 0);
+	std::ranges::fill(pos, 0);
 
 	// Initialize period (sets members orgPeriod, period, incr, count, out)
 	for (auto i : xrange(2 * 5)) {
@@ -170,7 +173,7 @@ void SCC::powerUp(EmuTime::param time)
 	}
 }
 
-void SCC::reset(EmuTime::param /*time*/)
+void SCC::reset(EmuTime /*time*/)
 {
 	if (currentMode != Mode::Real) {
 		setMode(Mode::Compatible);
@@ -190,7 +193,7 @@ void SCC::setMode(Mode newMode)
 	currentMode = newMode;
 }
 
-uint8_t SCC::readMem(uint8_t addr, EmuTime::param time)
+uint8_t SCC::readMem(uint8_t addr, EmuTime time)
 {
 	// Deform-register locations:
 	//   SCC_Real:       0xE0..0xFF
@@ -203,7 +206,7 @@ uint8_t SCC::readMem(uint8_t addr, EmuTime::param time)
 	return peekMem(addr, time);
 }
 
-uint8_t SCC::peekMem(uint8_t address, EmuTime::param time) const
+uint8_t SCC::peekMem(uint8_t address, EmuTime time) const
 {
 	switch (currentMode) {
 	case Mode::Real:
@@ -246,7 +249,7 @@ uint8_t SCC::peekMem(uint8_t address, EmuTime::param time) const
 	}
 }
 
-uint8_t SCC::readWave(unsigned channel, unsigned address, EmuTime::param time) const
+uint8_t SCC::readWave(unsigned channel, unsigned address, EmuTime time) const
 {
 	if (!rotate[channel]) {
 		return wave[channel][address & 0x1F];
@@ -282,7 +285,7 @@ uint8_t SCC::getFreqVol(unsigned address) const
 	}
 }
 
-void SCC::writeMem(uint8_t address, uint8_t value, EmuTime::param time)
+void SCC::writeMem(uint8_t address, uint8_t value, EmuTime time)
 {
 	updateStream(time);
 
@@ -368,7 +371,7 @@ void SCC::writeWave(unsigned channel, unsigned address, uint8_t value)
 	}
 }
 
-void SCC::setFreqVol(unsigned address, uint8_t value, EmuTime::param time)
+void SCC::setFreqVol(unsigned address, uint8_t value, EmuTime time)
 {
 	address &= 0x0F; // region is visible twice
 	if (address < 0x0A) {
@@ -411,7 +414,7 @@ void SCC::setFreqVol(unsigned address, uint8_t value, EmuTime::param time)
 	}
 }
 
-void SCC::setDeformReg(uint8_t value, EmuTime::param time)
+void SCC::setDeformReg(uint8_t value, EmuTime time)
 {
 	if (value == deformValue) {
 		return;
@@ -428,12 +431,12 @@ void SCC::setDeformRegHelper(uint8_t value)
 	}
 	switch (value & 0xC0) {
 	case 0x00:
-		ranges::fill(rotate, false);
-		ranges::fill(readOnly, false);
+		std::ranges::fill(rotate, false);
+		std::ranges::fill(readOnly, false);
 		break;
 	case 0x40:
-		ranges::fill(rotate, true);
-		ranges::fill(readOnly, true);
+		std::ranges::fill(rotate, true);
+		std::ranges::fill(readOnly, true);
 		break;
 	case 0x80:
 		for (auto i : xrange(3)) {
@@ -505,7 +508,7 @@ SCC::Debuggable::Debuggable(MSXMotherBoard& motherBoard_, const std::string& nam
 {
 }
 
-uint8_t SCC::Debuggable::read(unsigned address, EmuTime::param time)
+uint8_t SCC::Debuggable::read(unsigned address, EmuTime time)
 {
 	const auto& scc = OUTER(SCC, debuggable);
 	if (address < 0xA0) {
@@ -522,7 +525,7 @@ uint8_t SCC::Debuggable::read(unsigned address, EmuTime::param time)
 	}
 }
 
-void SCC::Debuggable::write(unsigned address, uint8_t value, EmuTime::param time)
+void SCC::Debuggable::write(unsigned address, uint8_t value, EmuTime time)
 {
 	auto& scc = OUTER(SCC, debuggable);
 	if (address < 0xA0) {
@@ -540,11 +543,11 @@ void SCC::Debuggable::write(unsigned address, uint8_t value, EmuTime::param time
 }
 
 
-static constexpr std::initializer_list<enum_string<SCC::Mode>> chipModeInfo = {
+static constexpr auto chipModeInfo = std::to_array<enum_string<SCC::Mode>>({
 	{ "Real",       SCC::Mode::Real       },
 	{ "Compatible", SCC::Mode::Compatible },
 	{ "Plus",       SCC::Mode::Plus   },
-};
+});
 SERIALIZE_ENUM(SCC::Mode, chipModeInfo);
 
 template<typename Archive>
@@ -582,7 +585,7 @@ void SCC::serialize(Archive& ar, unsigned /*version*/)
 		//  as an unwanted side-effect, so (de)serialize those later
 		// Don't use current time, but instead use deformTimer, to
 		// avoid changing the value of deformTimer.
-		EmuTime::param time = deformTimer.getTime();
+		EmuTime time = deformTimer.getTime();
 		for (auto channel : xrange(5)) {
 			unsigned per = orgPeriod[channel];
 			setFreqVol(2 * channel + 0, (per & 0x0FF) >> 0, time);

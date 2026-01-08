@@ -6,7 +6,9 @@
 #include "OutputSurface.hh"
 #include "RTSchedulable.hh"
 #include "SDLSurfacePtr.hh"
+
 #include <memory>
+#include <optional>
 
 namespace openmsx {
 
@@ -21,6 +23,7 @@ class OSDGUI;
 class Reactor;
 class Setting;
 class VideoSystem;
+class BooleanSetting;
 
 /** An OutputSurface which is visible to the user, such as a window or a
   * full screen display.
@@ -34,7 +37,8 @@ public:
 	               EventDistributor& eventDistributor,
 	               InputEventGenerator& inputEventGenerator,
 	               CliComm& cliComm,
-	               VideoSystem& videoSystem);
+	               VideoSystem& videoSystem,
+		       BooleanSetting& pauseSetting);
 	~VisibleSurface() override;
 
 	[[nodiscard]] CliComm& getCliComm() const { return cliComm; }
@@ -43,6 +47,7 @@ public:
 	static void saveScreenshotGL(const OutputSurface& output,
 	                             const std::string& filename);
 
+	[[nodiscard]] std::optional<gl::ivec2> getMouseCoord() const;
 	void updateWindowTitle();
 	bool setFullScreen(bool fullscreen);
 	void resize();
@@ -67,7 +72,7 @@ public:
 
 	/** Returns x,y coordinates of top-left window corner,
 	    or returns a nullopt when in fullscreen mode. */
-	std::optional<gl::ivec2> getWindowPosition() const;
+	[[nodiscard]] std::optional<gl::ivec2> getWindowPosition() const;
 	void setWindowPosition(gl::ivec2 pos);
 
 	// OutputSurface
@@ -93,6 +98,7 @@ private:
 	InputEventGenerator& inputEventGenerator;
 	CliComm& cliComm;
 	VideoSystem& videoSystem;
+	BooleanSetting& pauseSetting;
 
 	struct VSyncObserver : openmsx::Observer<Setting> {
 		void update(const Setting& setting) noexcept override;

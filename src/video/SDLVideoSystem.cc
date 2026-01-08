@@ -1,22 +1,29 @@
 #include "SDLVideoSystem.hh"
-#include "SDLRasterizer.hh"
-#include "VisibleSurface.hh"
-#include "PostProcessor.hh"
-#include "V9990SDLRasterizer.hh"
-#include "Reactor.hh"
+
 #include "Display.hh"
+#include "GlobalSettings.hh"
+#include "PostProcessor.hh"
 #include "RenderSettings.hh"
-#include "IntegerSetting.hh"
-#include "EventDistributor.hh"
-#include "VDP.hh"
+#include "SDLRasterizer.hh"
 #include "V9990.hh"
+#include "V9990SDLRasterizer.hh"
+#include "VDP.hh"
+#include "VisibleSurface.hh"
+
+#include "EventDistributor.hh"
+#include "IntegerSetting.hh"
+#include "Reactor.hh"
+
 #include "unreachable.hh"
+
+#include "imgui.h"
+
 #include <memory>
 
 #include "components.hh"
 #if COMPONENT_LASERDISC
-#include "LaserdiscPlayer.hh"
 #include "LDSDLRasterizer.hh"
+#include "LaserdiscPlayer.hh"
 #endif
 
 namespace openmsx {
@@ -30,7 +37,7 @@ SDLVideoSystem::SDLVideoSystem(Reactor& reactor_)
 		display,
 		reactor.getRTScheduler(), reactor.getEventDistributor(),
 		reactor.getInputEventGenerator(), reactor.getCliComm(),
-		*this);
+		*this, reactor.getGlobalSettings().getPauseSetting());
 
 	snowLayer = screen->createSnowLayer();
 	osdGuiLayer = screen->createOSDGUILayer(display.getOSDGUI());
@@ -55,7 +62,7 @@ SDLVideoSystem::~SDLVideoSystem()
 
 std::unique_ptr<Rasterizer> SDLVideoSystem::createRasterizer(VDP& vdp)
 {
-	assert(renderSettings.getRenderer() == RenderSettings::RendererID::SDLGL_PP);
+	assert(display.getRenderer() == RenderSettings::RendererID::SDLGL_PP);
 	std::string videoSource = (vdp.getName() == "VDP")
 	                        ? "MSX" // for backwards compatibility
 	                        : vdp.getName();
@@ -70,7 +77,7 @@ std::unique_ptr<Rasterizer> SDLVideoSystem::createRasterizer(VDP& vdp)
 std::unique_ptr<V9990Rasterizer> SDLVideoSystem::createV9990Rasterizer(
 	V9990& vdp)
 {
-	assert(renderSettings.getRenderer() == RenderSettings::RendererID::SDLGL_PP);
+	assert(display.getRenderer() == RenderSettings::RendererID::SDLGL_PP);
 	std::string videoSource = (vdp.getName() == "Sunrise GFX9000")
 	                        ? "GFX9000" // for backwards compatibility
 	                        : vdp.getName();
@@ -86,7 +93,7 @@ std::unique_ptr<V9990Rasterizer> SDLVideoSystem::createV9990Rasterizer(
 std::unique_ptr<LDRasterizer> SDLVideoSystem::createLDRasterizer(
 	LaserdiscPlayer& ld)
 {
-	assert(renderSettings.getRenderer() == RenderSettings::RendererID::SDLGL_PP);
+	assert(display.getRenderer() == RenderSettings::RendererID::SDLGL_PP);
 	std::string videoSource = "Laserdisc"; // TODO handle multiple???
 	MSXMotherBoard& motherBoard = ld.getMotherBoard();
 	return std::make_unique<LDSDLRasterizer>(
@@ -122,11 +129,9 @@ void SDLVideoSystem::updateWindowTitle()
 	screen->updateWindowTitle();
 }
 
-gl::ivec2 SDLVideoSystem::getMouseCoord()
+std::optional<gl::ivec2> SDLVideoSystem::getMouseCoord()
 {
-	int mouseX, mouseY;
-	SDL_GetMouseState(&mouseX, &mouseY);
-	return {mouseX, mouseY};
+	return screen->getMouseCoord();
 }
 
 OutputSurface* SDLVideoSystem::getOutputSurface()
@@ -137,6 +142,11 @@ OutputSurface* SDLVideoSystem::getOutputSurface()
 void SDLVideoSystem::showCursor(bool show)
 {
 	SDL_ShowCursor(show ? SDL_ENABLE : SDL_DISABLE);
+	if (show) {
+		ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+	} else {
+		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+	}
 }
 
 bool SDLVideoSystem::getCursorEnabled()

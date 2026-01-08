@@ -1,7 +1,9 @@
 #include "VictorFDC.hh"
-#include "CacheLine.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
+#include "CacheLine.hh"
 #include "serialize.hh"
 
 // This implementation is documented in the HC-95 service manual:
@@ -32,13 +34,16 @@ static constexpr int DATA_REQUEST  = 0x40;
 static constexpr int INTR_REQUEST  = 0x80;
 
 
-VictorFDC::VictorFDC(const DeviceConfig& config)
+VictorFDC::VictorFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config)
 {
+	// ROM only visible in 0x4000-0x7FFF by default
+	parseRomVisibility(config, 0x4000, 0x4000);
+
 	reset(getCurrentTime());
 }
 
-void VictorFDC::reset(EmuTime::param time)
+void VictorFDC::reset(EmuTime time)
 {
 	WD2793BasedFDC::reset(time);
 	// initialize in such way that drives are disabled
@@ -47,7 +52,7 @@ void VictorFDC::reset(EmuTime::param time)
 	writeMem(0x7FFC, DRIVE_DISABLE, time);
 }
 
-byte VictorFDC::readMem(word address, EmuTime::param time)
+byte VictorFDC::readMem(uint16_t address, EmuTime time)
 {
 	switch (address) {
 	case 0x7FF8:
@@ -70,7 +75,7 @@ byte VictorFDC::readMem(word address, EmuTime::param time)
 	}
 }
 
-byte VictorFDC::peekMem(word address, EmuTime::param time) const
+byte VictorFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	switch (address) {
 	case 0x7FF8:
@@ -89,29 +94,21 @@ byte VictorFDC::peekMem(word address, EmuTime::param time) const
 		return value;
 	}
 	default:
-		if ((0x4000 <= address) && (address < 0x8000)) {
-			// ROM only visible in 0x4000-0x7FFF
-			return MSXFDC::peekMem(address, time);
-		} else {
-			return 255;
-		}
+		return MSXFDC::peekMem(address, time);
 	}
 }
 
-const byte* VictorFDC::getReadCacheLine(word start) const
+const byte* VictorFDC::getReadCacheLine(uint16_t start) const
 {
 	if ((start & CacheLine::HIGH) == (0x7FF8 & CacheLine::HIGH)) {
 		// FDC at 0x7FF8-0x7FFC
 		return nullptr;
-	} else if ((0x4000 <= start) && (start < 0x8000)) {
-		// ROM at 0x4000-0x7FFF
-		return MSXFDC::getReadCacheLine(start);
 	} else {
-		return unmappedRead.data();
+		return MSXFDC::getReadCacheLine(start);
 	}
 }
 
-void VictorFDC::writeMem(word address, byte value, EmuTime::param time)
+void VictorFDC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	switch (address) {
 	case 0x7FF8:
@@ -141,7 +138,7 @@ void VictorFDC::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* VictorFDC::getWriteCacheLine(word address)
+byte* VictorFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address & CacheLine::HIGH) == (0x7FF8 & CacheLine::HIGH)) {
 		// FDC at 0x7FF8-0x7FFC

@@ -1,6 +1,7 @@
 #include "RenShaTurbo.hh"
-#include "XMLElement.hh"
+
 #include "MSXException.hh"
+#include "XMLElement.hh"
 
 namespace openmsx {
 
@@ -16,11 +17,11 @@ RenShaTurbo::RenShaTurbo(MSXMotherBoard& motherBoard,
 				"1 <= min_ints <= max_ints <= 6000.");
 		}
 		autofire.emplace(motherBoard, min_ints, max_ints,
-		                 Autofire::RENSHATURBO);
+		                 Autofire::ID::RENSHATURBO);
 	}
 }
 
-bool RenShaTurbo::getSignal(EmuTime::param time)
+bool RenShaTurbo::getSignal(EmuTime time)
 {
 	return autofire ? autofire->getSignal(time) : false;
 }

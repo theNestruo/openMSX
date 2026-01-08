@@ -3,10 +3,11 @@
 
 #include "DeviceConfig.hh"
 #include "EmuTime.hh"
+
 #include "IterableBitSet.hh"
 #include "narrow.hh"
-#include "openmsx.hh"
 #include "serialize_meta.hh"
+
 #include <array>
 #include <cassert>
 #include <span>
@@ -14,6 +15,8 @@
 #include <vector>
 
 namespace openmsx {
+
+using byte = uint8_t;  // TODO over time deprecate and remove these
 
 class XMLElement;
 class MSXMotherBoard;
@@ -49,6 +52,9 @@ public:
 	[[nodiscard]] const HardwareConfig& getHardwareConfig() const {
 		return deviceConfig.getHardwareConfig();
 	}
+	[[nodiscard]] HardwareConfig& getHardwareConfig() {
+		return deviceConfig.getHardwareConfig();
+	}
 
 	/** Checks whether this device can be removed (no other device has a
 	  * reference to it). Throws an exception if it can't be removed.
@@ -59,7 +65,7 @@ public:
 	 * This method is called on reset.
 	 * Default implementation does nothing.
 	 */
-	virtual void reset(EmuTime::param time);
+	virtual void reset(EmuTime time);
 
 	/**
 	 * Gets IRQ vector used in IM2. This method only exists to support
@@ -76,14 +82,14 @@ public:
 	 * that need to turn off LEDs need to reimplement this method.
 	 * @param time The moment in time the power down occurs.
 	 */
-	virtual void powerDown(EmuTime::param time);
+	virtual void powerDown(EmuTime time);
 
 	/**
 	 * This method is called when MSX is powered up. The default
 	 * implementation calls reset(), this is usually ok.
 	 * @param time The moment in time the power up occurs.
 	 */
-	virtual void powerUp(EmuTime::param time);
+	virtual void powerUp(EmuTime time);
 
 	/**
 	 * Returns a human-readable name for this device.
@@ -116,14 +122,14 @@ public:
 	 * Read a byte from an IO port at a certain time from this device.
 	 * The default implementation returns 255.
 	 */
-	[[nodiscard]] virtual byte readIO(word port, EmuTime::param time);
+	[[nodiscard]] virtual byte readIO(uint16_t port, EmuTime time);
 
 	/**
 	 * Write a byte to a given IO port at a certain time to this
 	 * device.
 	 * The default implementation ignores the write (does nothing)
 	 */
-	virtual void writeIO(word port, byte value, EmuTime::param time);
+	virtual void writeIO(uint16_t port, byte value, EmuTime time);
 
 	/**
 	 * Read a byte from a given IO port. Reading via this method has no
@@ -133,7 +139,7 @@ public:
 	 * by a debugger.
 	 * The default implementation just returns 0xFF.
 	 */
-	[[nodiscard]] virtual byte peekIO(word port, EmuTime::param time) const;
+	[[nodiscard]] virtual byte peekIO(uint16_t port, EmuTime time) const;
 
 
 	// Memory
@@ -143,14 +149,14 @@ public:
 	 * device.
 	 * The default implementation returns 255.
 	 */
-	[[nodiscard]] virtual byte readMem(word address, EmuTime::param time);
+	[[nodiscard]] virtual byte readMem(uint16_t address, EmuTime time);
 
 	/**
 	 * Write a given byte to a given location at a certain time
 	 * to this device.
 	 * The default implementation ignores the write (does nothing).
 	 */
-	virtual void writeMem(word address, byte value, EmuTime::param time);
+	virtual void writeMem(uint16_t address, byte value, EmuTime time);
 
 	/**
 	 * Test that the memory in the interval [start, start +
@@ -163,7 +169,7 @@ public:
 	 * The default implementation always returns a null pointer.
 	 * The start of the interval is CacheLine::SIZE aligned.
 	 */
-	[[nodiscard]] virtual const byte* getReadCacheLine(word start) const;
+	[[nodiscard]] virtual const byte* getReadCacheLine(uint16_t start) const;
 
 	/**
 	 * Test that the memory in the interval [start, start +
@@ -176,7 +182,7 @@ public:
 	 * The default implementation always returns a null pointer.
 	 * The start of the interval is CacheLine::SIZE aligned.
 	 */
-	[[nodiscard]] virtual byte* getWriteCacheLine(word start);
+	[[nodiscard]] virtual byte* getWriteCacheLine(uint16_t start);
 
 	/**
 	 * Read a byte from a given memory location. Reading memory
@@ -190,7 +196,7 @@ public:
 	 * cacheable you cannot read it by default, Override this
 	 * method if you want to improve this behaviour.
 	 */
-	[[nodiscard]] virtual byte peekMem(word address, EmuTime::param time) const;
+	[[nodiscard]] virtual byte peekMem(uint16_t address, EmuTime time) const;
 
 	/** Global writes.
 	  * Some devices violate the MSX standard by ignoring the SLOT-SELECT
@@ -200,13 +206,13 @@ public:
 	  * You need to register each address for which you want this method
 	  * to be triggered.
 	  */
-	virtual void globalWrite(word address, byte value, EmuTime::param time);
+	virtual void globalWrite(uint16_t address, byte value, EmuTime time);
 
 	/** Global reads. Similar to globalWrite() but then for reads.
 	  * 'Carnivore2' is an example of a device that monitors the MSX bus
 	  * for reads in any slot.
 	  */
-	virtual void globalRead(word address, EmuTime::param time);
+	virtual void globalRead(uint16_t address, EmuTime time);
 
 	/** Calls MSXCPUInterface::invalidateXXCache() for the specific (part
 	  * of) the slot that this device is located in.
@@ -236,7 +242,13 @@ public:
 	[[nodiscard]] const XMLElement& getDeviceConfig() const {
 		return *deviceConfig.getXML();
 	}
+	[[nodiscard]] XMLElement& getDeviceConfig() {
+		return *deviceConfig.getXML();
+	}
 	[[nodiscard]] const DeviceConfig& getDeviceConfig2() const { // TODO
+		return deviceConfig;
+	}
+	[[nodiscard]] DeviceConfig& getDeviceConfig2() { // TODO
 		return deviceConfig;
 	}
 
@@ -245,7 +257,7 @@ public:
 	[[nodiscard]] const Devices& getReferences() const;
 
 	// convenience functions, these delegate to MSXMotherBoard
-	[[nodiscard]] EmuTime::param getCurrentTime() const;
+	[[nodiscard]] EmuTime getCurrentTime() const;
 	[[nodiscard]] MSXCPU& getCPU() const;
 	[[nodiscard]] MSXCPUInterface& getCPUInterface() const;
 	[[nodiscard]] Scheduler& getScheduler() const;
@@ -319,17 +331,21 @@ private:
 	void registerSlots();
 	void unregisterSlots();
 
+protected:
 	void registerPorts();
+	void doRegisterPorts();
 	void unregisterPorts();
 
-protected:
-	std::string deviceName;
+	mutable std::string deviceName; // MSXMultiXxxDevice has a dynamic (lazy) name
 
 	[[nodiscard]] byte getPrimarySlot() const {
 		// must already be resolved to an actual slot
 		assert((0 <= ps) && (ps <= 3));
 		return narrow_cast<byte>(ps);
 	}
+
+	IterableBitSet<256> inPorts;
+	IterableBitSet<256> outPorts;
 
 private:
 	struct BaseSize {
@@ -339,8 +355,6 @@ private:
 	};
 	using MemRegions = std::vector<BaseSize>;
 	MemRegions memRegions;
-	IterableBitSet<256> inPorts;
-	IterableBitSet<256> outPorts;
 
 	DeviceConfig deviceConfig;
 

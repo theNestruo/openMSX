@@ -1,10 +1,11 @@
 #include "WD2793BasedFDC.hh"
+
 #include "XMLElement.hh"
 #include "serialize.hh"
 
 namespace openmsx {
 
-WD2793BasedFDC::WD2793BasedFDC(const DeviceConfig& config, const std::string& romId,
+WD2793BasedFDC::WD2793BasedFDC(DeviceConfig& config, const std::string& romId,
                                bool needROM, DiskDrive::TrackMode trackMode)
 	: MSXFDC(config, romId, needROM, trackMode)
 	, multiplexer(drives)
@@ -13,7 +14,7 @@ WD2793BasedFDC::WD2793BasedFDC(const DeviceConfig& config, const std::string& ro
 {
 }
 
-void WD2793BasedFDC::reset(EmuTime::param time)
+void WD2793BasedFDC::reset(EmuTime time)
 {
 	controller.reset(time);
 }

@@ -1,11 +1,12 @@
 #include "MSXPPI.hh"
+
+#include "CassettePort.hh"
+#include "GlobalSettings.hh"
 #include "LedStatus.hh"
 #include "MSXCPUInterface.hh"
 #include "MSXMotherBoard.hh"
 #include "Reactor.hh"
-#include "CassettePort.hh"
 #include "RenShaTurbo.hh"
-#include "GlobalSettings.hh"
 #include "serialize.hh"
 
 namespace openmsx {
@@ -33,28 +34,28 @@ MSXPPI::~MSXPPI()
 	powerDown(EmuTime::dummy());
 }
 
-void MSXPPI::reset(EmuTime::param time)
+void MSXPPI::reset(EmuTime time)
 {
 	i8255.reset(time);
 	click.reset(time);
 }
 
-void MSXPPI::powerDown(EmuTime::param /*time*/)
+void MSXPPI::powerDown(EmuTime /*time*/)
 {
 	getLedStatus().setLed(LedStatus::CAPS, false);
 }
 
-byte MSXPPI::readIO(word port, EmuTime::param time)
+uint8_t MSXPPI::readIO(uint16_t port, EmuTime time)
 {
 	return i8255.read(port & 0x03, time);
 }
 
-byte MSXPPI::peekIO(word port, EmuTime::param time) const
+uint8_t MSXPPI::peekIO(uint16_t port, EmuTime time) const
 {
 	return i8255.peek(port & 0x03, time);
 }
 
-void MSXPPI::writeIO(word port, byte value, EmuTime::param time)
+void MSXPPI::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	i8255.write(port & 0x03, value, time);
 }
@@ -62,11 +63,11 @@ void MSXPPI::writeIO(word port, byte value, EmuTime::param time)
 
 // I8255Interface
 
-byte MSXPPI::readA(EmuTime::param time)
+uint8_t MSXPPI::readA(EmuTime time)
 {
 	return peekA(time);
 }
-byte MSXPPI::peekA(EmuTime::param /*time*/) const
+uint8_t MSXPPI::peekA(EmuTime /*time*/) const
 {
 	// port A is normally an output on MSX, reading from an output port
 	// is handled internally in the 8255
@@ -76,16 +77,16 @@ byte MSXPPI::peekA(EmuTime::param /*time*/) const
 	//      solution is good enough.
 	return 0;
 }
-void MSXPPI::writeA(byte value, EmuTime::param /*time*/)
+void MSXPPI::writeA(uint8_t value, EmuTime /*time*/)
 {
 	getCPUInterface().setPrimarySlots(value);
 }
 
-byte MSXPPI::readB(EmuTime::param time)
+uint8_t MSXPPI::readB(EmuTime time)
 {
 	return peekB(time);
 }
-byte MSXPPI::peekB(EmuTime::param time) const
+uint8_t MSXPPI::peekB(EmuTime time) const
 {
 	auto row = keyboard.getKeys()[selectedRow];
 	if (selectedRow == 8) {
@@ -93,28 +94,28 @@ byte MSXPPI::peekB(EmuTime::param time) const
 	}
 	return row;
 }
-void MSXPPI::writeB(byte /*value*/, EmuTime::param /*time*/)
+void MSXPPI::writeB(uint8_t /*value*/, EmuTime /*time*/)
 {
 	// probably nothing happens on a real MSX
 }
 
-nibble MSXPPI::readC1(EmuTime::param time)
+uint4_t MSXPPI::readC1(EmuTime time)
 {
 	return peekC1(time);
 }
-nibble MSXPPI::peekC1(EmuTime::param /*time*/) const
+uint4_t MSXPPI::peekC1(EmuTime /*time*/) const
 {
 	return 15; // TODO check this
 }
-nibble MSXPPI::readC0(EmuTime::param time)
+uint4_t MSXPPI::readC0(EmuTime time)
 {
 	return peekC0(time);
 }
-nibble MSXPPI::peekC0(EmuTime::param /*time*/) const
+uint4_t MSXPPI::peekC0(EmuTime /*time*/) const
 {
 	return 15; // TODO check this
 }
-void MSXPPI::writeC1(nibble value, EmuTime::param time)
+void MSXPPI::writeC1(uint4_t value, EmuTime time)
 {
 	if ((prevBits ^ value) & 1) {
 		cassettePort.setMotor((value & 1) == 0, time); // 0=0n, 1=Off
@@ -130,7 +131,7 @@ void MSXPPI::writeC1(nibble value, EmuTime::param time)
 	}
 	prevBits = value;
 }
-void MSXPPI::writeC0(nibble value, EmuTime::param /*time*/)
+void MSXPPI::writeC0(uint4_t value, EmuTime /*time*/)
 {
 	selectedRow = value;
 }
@@ -143,11 +144,11 @@ void MSXPPI::serialize(Archive& ar, unsigned /*version*/)
 	ar.serialize("i8255", i8255);
 
 	// merge prevBits and selectedRow into one byte
-	auto portC = byte((prevBits << 4) | (selectedRow << 0));
+	auto portC = uint8_t((prevBits << 4) | (selectedRow << 0));
 	ar.serialize("portC", portC);
 	if constexpr (Archive::IS_LOADER) {
 		selectedRow = (portC >> 0) & 0xF;
-		nibble bits = (portC >> 4) & 0xF;
+		uint4_t bits = (portC >> 4) & 0xF;
 		writeC1(bits, getCurrentTime());
 	}
 	ar.serialize("keyboard", keyboard);

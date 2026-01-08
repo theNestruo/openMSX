@@ -37,7 +37,7 @@ namespace openmsx {
 [[nodiscard]] static unsigned getNumBlocks(const DeviceConfig& config)
 {
 	int size = config.getChildDataAsInt("size", 0); // size in kB
-	if (auto err = [&]() -> const char* {
+	if (const auto* err = [&] -> const char* {
 		if (size < 0)         return "Cannot be negative.";
 		if (size > (8 * 256)) return "Cannot be larger than 2048.";
 		if ((size % 8) != 0)  return "Must be a multiple of 8.";
@@ -48,7 +48,7 @@ namespace openmsx {
 	return size / 8;
 }
 
-MSXMegaRam::MSXMegaRam(const DeviceConfig& config)
+MSXMegaRam::MSXMegaRam(DeviceConfig& config)
 	: MSXDevice(config)
 	, numBlocks(getNumBlocks(config)) // number of 8kB blocks
 	, ram(config, getName() + " RAM", "Mega-RAM", numBlocks * 0x2000)
@@ -63,7 +63,7 @@ MSXMegaRam::MSXMegaRam(const DeviceConfig& config)
 
 MSXMegaRam::~MSXMegaRam() = default;
 
-void MSXMegaRam::powerUp(EmuTime::param time)
+void MSXMegaRam::powerUp(EmuTime time)
 {
 	for (auto i : xrange(byte(4))) {
 		setBank(i, 0);
@@ -73,18 +73,18 @@ void MSXMegaRam::powerUp(EmuTime::param time)
 	reset(time);
 }
 
-void MSXMegaRam::reset(EmuTime::param /*time*/)
+void MSXMegaRam::reset(EmuTime /*time*/)
 {
 	// selected banks nor writeMode does change after reset
 	romMode = rom != nullptr; // select rom mode if there is a rom
 }
 
-byte MSXMegaRam::readMem(word address, EmuTime::param /*time*/)
+byte MSXMegaRam::readMem(uint16_t address, EmuTime /*time*/)
 {
 	return *MSXMegaRam::getReadCacheLine(address);
 }
 
-const byte* MSXMegaRam::getReadCacheLine(word address) const
+const byte* MSXMegaRam::getReadCacheLine(uint16_t address) const
 {
 	if (romMode) {
 		if (address >= 0x4000 && address <= 0xBFFF) {
@@ -98,7 +98,7 @@ const byte* MSXMegaRam::getReadCacheLine(word address) const
 	     : unmappedRead.data();
 }
 
-void MSXMegaRam::writeMem(word address, byte value, EmuTime::param /*time*/)
+void MSXMegaRam::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if (byte* tmp = getWriteCacheLine(address)) {
 		*tmp = value;
@@ -108,7 +108,7 @@ void MSXMegaRam::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* MSXMegaRam::getWriteCacheLine(word address)
+byte* MSXMegaRam::getWriteCacheLine(uint16_t address)
 {
 	if (romMode) return unmappedWrite.data();
 	if (writeMode) {
@@ -121,7 +121,7 @@ byte* MSXMegaRam::getWriteCacheLine(word address)
 	}
 }
 
-byte MSXMegaRam::readIO(word port, EmuTime::param /*time*/)
+byte MSXMegaRam::readIO(uint16_t port, EmuTime /*time*/)
 {
 	switch (port & 1) {
 		case 0:
@@ -137,12 +137,12 @@ byte MSXMegaRam::readIO(word port, EmuTime::param /*time*/)
 	return 0xFF; // return value doesn't matter
 }
 
-byte MSXMegaRam::peekIO(word /*port*/, EmuTime::param /*time*/) const
+byte MSXMegaRam::peekIO(uint16_t /*port*/, EmuTime /*time*/) const
 {
 	return 0xFF;
 }
 
-void MSXMegaRam::writeIO(word port, byte /*value*/, EmuTime::param /*time*/)
+void MSXMegaRam::writeIO(uint16_t port, byte /*value*/, EmuTime /*time*/)
 {
 	switch (port & 1) {
 		case 0:
@@ -160,7 +160,7 @@ void MSXMegaRam::writeIO(word port, byte /*value*/, EmuTime::param /*time*/)
 void MSXMegaRam::setBank(byte page, byte block)
 {
 	bank[page] = block & maskBlocks;
-	word adr = page * 0x2000;
+	uint16_t adr = page * 0x2000;
 	invalidateDeviceRWCache(adr + 0x0000, 0x2000);
 	invalidateDeviceRWCache(adr + 0x8000, 0x2000);
 }

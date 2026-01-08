@@ -11,7 +11,9 @@
 #define PRINTER_HH
 
 #include "PrinterPortDevice.hh"
+
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <utility>
 
@@ -27,13 +29,13 @@ class PrinterCore : public PrinterPortDevice
 {
 public:
 	// PrinterPortDevice
-	[[nodiscard]] bool getStatus(EmuTime::param time) override;
-	void setStrobe(bool strobe, EmuTime::param time) override;
-	void writeData(uint8_t data, EmuTime::param time) override;
+	[[nodiscard]] bool getStatus(EmuTime time) override;
+	void setStrobe(bool strobe, EmuTime time) override;
+	void writeData(uint8_t data, EmuTime time) override;
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
 
 protected:
 	PrinterCore() = default;
@@ -97,18 +99,18 @@ protected:
 	unsigned ramLoadOffset = 0;
 	unsigned ramLoadEnd = 0;
 	unsigned lines;
-	enum CountryCode {
-		CC_USA              = 0,
-		CC_FRANCE           = 1,
-		CC_GERMANY          = 2,
-		CC_UNITED_KINGDOM   = 3,
-		CC_DENMARK          = 4,
-		CC_SWEDEN           = 5,
-		CC_ITALY            = 6,
-		CC_SPAIN            = 7,
-		CC_JAPAN            = 8
+	enum class CountryCode : uint8_t {
+		USA              = 0,
+		FRANCE           = 1,
+		GERMANY          = 2,
+		UNITED_KINGDOM   = 3,
+		DENMARK          = 4,
+		SWEDEN           = 5,
+		ITALY            = 6,
+		SPAIN            = 7,
+		JAPAN            = 8
 	};
-	CountryCode countryCode = CC_USA;
+	CountryCode countryCode = CountryCode::USA;
 
 	static constexpr int MAX_ESC_CMDSIZE = 8;
 	std::array<uint8_t, MAX_ESC_CMDSIZE> abEscSeq;
@@ -158,8 +160,8 @@ public:
 	explicit ImagePrinterMSX(MSXMotherBoard& motherBoard);
 
 	// Pluggable
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -181,8 +183,8 @@ public:
 	explicit ImagePrinterEpson(MSXMotherBoard& motherBoard);
 
 	// Pluggable
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

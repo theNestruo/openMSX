@@ -1,20 +1,23 @@
 #ifndef GLOBALCOMMANDCONTROLLER_HH
 #define GLOBALCOMMANDCONTROLLER_HH
 
-#include "CommandController.hh"
 #include "Command.hh"
-#include "Interpreter.hh"
+#include "CommandController.hh"
 #include "InfoCommand.hh"
 #include "InfoTopic.hh"
-#include "HotKey.hh"
-#include "SettingsConfig.hh"
-#include "RomInfoTopic.hh"
+#include "Interpreter.hh"
 #include "TclObject.hh"
+
+#include "HotKey.hh"
+#include "RomInfoTopic.hh"
+#include "SettingsConfig.hh"
+
 #include "hash_map.hh"
 #include "xxhash.hh"
+
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
 namespace openmsx {
 
@@ -81,6 +84,8 @@ public:
 	 * Complete the given command.
 	 */
 	[[nodiscard]] std::string tabCompletion(std::string_view command);
+	[[nodiscard]] std::string tabCompletionReplace(
+		std::string_view command, const CompletionCandidate& replacement);
 
 	/**
 	 * Returns true iff the command is complete (all braces, quotes etc. are

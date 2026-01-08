@@ -1,9 +1,10 @@
 #ifndef PLUGGINGCONTROLLER_HH
 #define PLUGGINGCONTROLLER_HH
 
-#include "RecordedCommand.hh"
-#include "InfoTopic.hh"
 #include "EmuTime.hh"
+#include "InfoTopic.hh"
+#include "RecordedCommand.hh"
+
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -52,7 +53,7 @@ public:
 
 	/** Convenience method: get current time.
 	 */
-	[[nodiscard]] EmuTime::param getCurrentTime() const;
+	[[nodiscard]] EmuTime getCurrentTime() const;
 
 private:
 	[[nodiscard]] Connector& getConnector(std::string_view name) const;
@@ -68,7 +69,7 @@ private:
 			StateChangeDistributor& stateChangeDistributor,
 			Scheduler& scheduler);
 		void execute(std::span<const TclObject> tokens, TclObject& result,
-			     EmuTime::param time) override;
+			     EmuTime time) override;
 		[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 		void tabCompletion(std::vector<std::string>& tokens) const override;
 		[[nodiscard]] bool needRecord(std::span<const TclObject> tokens) const override;
@@ -79,7 +80,7 @@ private:
 			  StateChangeDistributor& stateChangeDistributor,
 			  Scheduler& scheduler);
 		void execute(std::span<const TclObject> tokens, TclObject& result,
-			     EmuTime::param time) override;
+			     EmuTime time) override;
 		[[nodiscard]] std::string help(std::span<const TclObject> tokens) const override;
 		void tabCompletion(std::vector<std::string>& tokens) const override;
 	} unplugCmd;

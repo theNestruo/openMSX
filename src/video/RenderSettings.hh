@@ -6,9 +6,12 @@
 #include "FloatSetting.hh"
 #include "IntegerSetting.hh"
 #include "StringSetting.hh"
+
 #include "Observer.hh"
 #include "gl_mat.hh"
 #include "narrow.hh"
+
+#include <cstdint>
 
 namespace openmsx {
 
@@ -25,21 +28,21 @@ public:
 	/** Enumeration of Renderers known to openMSX.
 	  * This is the full list, the list of available renderers may be smaller.
 	  */
-	enum class RendererID { UNINITIALIZED, DUMMY, SDLGL_PP };
+	enum class RendererID : uint8_t { UNINITIALIZED, DUMMY, SDLGL_PP };
 	using RendererSetting = EnumSetting<RendererID>;
 
 	/** Render accuracy: granularity of the rendered area.
 	  */
-	enum class Accuracy { SCREEN, LINE, PIXEL };
+	enum class Accuracy : uint8_t { SCREEN, LINE, PIXEL };
 
 	/** Scaler algorithm
 	  */
-	enum class ScaleAlgorithm {
-		SIMPLE, SCALE, HQ, HQLITE, RGBTRIPLET, TV,
+	enum class ScaleAlgorithm : uint8_t {
+		SIMPLE, SCALE, HQ, RGBTRIPLET, TV,
 		NO
 	};
 
-	enum class DisplayDeform {
+	enum class DisplayDeform : uint8_t {
 		NORMAL, _3D
 	};
 
@@ -157,6 +160,9 @@ public:
 	/** VSync [on, off]. */
 	[[nodiscard]] BooleanSetting& getVSyncSetting() { return vSyncSetting; }
 
+	[[nodiscard]] BooleanSetting& getFullStretchSetting() { return fullStretchSetting; }
+	[[nodiscard]] bool getFullStretch() const { return fullStretchSetting.getBoolean(); }
+
 	/** Amount of horizontal stretch.
 	  * This number represents the amount of MSX pixels (normal width) that
 	  * will be stretched to the complete width of the host window. */
@@ -236,6 +242,7 @@ private:
 	EnumSetting<bool> tooFastAccessSetting;
 	EnumSetting<DisplayDeform> displayDeformSetting;
 	BooleanSetting vSyncSetting;
+	BooleanSetting fullStretchSetting;
 	FloatSetting horizontalStretchSetting;
 	FloatSetting pointerHideDelaySetting;
 	BooleanSetting interleaveBlackFrameSetting;

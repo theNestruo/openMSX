@@ -1,7 +1,10 @@
 #include "SectorBasedDisk.hh"
+
 #include "MSXException.hh"
+
 #include "narrow.hh"
 #include "xrange.hh"
+
 #include <cassert>
 
 namespace openmsx {
@@ -143,7 +146,7 @@ void SectorBasedDisk::flushCaches()
 	cachedTrackNum = -1;
 }
 
-size_t SectorBasedDisk::getNbSectorsImpl() const
+size_t SectorBasedDisk::getNbSectorsImpl()
 {
 	assert(nbSectors != size_t(-1)); // must have been initialized
 	return nbSectors;

@@ -23,6 +23,15 @@ inline constexpr double ln2  = std::numbers::ln2_v <double>;
 inline constexpr double ln10 = std::numbers::ln10_v<double>;
 inline constexpr double pi   = std::numbers::pi_v  <double>;
 
+/** GLSL fract() function,  https://registry.khronos.org/OpenGL-Refpages/gl4/html/fract.xhtml
+ * Return the fractional part of the input, result is in [0, 1).
+ */
+template <std::floating_point T>
+[[nodiscard]] constexpr T fract(T x) noexcept
+{
+	return x - std::floor(x);
+}
+
 /** Returns the smallest number of the form 2^n-1 that is greater or equal
   * to the given number.
   * The resulting number has the same number of leading zeros as the input,
@@ -146,7 +155,7 @@ template<std::signed_integral T>
   * @return 0 if the input is zero (no bits are set),
   *   otherwise the index of the first set bit + 1.
   */
-[[nodiscard]] inline /*constexpr*/ unsigned findFirstSet(uint32_t x)
+[[nodiscard]] constexpr unsigned findFirstSet(uint32_t x)
 {
 	return x ? std::countr_zero(x) + 1 : 0;
 }
@@ -192,7 +201,7 @@ constexpr QuotientRemainder div_mod_floor(int dividend, int divisor) {
         --q;
         r += divisor;
     }
-    return {q, r};
+    return {.quotient = q, .remainder = r};
 }
 constexpr int div_floor(int dividend, int divisor) {
     return div_mod_floor(dividend, divisor).quotient;
@@ -200,6 +209,52 @@ constexpr int div_floor(int dividend, int divisor) {
 constexpr int mod_floor(int dividend, int divisor) {
     return div_mod_floor(dividend, divisor).remainder;
 }
+
+/**
+ * RAII utility to temporarily disable denormal floating-point handling.
+ *
+ * Denormal numbers (very small values near zero) can cause 10-100x performance
+ * degradation on x86/x64 CPUs. This guard flushes denormals to zero within its
+ * scope, trading slight accuracy loss for significant speedup in floating-point
+ * intensive code.
+ *
+ * Only active on x86/x64 platforms with SSE support. No-op on other architectures.
+ *
+ * Usage: DenormalGuard guard; // at start of performance-critical scope
+ */
+class DenormalGuard {
+private:
+#if (defined(__SSE__) && (defined(__GNUC__) || defined(__clang__)))
+    // MXCSR bit positions
+    static constexpr int DAZ_BIT = 6;   // Denormals-Are-Zero
+    static constexpr int FTZ_BIT = 15;  // Flush-To-Zero
+
+    uint32_t saved_mxcsr;
+#endif
+
+public:
+    [[nodiscard]] DenormalGuard() {
+#if (defined(__SSE__) && (defined(__GNUC__) || defined(__clang__)))
+        // Read current MXCSR
+        asm volatile("stmxcsr %0" : "=m"(saved_mxcsr));
+
+        // Modify and write back
+        auto new_mxcsr = saved_mxcsr | (1u << DAZ_BIT) | (1u << FTZ_BIT);
+        asm volatile("ldmxcsr %0" : : "m"(new_mxcsr));
+#endif
+    }
+
+    ~DenormalGuard() {
+#if (defined(__SSE__) && (defined(__GNUC__) || defined(__clang__)))
+        asm volatile("ldmxcsr %0" : : "m"(saved_mxcsr));
+#endif
+    }
+
+    DenormalGuard(const DenormalGuard&) = delete;
+    DenormalGuard& operator=(const DenormalGuard&) = delete;
+    DenormalGuard(DenormalGuard&&) = delete;
+    DenormalGuard& operator=(DenormalGuard&&) = delete;
+};
 
 } // namespace Math
 

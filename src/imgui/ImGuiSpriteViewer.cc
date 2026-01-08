@@ -17,11 +17,21 @@
 
 #include <cassert>
 #include <cstdint>
+#include <ranges>
 #include <span>
 
 namespace openmsx {
 
 using namespace std::literals;
+
+ImGuiSpriteViewer::ImGuiSpriteViewer(ImGuiManager& manager_, size_t index)
+	: ImGuiPart(manager_)
+	, title("Sprite viewer")
+{
+	if (index) {
+		strAppend(title, " (", index + 1, ')');
+	}
+}
 
 void ImGuiSpriteViewer::save(ImGuiTextBuffer& buf)
 {
@@ -93,7 +103,7 @@ static void renderPatterns16(const VramTable& pat, std::span<uint32_t> output)
 }
 
 static void renderSpriteAttrib(const VramTable& att, int sprite, int mode, int size, int transparent,
-                               float zoom, std::span<uint32_t, 16> palette, void* patternTex)
+                               float zoom, std::span<uint32_t, 16> palette, ImTextureID patternTex)
 {
 	int addr = getSpriteAttrAddr(sprite, mode);
 	int pattern = att[addr + 2];
@@ -115,7 +125,8 @@ static void renderSpriteAttrib(const VramTable& att, int sprite, int mode, int s
 		auto attrib = att[addr + 3];
 		auto color = attrib & 0x0f;
 		float v2 = float(size * (rr + 1)) * (1.0f / 64.0f);
-		ImGui::Image(patternTex, zoom * gl::vec2{float(size)}, {u1, v1}, {u2, v2}, getColor(color));
+		ImGui::ImageWithBg(patternTex, zoom * gl::vec2{float(size)}, {u1, v1}, {u2, v2},
+		                   {}, getColor(color));
 	} else {
 		int colorBase = getSpriteColorAddr(sprite, mode);
 		gl::vec2 pos = ImGui::GetCursorPos();
@@ -124,7 +135,8 @@ static void renderSpriteAttrib(const VramTable& att, int sprite, int mode, int s
 			auto color = attrib & 0x0f;
 			ImGui::SetCursorPos({pos.x, pos.y + zoom * float(y)});
 			float v2 = v1 + (1.0f / 64.0f);
-			ImGui::Image(patternTex, zoom * gl::vec2{float(size), 1.0f}, {u1, v1}, {u2, v2}, getColor(color));
+			ImGui::ImageWithBg(patternTex, zoom * gl::vec2{float(size), 1.0f}, {u1, v1}, {u2, v2},
+			                   {}, getColor(color));
 			v1 = v2;
 		}
 	}
@@ -135,7 +147,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 	if (!show || !motherBoard) return;
 
 	ImGui::SetNextWindowSize({748, 1010}, ImGuiCond_FirstUseEver);
-	im::Window("Sprite viewer", &show, [&]{
+	im::Window(title.c_str(), &show, [&]{
 		auto* vdp = dynamic_cast<VDP*>(motherBoard->findDevice("VDP")); // TODO name based OK?
 		if (!vdp) return;
 		const auto& vram = vdp->getVRAM().getData();
@@ -174,10 +186,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 
 		auto vramSize = std::min(vdp->getVRAM().getSize(), 0x20000u); // max 128kB
 
-		std::array<uint32_t, 16> palette;
-		auto msxPalette = manager.palette->getPalette(vdp);
-		ranges::transform(msxPalette, palette.data(),
-			[](uint16_t msx) { return ImGuiPalette::toRGBA(msx); });
+		auto palette = manager.palette->getPalette(vdp);
 		// TODO? if (color0 < 16) palette[0] = palette[color0];
 
 		bool manMode   = overrideAll || overrideMode;
@@ -222,7 +231,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 				});
 				im::Disabled(manLines, [&]{
 					ImGui::AlignTextToFramePadding();
-					ImGui::StrCat("Visible lines: ", (vdpLines == 192) ? "192" : "212");
+					ImGui::StrCat("Visible lines: ", (vdpLines == 192) ? "192"sv : "212"sv);
 				});
 			});
 			ImGui::SameLine();
@@ -306,9 +315,10 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 				ImGui::TextUnformatted("Checkerboard:"sv);
 				simpleToolTip("Used as background in 'Sprite attribute' and 'Rendered sprites' view");
 				ImGui::SameLine();
-				ImGui::ColorEdit4("checkerboard color1", checkerBoardColor1.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+				auto checkerBoardColorFlags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoAlpha;
+				ImGui::ColorEdit4("checkerboard color1", checkerBoardColor1.data(), checkerBoardColorFlags);
 				ImGui::SameLine();
-				ImGui::ColorEdit4("checkerboard color2", checkerBoardColor2.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+				ImGui::ColorEdit4("checkerboard color2", checkerBoardColor2.data(), checkerBoardColorFlags);
 				im::Indent([&]{
 					ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
 					ImGui::InputInt("size", &checkerBoardSize);
@@ -316,6 +326,17 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 			});
 		});
 		ImGui::Separator();
+
+		auto copySpriteDataPopup = [&](zstring_view text, function_ref<std::string()> supplier) {
+			return im::PopupContextWindow("CopySpriteDataPopup", [&]{
+				if (ImGui::MenuItem(text.c_str())) {
+					ImGui::SetClipboardText(supplier().c_str());
+				}
+			});
+		};
+		auto formatClipboardData = [&](unsigned address, unsigned size) {
+			return formatToString([&](unsigned addr) { return vram[addr]; }, address, address + size - 1, {}, 1, {}, "%02X", manager.getInterpreter());
+		};
 
 		int mode = manMode ? manualMode : vdpMode;
 		int size = manSize ? manualSize : vdpSize;
@@ -361,7 +382,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 		int zm = 2 * (1 + zoom);
 		auto gColor = ImGui::ColorConvertFloat4ToU32(gridColor);
 		if (grid) {
-			auto gridSize = size * zm;
+			size_t gridSize = size * zm;
 			for (auto y : xrange(gridSize)) {
 				auto* line = &pixels[y * gridSize];
 				for (auto x : xrange(gridSize)) {
@@ -372,8 +393,9 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 				gridTex = gl::Texture(false, true); // no interpolation, with wrapping
 			}
 			gridTex.bind();
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gridSize, gridSize, 0,
-			             GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+			             narrow<int>(gridSize), narrow<int>(gridSize),
+			             0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 		}
 
 		// create checker board texture
@@ -387,24 +409,32 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0,
 			             GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 		}
-
 		im::TreeNode("Sprite patterns", ImGuiTreeNodeFlags_DefaultOpen, [&]{
 			auto fullSize = gl::vec2(256, 64) * float(zm);
 			im::Child("##pattern", {0, fullSize.y}, 0, ImGuiWindowFlags_HorizontalScrollbar, [&]{
 				auto pos1 = ImGui::GetCursorPos();
 				gl::vec2 scrnPos = ImGui::GetCursorScreenPos();
 				ImGui::Image(patternTex.getImGui(), fullSize);
+				gl::vec2 zoomPatSize{float(size * zm)};
 				bool hovered = ImGui::IsItemHovered() && (mode != 0);
+				if (hovered) {
+					gridPosition = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / zoomPatSize);
+				}
 				ImGui::SameLine();
 				im::Group([&]{
-					gl::vec2 zoomPatSize{float(size * zm)};
-					if (hovered) {
-						auto gridPos = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / zoomPatSize);
-						auto pattern = (size == 16) ? ((16 * gridPos.y) + gridPos.x) * 4
-						                            : ((32 * gridPos.y) + gridPos.x) * 1;
+					auto pattern = (size == 16) ? ((16 * gridPosition.y) + gridPosition.x) * 4
+												: ((32 * gridPosition.y) + gridPosition.x) * 1;
+					bool popup = copySpriteDataPopup("Copy pattern data to clipboard", [&] {
+						return formatClipboardData(patTable.getAddress(8 * pattern), size == 16 ? 32 : 8);
+					});
+					if (hovered || popup) {
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1); // HACK !!
 						ImGui::StrCat("pattern: ", pattern);
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1); // HACK !!
+						ImGui::StrCat("address: 0x", hex_string<5>(patTable.getAddress(8 * pattern)));
+						ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1); // HACK !!
 						auto recipPatTex = recip((size == 16) ? gl::vec2{16, 4} : gl::vec2{32, 8});
-						auto uv1 = gl::vec2(gridPos) * recipPatTex;
+						auto uv1 = gl::vec2(gridPosition) * recipPatTex;
 						auto uv2 = uv1 + recipPatTex;
 						auto pos2 = ImGui::GetCursorPos();
 						int z = (size == 16) ? 3 : 6;
@@ -443,7 +473,9 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 		im::TreeNode("Sprite attributes", ImGuiTreeNodeFlags_DefaultOpen, [&]{
 			auto zoomSize = float(zm * size);
 			auto fullSize = zoomSize * gl::vec2(8, 4);
-			im::Child("##attrib", {0, fullSize.y}, 0, ImGuiWindowFlags_HorizontalScrollbar, [&]{
+			auto hoverY = 3.0f * (ImGui::GetTextLineHeight() - 1.0f)
+			            + float(3 * zm) * float(size);
+			im::Child("##attrib", {0, std::max(fullSize.y, hoverY)}, 0, ImGuiWindowFlags_HorizontalScrollbar, [&]{
 				if (mode == 0) {
 					ImGui::TextUnformatted("No sprites in this screen mode"sv);
 				} else {
@@ -469,15 +501,24 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 					} else {
 						ImGui::Dummy(fullSize);
 					}
+					gl::vec2 zoomPatSize{float(size * zm)};
 					bool hovered = ImGui::IsItemHovered();
 					if (hovered) {
-						gl::vec2 zoomPatSize{float(size * zm)};
-						auto gridPos = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / zoomPatSize);
-						auto sprite = 8 * gridPos.y + gridPos.x;
-
+						gridPosition = trunc((gl::vec2(ImGui::GetIO().MousePos) - scrnPos) / zoomPatSize);
+					}
+					auto sprite = 8 * gridPosition.y + gridPosition.x;
+					auto addr = getSpriteAttrAddr(sprite, mode);
+					bool popup = (mode == 2) && copySpriteDataPopup("Copy color data to clipboard", [&]{
+						return formatClipboardData(attTable.getAddress(getSpriteColorAddr(sprite, mode)), size);
+					});
+					if (hovered || popup) {
 						ImGui::SameLine();
 						im::Group([&]{
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1); // HACK !!
 							ImGui::StrCat("sprite: ", sprite);
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1); // HACK !!
+							ImGui::StrCat("address: 0x", hex_string<5>(attTable.getAddress(addr)));
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1); // HACK !!
 							auto pos = ImGui::GetCursorPos();
 							if (checkerBoardSize) {
 								ImGui::Image(checkerTex.getImGui(), 3.0f * zoomPatSize,
@@ -489,13 +530,12 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 						});
 						ImGui::SameLine();
 						im::Group([&]{
-							int addr = getSpriteAttrAddr(sprite, mode);
 							ImGui::StrCat("x: ", attTable[addr + 1],
 							              "  y: ", attTable[addr + 0]);
 							ImGui::StrCat("pattern: ", attTable[addr + 2]);
 							if (mode == 1) {
 								auto c = attTable[addr + 3];
-								ImGui::StrCat("color: ", c & 15, (c & 80 ? " (EC)" : ""));
+								ImGui::StrCat("color: ", c & 15, (c & 80 ? " (EC)"sv : ""sv));
 							} else {
 								int colorBase = getSpriteColorAddr(sprite, mode);
 								im::StyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 1), [&]{ // Tighten spacing
@@ -511,6 +551,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 											if (x != 3) ImGui::SameLine();
 										}
 									}
+									ImGui::StrCat("address: 0x", hex_string<5>(attTable.getAddress(colorBase)));
 								});
 							}
 						});
@@ -536,6 +577,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 			uint8_t stopY = (mode == 1) ? 208 : 216;
 			uint8_t patMask = (size == 8) ? 0xff : 0xfc;
 			int magFactor = mag ? 2 : 1;
+			auto magSize = magFactor * size;
 
 			uint8_t spriteCnt = 0;
 			for (/**/; spriteCnt < 32; ++spriteCnt) {
@@ -587,11 +629,14 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 				}
 				assert(anyEC || anyNonEC);
 				spriteBoxes[spriteCnt] = SpriteBox{
-					anyEC ? x - 32 : x,
-					initialY,
-					anyEC && anyNonEC ? size + 32 : size,
-					size,
-					spriteCnt, x, originalY, pat};
+					.x = anyEC ? x - 32 : x,
+					.y = initialY,
+					.w = magSize + (anyEC && anyNonEC ? 32 : 0),
+					.h = magSize,
+					.sprite = spriteCnt,
+					.vramX = x,
+					.vramY = originalY,
+					.pattern = pat};
 			}
 
 			std::array<uint32_t, 256 * 256> screen; // TODO screen6 striped colors
@@ -603,7 +648,7 @@ void ImGuiSpriteViewer::paint(MSXMotherBoard* motherBoard)
 
 				if (mode == 1) {
 					auto visibleSprites = subspan(spriteBuffer[line], 0, count);
-					for (const auto& spr : view::reverse(visibleSprites)) {
+					for (const auto& spr : std::views::reverse(visibleSprites)) {
 						uint8_t colIdx = spr.colorAttrib & 0x0f;
 						if (colIdx == 0 && transparent) continue;
 						auto color = palette[colIdx];

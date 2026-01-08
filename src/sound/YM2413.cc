@@ -1,15 +1,18 @@
 #include "YM2413.hh"
-#include "YM2413Okazaki.hh"
+
 #include "YM2413Burczynski.hh"
 #include "YM2413NukeYKT.hh"
+#include "YM2413Okazaki.hh"
 #include "YM2413OriginalNukeYKT.hh"
+
 #include "DeviceConfig.hh"
 #include "MSXException.hh"
 #include "serialize.hh"
+
 #include "cstd.hh"
 #include "narrow.hh"
 #include "outer.hh"
-#include <cmath>
+
 #include <memory>
 
 namespace openmsx {
@@ -22,13 +25,13 @@ YM2413::Debuggable::Debuggable(
 {
 }
 
-byte YM2413::Debuggable::read(unsigned address)
+uint8_t YM2413::Debuggable::read(unsigned address)
 {
 	const auto& ym2413 = OUTER(YM2413, debuggable);
-	return ym2413.core->peekReg(narrow<uint8_t>(address));
+	return ym2413.core->peekRegs()[address];
 }
 
-void YM2413::Debuggable::write(unsigned address, byte value, EmuTime::param time)
+void YM2413::Debuggable::write(unsigned address, uint8_t value, EmuTime time)
 {
 	auto& ym2413 = OUTER(YM2413, debuggable);
 	ym2413.pokeReg(narrow<uint8_t>(address), value, time);
@@ -77,13 +80,13 @@ YM2413::~YM2413()
 	unregisterSound();
 }
 
-void YM2413::reset(EmuTime::param time)
+void YM2413::reset(EmuTime time)
 {
 	updateStream(time);
 	core->reset();
 }
 
-void YM2413::writePort(bool port, byte value, EmuTime::param time)
+void YM2413::writePort(bool port, uint8_t value, EmuTime time)
 {
 	updateStream(time);
 
@@ -96,10 +99,15 @@ void YM2413::writePort(bool port, byte value, EmuTime::param time)
 	core->writePort(port, value, offset);
 }
 
-void YM2413::pokeReg(byte reg, byte value, EmuTime::param time)
+void YM2413::pokeReg(uint8_t reg, uint8_t value, EmuTime time)
 {
 	updateStream(time);
 	core->pokeReg(reg, value);
+}
+
+std::span<const uint8_t, 64> YM2413::peekRegs() const
+{
+	return core->peekRegs();
 }
 
 void YM2413::setOutputRate(unsigned hostSampleRate, double speed)

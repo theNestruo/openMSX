@@ -10,9 +10,11 @@
 // other address in a page switches that page as well)
 
 #include "RomKonami.hh"
-#include "MSXMotherBoard.hh"
+
 #include "MSXCliComm.hh"
+#include "MSXMotherBoard.hh"
 #include "serialize.hh"
+
 #include "xrange.hh"
 
 namespace openmsx {
@@ -51,14 +53,14 @@ void RomKonami::bankSwitch(unsigned page, unsigned block)
 	}
 }
 
-void RomKonami::reset(EmuTime::param /*time*/)
+void RomKonami::reset(EmuTime /*time*/)
 {
 	for (auto i : xrange(2, 6)) {
 		bankSwitch(i, i - 2);
 	}
 }
 
-void RomKonami::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomKonami::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	// Note: [0x4000..0x6000) is fixed at segment 0.
 	if (0x6000 <= address && address < 0xC000) {
@@ -66,7 +68,7 @@ void RomKonami::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-byte* RomKonami::getWriteCacheLine(word address)
+byte* RomKonami::getWriteCacheLine(uint16_t address)
 {
 	return (0x6000 <= address && address < 0xC000) ? nullptr : unmappedWrite.data();
 }

@@ -1,10 +1,13 @@
 #include "ColecoJoystickIO.hh"
+
+#include "JoystickPort.hh"
 #include "MSXMotherBoard.hh"
 #include "Reactor.hh"
-#include "JoystickPort.hh"
+#include "serialize.hh"
+
 #include "Math.hh"
 #include "enumerate.hh"
-#include "serialize.hh"
+
 #include <array>
 
 namespace openmsx {
@@ -31,12 +34,12 @@ ColecoJoystickIO::ColecoJoystickIO(const DeviceConfig& config)
 	reset(time);
 }
 
-void ColecoJoystickIO::reset(EmuTime::param /*time*/)
+void ColecoJoystickIO::reset(EmuTime /*time*/)
 {
 	joyMode = 0;
 }
 
-byte ColecoJoystickIO::peekIO(word port, EmuTime::param time) const
+byte ColecoJoystickIO::peekIO(uint16_t port, EmuTime time) const
 {
 	const int joyPort = (port >> 1) & 1;
 	const byte joyStatus = ports[joyPort]->read(time);
@@ -72,12 +75,12 @@ byte ColecoJoystickIO::peekIO(word port, EmuTime::param time) const
 	}
 }
 
-byte ColecoJoystickIO::readIO(word port, EmuTime::param time)
+byte ColecoJoystickIO::readIO(uint16_t port, EmuTime time)
 {
 	return peekIO(port, time);
 }
 
-void ColecoJoystickIO::writeIO(word port, byte /*value*/, EmuTime::param /*time*/)
+void ColecoJoystickIO::writeIO(uint16_t port, byte /*value*/, EmuTime /*time*/)
 {
 	joyMode = (port >> 6) & 1;
 }

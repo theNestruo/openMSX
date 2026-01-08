@@ -1,31 +1,13 @@
 #include "FileBase.hh"
+
 #include "FileOperations.hh"
+
 #include "ranges.hh"
+
 #include <algorithm>
 #include <array>
 
 namespace openmsx {
-
-std::span<const uint8_t> FileBase::mmap()
-{
-	auto size = getSize();
-	if (mmapBuf.empty()) {
-		auto pos = getPos();
-		seek(0);
-
-		MemBuffer<uint8_t> tmpBuf(size);
-		read(std::span{tmpBuf.data(), size});
-		std::swap(mmapBuf, tmpBuf);
-
-		seek(pos);
-	}
-	return {mmapBuf.data(), size};
-}
-
-void FileBase::munmap()
-{
-	mmapBuf.clear();
-}
 
 void FileBase::truncate(size_t newSize)
 {

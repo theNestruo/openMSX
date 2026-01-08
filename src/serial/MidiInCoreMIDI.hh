@@ -1,14 +1,15 @@
 #ifndef MIDIINCOREMIDI_HH
 #define MIDIINCOREMIDI_HH
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
 
 #include "MidiInDevice.hh"
 #include "EventListener.hh"
-#include "openmsx.hh"
 #include "serialize_meta.hh"
 #include "circular_buffer.hh"
 #include <CoreMIDI/MIDIServices.h>
+
+#include <cstdint>
 #include <mutex>
 
 namespace openmsx {
@@ -33,13 +34,13 @@ public:
 	~MidiInCoreMIDI();
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// MidiInDevice
-	void signal(EmuTime::param time) override;
+	void signal(EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -56,7 +57,7 @@ private:
 private:
 	EventDistributor& eventDistributor;
 	Scheduler& scheduler;
-	cb_queue<byte> queue;
+	cb_queue<uint8_t> queue;
 	std::mutex mutex; // to protect queue
 
 	MIDIClientRef client;
@@ -79,13 +80,13 @@ public:
 	~MidiInCoreMIDIVirtual();
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	std::string_view getName() const override;
-	std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	zstring_view getName() const override;
+	zstring_view getDescription() const override;
 
 	// MidiInDevice
-	void signal(EmuTime::param time) override;
+	void signal(EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -100,7 +101,7 @@ private:
 
 	EventDistributor& eventDistributor;
 	Scheduler& scheduler;
-	cb_queue<byte> queue;
+	cb_queue<uint8_t> queue;
 	std::mutex mutex; // to protect queue
 
 	MIDIClientRef client;

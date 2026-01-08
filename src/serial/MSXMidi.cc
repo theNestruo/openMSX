@@ -1,19 +1,23 @@
 #include "MSXMidi.hh"
+
 #include "MidiInDevice.hh"
+
 #include "MSXCPUInterface.hh"
 #include "MSXException.hh"
+#include "serialize.hh"
+
 #include "narrow.hh"
 #include "outer.hh"
-#include "serialize.hh"
 #include "unreachable.hh"
 #include "xrange.hh"
+
 #include <cassert>
 
 namespace openmsx {
 
 // Documented in MSX-Datapack Vol. 3, section 4 (MSX-MIDI), from page 634
-static constexpr byte LIMITED_RANGE_VALUE = 0x01; // b0 = "E8" => determines port range
-static constexpr byte DISABLED_VALUE      = 0x80; // b7 = EN
+static constexpr uint8_t LIMITED_RANGE_VALUE = 0x01; // b0 = "E8" => determines port range
+static constexpr uint8_t DISABLED_VALUE      = 0x80; // b7 = EN
 
 MSXMidi::MSXMidi(const DeviceConfig& config)
 	: MSXDevice(config)
@@ -26,9 +30,9 @@ MSXMidi::MSXMidi(const DeviceConfig& config)
 	, i8251(getScheduler(), interface, getCurrentTime())
 	, i8254(getScheduler(), &cntr0, nullptr, &cntr2, getCurrentTime())
 {
-	EmuDuration total(1.0 / 4e6); // 4MHz
-	EmuDuration hi   (1.0 / 8e6); // 8MHz half clock period
-	EmuTime::param time = getCurrentTime();
+	EmuDuration total = EmuDuration::hz(4e6); // 4MHz
+	EmuDuration hi    = EmuDuration::hz(8e6); // 8MHz half clock period
+	EmuTime time = getCurrentTime();
 	i8254.getClockPin(0).setPeriodicState(total, hi, time);
 	i8254.getClockPin(1).setState(false, time);
 	i8254.getClockPin(2).setPeriodicState(total, hi, time);
@@ -59,7 +63,7 @@ MSXMidi::~MSXMidi()
 	}
 }
 
-void MSXMidi::reset(EmuTime::param time)
+void MSXMidi::reset(EmuTime time)
 {
 	timerIRQlatch = false;
 	timerIRQenabled = false;
@@ -74,7 +78,7 @@ void MSXMidi::reset(EmuTime::param time)
 	i8251.reset(time);
 }
 
-byte MSXMidi::readIO(word port, EmuTime::param time)
+uint8_t MSXMidi::readIO(uint16_t port, EmuTime time)
 {
 	// If not enabled then no ports should have been registered.
 	assert(isEnabled);
@@ -98,7 +102,7 @@ byte MSXMidi::readIO(word port, EmuTime::param time)
 	}
 }
 
-byte MSXMidi::peekIO(word port, EmuTime::param time) const
+uint8_t MSXMidi::peekIO(uint16_t port, EmuTime time) const
 {
 	// If not enabled then no ports should have been registered.
 	assert(isEnabled);
@@ -122,7 +126,7 @@ byte MSXMidi::peekIO(word port, EmuTime::param time) const
 	}
 }
 
-void MSXMidi::writeIO(word port, byte value, EmuTime::param time)
+void MSXMidi::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	if (isExternalMSXMIDI && ((port & 0xFF) == 0xE2)) {
 		// control register
@@ -151,12 +155,13 @@ void MSXMidi::writeIO(word port, byte value, EmuTime::param time)
 	}
 }
 
-void MSXMidi::registerIOports(byte value)
+void MSXMidi::registerIOports(uint8_t value)
 {
 	assert(isExternalMSXMIDI);
 	bool newIsEnabled = (value & DISABLED_VALUE) == 0;
 	bool newIsLimited = (value & LIMITED_RANGE_VALUE) != 0;
 
+	auto& cpuInterface = getCPUInterface();
 	if (newIsEnabled != isEnabled) {
 		// Enable/disabled status changes, possibly limited status
 		// changes as well but that doesn't matter, we anyway need
@@ -164,16 +169,16 @@ void MSXMidi::registerIOports(byte value)
 		if (newIsEnabled) {
 			// disabled -> enabled
 			if (newIsLimited) {
-				registerRange(0xE0, 2);
+				cpuInterface.register_IO_InOut_range(0xE0, 2, this);
 			} else {
-				registerRange(0xE8, 8);
+				cpuInterface.register_IO_InOut_range(0xE8, 8, this);
 			}
 		} else {
 			// enabled -> disabled
 			if (isLimitedTo8251) { // note: old isLimited status
-				unregisterRange(0xE0, 2);
+				cpuInterface.unregister_IO_InOut_range(0xE0, 2, this);
 			} else {
-				unregisterRange(0xE8, 8);
+				cpuInterface.unregister_IO_InOut_range(0xE8, 8, this);
 			}
 		}
 
@@ -182,12 +187,12 @@ void MSXMidi::registerIOports(byte value)
 		// Need to switch between the low/high range.
 		if (newIsLimited) {
 			// Switch high->low range.
-			unregisterRange(0xE8, 8);
-			registerRange  (0xE0, 2);
+			cpuInterface.unregister_IO_InOut_range(0xE8, 8, this);
+			cpuInterface.register_IO_InOut_range  (0xE0, 2, this);
 		} else {
 			// Switch low->high range.
-			unregisterRange(0xE0, 2);
-			registerRange  (0xE8, 8);
+			cpuInterface.unregister_IO_InOut_range(0xE0, 2, this);
+			cpuInterface.register_IO_InOut_range  (0xE8, 8, this);
 		}
 	}
 
@@ -195,22 +200,7 @@ void MSXMidi::registerIOports(byte value)
 	isLimitedTo8251 = newIsLimited;
 }
 
-void MSXMidi::registerRange(byte port, unsigned num)
-{
-	for (auto i : xrange(num)) {
-		getCPUInterface().register_IO_In (narrow<byte>(port + i), this);
-		getCPUInterface().register_IO_Out(narrow<byte>(port + i), this);
-	}
-}
-void MSXMidi::unregisterRange(byte port, unsigned num)
-{
-	for (auto i : xrange(num)) {
-		getCPUInterface().unregister_IO_In (narrow<byte>(port + i), this);
-		getCPUInterface().unregister_IO_Out(narrow<byte>(port + i), this);
-	}
-}
-
-void MSXMidi::setTimerIRQ(bool status, EmuTime::param time)
+void MSXMidi::setTimerIRQ(bool status, EmuTime time)
 {
 	if (timerIRQlatch != status) {
 		timerIRQlatch = status;
@@ -221,7 +211,7 @@ void MSXMidi::setTimerIRQ(bool status, EmuTime::param time)
 	}
 }
 
-void MSXMidi::enableTimerIRQ(bool enabled, EmuTime::param time)
+void MSXMidi::enableTimerIRQ(bool enabled, EmuTime time)
 {
 	if (timerIRQenabled != enabled) {
 		timerIRQenabled = enabled;
@@ -232,7 +222,7 @@ void MSXMidi::enableTimerIRQ(bool enabled, EmuTime::param time)
 	}
 }
 
-void MSXMidi::updateEdgeEvents(EmuTime::param time)
+void MSXMidi::updateEdgeEvents(EmuTime time)
 {
 	bool wantEdges = timerIRQenabled && !timerIRQlatch;
 	i8254.getOutputPin(2).generateEdgeSignals(wantEdges, time);
@@ -261,31 +251,31 @@ void MSXMidi::enableRxRDYIRQ(bool enabled)
 
 // I8251Interface  (pass calls from I8251 to outConnector)
 
-void MSXMidi::Interface::setRxRDY(bool status, EmuTime::param /*time*/)
+void MSXMidi::Interface::setRxRDY(bool status, EmuTime /*time*/)
 {
 	auto& midi = OUTER(MSXMidi, interface);
 	midi.setRxRDYIRQ(status);
 }
 
-void MSXMidi::Interface::setDTR(bool status, EmuTime::param time)
+void MSXMidi::Interface::setDTR(bool status, EmuTime time)
 {
 	auto& midi = OUTER(MSXMidi, interface);
 	midi.enableTimerIRQ(status, time);
 }
 
-void MSXMidi::Interface::setRTS(bool status, EmuTime::param /*time*/)
+void MSXMidi::Interface::setRTS(bool status, EmuTime /*time*/)
 {
 	auto& midi = OUTER(MSXMidi, interface);
 	midi.enableRxRDYIRQ(status);
 }
 
-bool MSXMidi::Interface::getDSR(EmuTime::param /*time*/)
+bool MSXMidi::Interface::getDSR(EmuTime /*time*/)
 {
 	const auto& midi = OUTER(MSXMidi, interface);
 	return midi.timerIRQ.getState();
 }
 
-bool MSXMidi::Interface::getCTS(EmuTime::param /*time*/)
+bool MSXMidi::Interface::getCTS(EmuTime /*time*/)
 {
 	return true;
 }
@@ -308,13 +298,13 @@ void MSXMidi::Interface::setParityBit(bool enable, Parity parity)
 	midi.outConnector.setParityBit(enable, parity);
 }
 
-void MSXMidi::Interface::recvByte(byte value, EmuTime::param time)
+void MSXMidi::Interface::recvByte(uint8_t value, EmuTime time)
 {
 	auto& midi = OUTER(MSXMidi, interface);
 	midi.outConnector.recvByte(value, time);
 }
 
-void MSXMidi::Interface::signal(EmuTime::param time)
+void MSXMidi::Interface::signal(EmuTime time)
 {
 	const auto& midi = OUTER(MSXMidi, interface);
 	midi.getPluggedMidiInDev().signal(time);
@@ -323,7 +313,7 @@ void MSXMidi::Interface::signal(EmuTime::param time)
 
 // Counter 0 output
 
-void MSXMidi::Counter0::signal(ClockPin& pin, EmuTime::param time)
+void MSXMidi::Counter0::signal(ClockPin& pin, EmuTime time)
 {
 	auto& midi = OUTER(MSXMidi, cntr0);
 	ClockPin& clk = midi.i8251.getClockPin();
@@ -335,7 +325,7 @@ void MSXMidi::Counter0::signal(ClockPin& pin, EmuTime::param time)
 	}
 }
 
-void MSXMidi::Counter0::signalPosEdge(ClockPin& /*pin*/, EmuTime::param /*time*/)
+void MSXMidi::Counter0::signalPosEdge(ClockPin& /*pin*/, EmuTime /*time*/)
 {
 	UNREACHABLE;
 }
@@ -343,7 +333,7 @@ void MSXMidi::Counter0::signalPosEdge(ClockPin& /*pin*/, EmuTime::param /*time*/
 
 // Counter 2 output
 
-void MSXMidi::Counter2::signal(ClockPin& pin, EmuTime::param time)
+void MSXMidi::Counter2::signal(ClockPin& pin, EmuTime time)
 {
 	auto& midi = OUTER(MSXMidi, cntr2);
 	ClockPin& clk = midi.i8254.getClockPin(1);
@@ -355,7 +345,7 @@ void MSXMidi::Counter2::signal(ClockPin& pin, EmuTime::param time)
 	}
 }
 
-void MSXMidi::Counter2::signalPosEdge(ClockPin& /*pin*/, EmuTime::param time)
+void MSXMidi::Counter2::signalPosEdge(ClockPin& /*pin*/, EmuTime time)
 {
 	auto& midi = OUTER(MSXMidi, cntr2);
 	midi.setTimerIRQ(true, time);
@@ -389,7 +379,7 @@ void MSXMidi::setParityBit(bool enable, Parity parity)
 	i8251.setParityBit(enable, parity);
 }
 
-void MSXMidi::recvByte(byte value, EmuTime::param time)
+void MSXMidi::recvByte(uint8_t value, EmuTime time)
 {
 	i8251.recvByte(value, time);
 }

@@ -1,8 +1,9 @@
 #include "RomMSXDOS2.hh"
+
 #include "CacheLine.hh"
 #include "MSXException.hh"
+
 #include "one_of.hh"
-#include "serialize.hh"
 #include "unreachable.hh"
 
 namespace openmsx {
@@ -19,7 +20,7 @@ RomMSXDOS2::RomMSXDOS2(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomMSXDOS2::reset(EmuTime::param /*time*/)
+void RomMSXDOS2::reset(EmuTime /*time*/)
 {
 	setUnmapped(0);
 	setRom(1, 0);
@@ -27,7 +28,7 @@ void RomMSXDOS2::reset(EmuTime::param /*time*/)
 	setUnmapped(3);
 }
 
-void RomMSXDOS2::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomMSXDOS2::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	switch (range) {
 	case 0x00:
@@ -45,7 +46,7 @@ void RomMSXDOS2::writeMem(word address, byte value, EmuTime::param /*time*/)
 	setRom(1, value);
 }
 
-byte* RomMSXDOS2::getWriteCacheLine(word address)
+byte* RomMSXDOS2::getWriteCacheLine(uint16_t address)
 {
 	switch (range) {
 	case 0x00:

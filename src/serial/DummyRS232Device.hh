@@ -8,13 +8,13 @@ namespace openmsx {
 class DummyRS232Device final : public RS232Device
 {
 public:
-	void signal(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getDescription() const override;
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
+	void signal(EmuTime time) override;
+	[[nodiscard]] zstring_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
 
 	// SerialDataInterface (part)
-	void recvByte(byte value, EmuTime::param time) override;
+	void recvByte(uint8_t value, EmuTime time) override;
 };
 
 } // namespace openmsx

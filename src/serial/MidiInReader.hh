@@ -2,13 +2,17 @@
 #define MIDIINREADER_HH
 
 #include "MidiInDevice.hh"
+
 #include "EventListener.hh"
-#include "FilenameSetting.hh"
 #include "FileOperations.hh"
-#include "circular_buffer.hh"
+#include "FilenameSetting.hh"
+
 #include "Poller.hh"
+#include "circular_buffer.hh"
+
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 namespace openmsx {
@@ -25,13 +29,13 @@ public:
 	~MidiInReader() override;
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// MidiInDevice
-	void signal(EmuTime::param time) override;
+	void signal(EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -49,7 +53,7 @@ private:
 	FileOperations::FILE_t file;
 	cb_queue<uint8_t> queue;
 	std::mutex mutex; // to protect queue
-	Poller poller;
+	std::optional<Poller> poller;
 
 	FilenameSetting readFilenameSetting;
 };

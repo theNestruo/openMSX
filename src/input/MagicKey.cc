@@ -1,36 +1,37 @@
 #include "MagicKey.hh"
+
 #include "serialize.hh"
 #include "serialize_meta.hh"
 
 namespace openmsx {
 
 // Pluggable
-std::string_view MagicKey::getName() const
+zstring_view MagicKey::getName() const
 {
 	return "magic-key";
 }
 
-std::string_view MagicKey::getDescription() const
+zstring_view MagicKey::getDescription() const
 {
 	return "Dongle used by some Japanese games to enable cheat mode";
 }
 
-void MagicKey::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
+void MagicKey::plugHelper(Connector& /*connector*/, EmuTime /*time*/)
 {
 }
 
-void MagicKey::unplugHelper(EmuTime::param /*time*/)
+void MagicKey::unplugHelper(EmuTime /*time*/)
 {
 }
 
 
 // JoystickDevice
-uint8_t MagicKey::read(EmuTime::param /*time*/)
+uint8_t MagicKey::read(EmuTime /*time*/)
 {
 	return JOY_BUTTONB | JOY_BUTTONA | JOY_RIGHT | JOY_LEFT;
 }
 
-void MagicKey::write(uint8_t /*value*/, EmuTime::param /*time*/)
+void MagicKey::write(uint8_t /*value*/, EmuTime /*time*/)
 {
 }
 

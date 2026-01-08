@@ -1,7 +1,11 @@
 #include "KonamiUltimateCollection.hh"
-#include "narrow.hh"
-#include "ranges.hh"
+
 #include "serialize.hh"
+
+#include "narrow.hh"
+#include "outer.hh"
+#include "ranges.hh"
+
 #include <array>
 
 /******************************************************************************
@@ -35,9 +39,9 @@ all Konami and Konami SCC ROMs should work with "Konami" mapper in KUC.
 
 namespace openmsx {
 
-KonamiUltimateCollection::KonamiUltimateCollection(
-		const DeviceConfig& config, Rom&& rom_)
+KonamiUltimateCollection::KonamiUltimateCollection(DeviceConfig& config, Rom&& rom_)
 	: MSXRom(config, std::move(rom_))
+	, romBlockDebug(*this)
 	, flash(rom, AmdFlashChip::M29W640GB, {}, config)
 	, scc("KUC SCC", config, getCurrentTime(), SCC::Mode::Compatible)
 	, dac("KUC DAC", "Konami Ultimate Collection DAC", config)
@@ -45,13 +49,13 @@ KonamiUltimateCollection::KonamiUltimateCollection(
 	powerUp(getCurrentTime());
 }
 
-void KonamiUltimateCollection::powerUp(EmuTime::param time)
+void KonamiUltimateCollection::powerUp(EmuTime time)
 {
 	scc.powerUp(time);
 	reset(time);
 }
 
-void KonamiUltimateCollection::reset(EmuTime::param time)
+void KonamiUltimateCollection::reset(EmuTime time)
 {
 	mapperReg = 0;
 	offsetReg = 0;
@@ -73,7 +77,7 @@ unsigned KonamiUltimateCollection::getFlashAddr(unsigned addr) const
 	return ((mapperReg & 0xC0) << (21 - 6)) | (bank << 13) | (addr & 0x1FFF);
 }
 
-bool KonamiUltimateCollection::isSCCAccess(word addr) const
+bool KonamiUltimateCollection::isSCCAccess(uint16_t addr) const
 {
 	if (sccMode & 0x10) return false;
 
@@ -94,7 +98,7 @@ bool KonamiUltimateCollection::isSCCAccess(word addr) const
 	}
 }
 
-byte KonamiUltimateCollection::readMem(word addr, EmuTime::param time)
+byte KonamiUltimateCollection::readMem(uint16_t addr, EmuTime time)
 {
 	if (isSCCAccess(addr)) {
 		return scc.readMem(narrow_cast<uint8_t>(addr & 0xFF), time);
@@ -102,11 +106,11 @@ byte KonamiUltimateCollection::readMem(word addr, EmuTime::param time)
 
 	unsigned flashAddr = getFlashAddr(addr);
 	return (flashAddr != unsigned(-1))
-		? flash.read(flashAddr)
+		? flash.read(flashAddr, time)
 		: 0xFF; // unmapped read
 }
 
-byte KonamiUltimateCollection::peekMem(word addr, EmuTime::param time) const
+byte KonamiUltimateCollection::peekMem(uint16_t addr, EmuTime time) const
 {
 	if (isSCCAccess(addr)) {
 		return scc.peekMem(narrow_cast<uint8_t>(addr & 0xFF), time);
@@ -114,11 +118,11 @@ byte KonamiUltimateCollection::peekMem(word addr, EmuTime::param time) const
 
 	unsigned flashAddr = getFlashAddr(addr);
 	return (flashAddr != unsigned(-1))
-		? flash.peek(flashAddr)
+		? flash.peek(flashAddr, time)
 		: 0xFF; // unmapped read
 }
 
-const byte* KonamiUltimateCollection::getReadCacheLine(word addr) const
+const byte* KonamiUltimateCollection::getReadCacheLine(uint16_t addr) const
 {
 	if (isSCCAccess(addr)) return nullptr;
 
@@ -128,7 +132,7 @@ const byte* KonamiUltimateCollection::getReadCacheLine(word addr) const
 		: unmappedRead.data();
 }
 
-void KonamiUltimateCollection::writeMem(word addr, byte value, EmuTime::param time)
+void KonamiUltimateCollection::writeMem(uint16_t addr, byte value, EmuTime time)
 {
 	unsigned page8kB = (addr >> 13) - 2;
 	if (page8kB >= 4) return; // outside [0x4000, 0xBFFF]
@@ -201,11 +205,11 @@ void KonamiUltimateCollection::writeMem(word addr, byte value, EmuTime::param ti
 	}
 
 	if ((flashAddr != unsigned(-1)) && isFlashRomWriteEnabled()) {
-		flash.write(flashAddr, value);
+		flash.write(flashAddr, value, time);
 	}
 }
 
-byte* KonamiUltimateCollection::getWriteCacheLine(word addr)
+byte* KonamiUltimateCollection::getWriteCacheLine(uint16_t addr)
 {
 	return ((0x4000 <= addr) && (addr < 0xC000))
 	       ? nullptr        // [0x4000,0xBFFF] isn't cacheable
@@ -228,5 +232,12 @@ void KonamiUltimateCollection::serialize(Archive& ar, unsigned /*version*/)
 }
 INSTANTIATE_SERIALIZE_METHODS(KonamiUltimateCollection);
 REGISTER_MSXDEVICE(KonamiUltimateCollection, "KonamiUltimateCollection");
+
+
+unsigned KonamiUltimateCollection::Blocks::readExt(unsigned address)
+{
+	const auto& dev = OUTER(KonamiUltimateCollection, romBlockDebug);
+	return dev.getFlashAddr(address) >> 13;
+}
 
 } // namespace openmsx

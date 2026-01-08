@@ -6,16 +6,21 @@
 // - Unsubscribe at CliComm after stream is closed.
 
 #include "CliConnection.hh"
-#include "EventDistributor.hh"
+
 #include "Event.hh"
+#include "EventDistributor.hh"
+
 #include "CommandController.hh"
 #include "CommandException.hh"
 #include "TclObject.hh"
-#include "TemporaryString.hh"
 #include "XMLEscape.hh"
+
+#include "TemporaryString.hh"
 #include "cstdiop.hh"
 #include "ranges.hh"
 #include "unistdp.hh"
+
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <iostream>
@@ -27,6 +32,8 @@
 
 namespace openmsx {
 
+using namespace std::literals;
+
 // class CliConnection
 
 CliConnection::CliConnection(CommandController& commandController_,
@@ -35,7 +42,7 @@ CliConnection::CliConnection(CommandController& commandController_,
 	, commandController(commandController_)
 	, eventDistributor(eventDistributor_)
 {
-	ranges::fill(updateEnabled, false);
+	std::ranges::fill(updateEnabled, false);
 
 	eventDistributor.registerEventListener(EventType::CLICOMMAND, *this);
 }
@@ -101,7 +108,7 @@ void CliConnection::execute(const std::string& command)
 
 static TemporaryString reply(std::string_view message, bool status)
 {
-	return tmpStrCat("<reply result=\"", (status ? "ok" : "nok"), "\">",
+	return tmpStrCat("<reply result=\"", (status ? "ok"sv : "nok"sv), "\">",
 	                 XMLEscape(message), "</reply>\n");
 }
 
@@ -334,8 +341,7 @@ void SocketConnection::output(std::string_view message_)
 		// yet send). Ignore log and update messages for now.
 		return;
 	}
-	// std::span message = message_; // error with clang-15/libc++
-	std::span message{message_.begin(), message_.end()};
+	std::span message = message_;
 	while (!message.empty()) {
 		ptrdiff_t bytesSend;
 		{
@@ -369,6 +375,12 @@ void SocketConnection::closeSocket()
 void SocketConnection::close()
 {
 	closeSocket();
+}
+
+bool SocketConnection::isClosed()
+{
+	std::scoped_lock lock(sdMutex);
+	return sd == OPENMSX_INVALID_SOCKET;
 }
 
 } // namespace openmsx

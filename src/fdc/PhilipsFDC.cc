@@ -1,25 +1,29 @@
 #include "PhilipsFDC.hh"
-#include "CacheLine.hh"
+
 #include "DriveMultiplexer.hh"
 #include "WD2793.hh"
+
+#include "CacheLine.hh"
 #include "serialize.hh"
 
 namespace openmsx {
 
-PhilipsFDC::PhilipsFDC(const DeviceConfig& config)
+PhilipsFDC::PhilipsFDC(DeviceConfig& config)
 	: WD2793BasedFDC(config)
 {
+	// ROM only visible in 0x4000-0x7FFF by default
+	parseRomVisibility(config, 0x4000, 0x4000);
 	reset(getCurrentTime());
 }
 
-void PhilipsFDC::reset(EmuTime::param time)
+void PhilipsFDC::reset(EmuTime time)
 {
 	WD2793BasedFDC::reset(time);
 	writeMem(0x3FFC, 0x00, time);
 	writeMem(0x3FFD, 0x00, time);
 }
 
-byte PhilipsFDC::readMem(word address, EmuTime::param time)
+byte PhilipsFDC::readMem(uint16_t address, EmuTime time)
 {
 	switch (address & 0x3FFF) {
 	case 0x3FF8:
@@ -56,7 +60,7 @@ byte PhilipsFDC::readMem(word address, EmuTime::param time)
 	}
 }
 
-byte PhilipsFDC::peekMem(word address, EmuTime::param time) const
+byte PhilipsFDC::peekMem(uint16_t address, EmuTime time) const
 {
 	// FDC registers are mirrored in
 	//   0x3FF8-0x3FFF
@@ -110,30 +114,22 @@ byte PhilipsFDC::peekMem(word address, EmuTime::param time) const
 		return value;
 	}
 	default:
-		if ((0x4000 <= address) && (address < 0x8000)) {
-			// ROM only visible in 0x4000-0x7FFF
-			return MSXFDC::peekMem(address, time);
-		} else {
-			return 255;
-		}
+		return MSXFDC::peekMem(address, time);
 	}
 }
 
-const byte* PhilipsFDC::getReadCacheLine(word start) const
+const byte* PhilipsFDC::getReadCacheLine(uint16_t start) const
 {
 	// if address overlap 0x7ff8-0x7ffb then return nullptr,
 	// else normal ROM behaviour
 	if ((start & 0x3FF8 & CacheLine::HIGH) == (0x3FF8 & CacheLine::HIGH)) {
 		return nullptr;
-	} else if ((0x4000 <= start) && (start < 0x8000)) {
-		// ROM visible in 0x4000-0x7FFF
-		return MSXFDC::getReadCacheLine(start);
 	} else {
-		return unmappedRead.data();
+		return MSXFDC::getReadCacheLine(start);
 	}
 }
 
-void PhilipsFDC::writeMem(word address, byte value, EmuTime::param time)
+void PhilipsFDC::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	switch (address & 0x3FFF) {
 	case 0x3FF8:
@@ -179,7 +175,7 @@ void PhilipsFDC::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* PhilipsFDC::getWriteCacheLine(word address)
+byte* PhilipsFDC::getWriteCacheLine(uint16_t address)
 {
 	if ((address & 0x3FF8) == (0x3FF8 & CacheLine::HIGH)) {
 		return nullptr;

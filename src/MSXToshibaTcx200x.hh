@@ -1,25 +1,25 @@
 #ifndef MSXTOSHIBATCX200X_HH
 #define MSXTOSHIBATCX200X_HH
 
+#include "BooleanSetting.hh"
 #include "MSXDevice.hh"
 #include "Rom.hh"
 #include "SRAM.hh"
-#include "BooleanSetting.hh"
 
 namespace openmsx {
 
 class MSXToshibaTcx200x final : public MSXDevice
 {
 public:
-	explicit MSXToshibaTcx200x(const DeviceConfig& config);
+	explicit MSXToshibaTcx200x(DeviceConfig& config);
 
-	void reset(EmuTime::param time) override;
+	void reset(EmuTime time) override;
 
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word start) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word start) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t start) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t start) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

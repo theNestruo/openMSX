@@ -1,10 +1,11 @@
 #ifndef MSXYAMAHASFG_HH
 #define MSXYAMAHASFG_HH
 
-#include "MSXDevice.hh"
 #include "YM2151.hh"
-#include "YM2148.hh"
+
+#include "MSXDevice.hh"
 #include "Rom.hh"
+#include "YM2148.hh"
 #include "serialize_meta.hh"
 
 namespace openmsx {
@@ -12,22 +13,22 @@ namespace openmsx {
 class MSXYamahaSFG final : public MSXDevice
 {
 public:
-	explicit MSXYamahaSFG(const DeviceConfig& config);
+	explicit MSXYamahaSFG(DeviceConfig& config);
 
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	[[nodiscard]] const byte* getReadCacheLine(word start) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] byte* getWriteCacheLine(word start) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t start) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t start) override;
 	[[nodiscard]] byte readIRQVector() override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
 
 private:
-	void writeRegisterPort(byte value, EmuTime::param time);
-	void writeDataPort(byte value, EmuTime::param time);
+	void writeRegisterPort(byte value, EmuTime time);
+	void writeDataPort(byte value, EmuTime time);
 
 private:
 	Rom rom;

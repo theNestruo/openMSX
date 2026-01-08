@@ -17,10 +17,10 @@ public:
 	[[nodiscard]] AudioInputDevice& getPluggedAudioDev() const;
 
 	// Connector
-	[[nodiscard]] std::string_view getDescription() const override;
-	[[nodiscard]] std::string_view getClass() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
+	[[nodiscard]] zstring_view getClass() const override;
 
-	[[nodiscard]] int16_t readSample(EmuTime::param time) const;
+	[[nodiscard]] int16_t readSample(EmuTime time) const;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

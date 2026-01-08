@@ -38,16 +38,16 @@ TODO:
 
 #include "narrow.hh"
 #include "one_of.hh"
-#include "ranges.hh"
 #include "unreachable.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 
 namespace openmsx {
 
-static byte getDelayCycles(const XMLElement& devices) {
-	byte cycles = 0;
+static uint8_t getDelayCycles(const XMLElement& devices) {
+	uint8_t cycles = 0;
 	if (const auto* t9769Dev = devices.findChild("T9769")) {
 		if (t9769Dev->getChildData("subtype") == "C") {
 			cycles = 1;
@@ -149,7 +149,8 @@ VDP::VDP(const DeviceConfig& config)
 	else throw MSXException("Unknown VDP version \"", versionString, '"');
 
 	// saturation parameters only make sense when using TMS VDPs
-	if ((versionString.find("TMS") != 0) && ((config.findChild("saturationPr") != nullptr) || (config.findChild("saturationPb") != nullptr) || (config.findChild("saturation") != nullptr))) {
+	if (!versionString.starts_with("TMS") &&
+	    (config.findChild("saturationPr") || config.findChild("saturationPb") || config.findChild("saturation"))) {
 		throw MSXException("Specifying saturation parameters only makes sense for TMS VDPs");
 	}
 
@@ -166,10 +167,10 @@ VDP::VDP(const DeviceConfig& config)
 	saturationPb   = getPercentage("saturationPb", "for Pb component ", saturation);
 
 	// Set up control register availability.
-	static constexpr std::array<byte, 32> VALUE_MASKS_MSX1 = {
+	static constexpr std::array<uint8_t, 32> VALUE_MASKS_MSX1 = {
 		0x03, 0xFB, 0x0F, 0xFF, 0x07, 0x7F, 0x07, 0xFF  // 00..07
 	};
-	static constexpr std::array<byte, 32> VALUE_MASKS_MSX2 = {
+	static constexpr std::array<uint8_t, 32> VALUE_MASKS_MSX2 = {
 		0x7E, 0x7F, 0x7F, 0xFF, 0x3F, 0xFF, 0x3F, 0xFF, // 00..07
 		0xFB, 0xBF, 0x07, 0x03, 0xFF, 0xFF, 0x07, 0x0F, // 08..15
 		0x0F, 0xBF, 0xFF, 0xFF, 0x3F, 0x3F, 0x3F, 0xFF, // 16..23
@@ -187,7 +188,7 @@ VDP::VDP(const DeviceConfig& config)
 	resetInit(); // must be done early to avoid UMRs
 
 	// Video RAM.
-	EmuTime::param time = getCurrentTime();
+	EmuTime time = getCurrentTime();
 	unsigned vramSize =
 		(isMSX1VDP() ? 16 : config.getChildDataAsInt("vram", 0));
 	if (vramSize != one_of(16u, 64u, 128u, 192u)) {
@@ -252,7 +253,7 @@ void VDP::resetInit()
 {
 	// note: vram, spriteChecker, cmdEngine, renderer may not yet be
 	//       created at this point
-	ranges::fill(controlRegs, 0);
+	std::ranges::fill(controlRegs, 0);
 	if (isVDPwithPALonly()) {
 		// Boots (and remains) in PAL mode, all other VDPs boot in NTSC.
 		controlRegs[9] |= 0x02;
@@ -303,7 +304,7 @@ void VDP::resetInit()
 	palette = V9938_PALETTE;
 }
 
-void VDP::resetMasks(EmuTime::param time)
+void VDP::resetMasks(EmuTime time)
 {
 	updateNameBase(time);
 	updateColorBase(time);
@@ -315,13 +316,13 @@ void VDP::resetMasks(EmuTime::param time)
 	//vram->bitmapWindow.setMask(~(~0u << 17), ~0u << 17, time);
 }
 
-void VDP::powerUp(EmuTime::param time)
+void VDP::powerUp(EmuTime time)
 {
 	vram->clear();
 	reset(time);
 }
 
-void VDP::reset(EmuTime::param time)
+void VDP::reset(EmuTime time)
 {
 	syncVSync        .removeSyncPoint();
 	syncDisplayStart .removeSyncPoint();
@@ -351,7 +352,7 @@ void VDP::reset(EmuTime::param time)
 	assert(frameCount == 0);
 }
 
-void VDP::execVSync(EmuTime::param time)
+void VDP::execVSync(EmuTime time)
 {
 	// This frame is finished.
 	// Inform VDP subcomponents.
@@ -373,7 +374,7 @@ void VDP::execVSync(EmuTime::param time)
 	frameStart(time);
 }
 
-void VDP::execDisplayStart(EmuTime::param time)
+void VDP::execDisplayStart(EmuTime time)
 {
 	// Display area starts here, unless we're doing overscan and it
 	// was already active.
@@ -385,7 +386,7 @@ void VDP::execDisplayStart(EmuTime::param time)
 	}
 }
 
-void VDP::execVScan(EmuTime::param time)
+void VDP::execVScan(EmuTime time)
 {
 	// VSCAN is the end of display.
 	// This will generate a VBLANK IRQ. Typically MSX software will
@@ -413,7 +414,7 @@ void VDP::execHScan()
 	}
 }
 
-void VDP::execHorAdjust(EmuTime::param time)
+void VDP::execHorAdjust(EmuTime time)
 {
 	int newHorAdjust = (controlRegs[18] & 0x0F) ^ 0x07;
 	if (controlRegs[25] & 0x08) {
@@ -423,7 +424,7 @@ void VDP::execHorAdjust(EmuTime::param time)
 	horizontalAdjust = newHorAdjust;
 }
 
-void VDP::execSetMode(EmuTime::param time)
+void VDP::execSetMode(EmuTime time)
 {
 	updateDisplayMode(
 		DisplayMode(controlRegs[0], controlRegs[1], controlRegs[25]),
@@ -431,7 +432,7 @@ void VDP::execSetMode(EmuTime::param time)
 		time);
 }
 
-void VDP::execSetBlank(EmuTime::param time)
+void VDP::execSetBlank(EmuTime time)
 {
 	bool newDisplayEnabled = (controlRegs[1] & 0x40) != 0;
 	if (isDisplayArea) {
@@ -440,21 +441,21 @@ void VDP::execSetBlank(EmuTime::param time)
 	displayEnabled = newDisplayEnabled;
 }
 
-void VDP::execSetSprites(EmuTime::param time)
+void VDP::execSetSprites(EmuTime time)
 {
 	bool newSpriteEnabled = (controlRegs[8] & 0x02) == 0;
 	vram->updateSpritesEnabled(newSpriteEnabled, time);
 	spriteEnabled = newSpriteEnabled;
 }
 
-void VDP::execCpuVramAccess(EmuTime::param time)
+void VDP::execCpuVramAccess(EmuTime time)
 {
 	assert(!allowTooFastAccess);
 	pendingCpuAccess = false;
 	executeCpuVramAccess(time);
 }
 
-void VDP::execSyncCmdDone(EmuTime::param time)
+void VDP::execSyncCmdDone(EmuTime time)
 {
 	cmdEngine->sync(time);
 }
@@ -462,7 +463,7 @@ void VDP::execSyncCmdDone(EmuTime::param time)
 // TODO: This approach assumes that an overscan-like approach can be used
 //       skip display start, so that the border is rendered instead.
 //       This makes sense, but it has not been tested on real MSX yet.
-void VDP::scheduleDisplayStart(EmuTime::param time)
+void VDP::scheduleDisplayStart(EmuTime time)
 {
 	// Remove pending DISPLAY_START sync point, if any.
 	if (displayStartSyncTime > time) {
@@ -495,7 +496,7 @@ void VDP::scheduleDisplayStart(EmuTime::param time)
 	scheduleVScan(time);
 }
 
-void VDP::scheduleVScan(EmuTime::param time)
+void VDP::scheduleVScan(EmuTime time)
 {
 	// Remove pending VSCAN sync point, if any.
 	if (vScanSyncTime > time) {
@@ -514,7 +515,7 @@ void VDP::scheduleVScan(EmuTime::param time)
 	}
 }
 
-void VDP::scheduleHScan(EmuTime::param time)
+void VDP::scheduleHScan(EmuTime time)
 {
 	// Remove pending HSCAN sync point, if any.
 	if (hScanSyncTime > time) {
@@ -580,7 +581,7 @@ void VDP::scheduleHScan(EmuTime::param time)
 //       frame when their callback occurs.
 //       But I'm not sure how to handle the PAL/NTSC setting (which also
 //       influences the frequency at which E/O toggles).
-void VDP::frameStart(EmuTime::param time)
+void VDP::frameStart(EmuTime time)
 {
 	++frameCount;
 
@@ -634,14 +635,14 @@ void VDP::frameStart(EmuTime::param time)
 		<< ", frameEnd = " << (frameStartTime + getTicksPerFrame())
 		<< ", hscan = " << hScanSyncTime
 		<< ", displayStart = " << displayStart
-		<< ", timing: " << (palTiming ? "PAL" : "NTSC")
+		<< ", timing: " << (palTiming ? "PAL"sv : "NTSC"sv)
 		<< "\n";
 	*/
 }
 
 // The I/O functions.
 
-void VDP::writeIO(word port, byte value, EmuTime::param time_)
+void VDP::writeIO(uint16_t port, uint8_t value, EmuTime time_)
 {
 	EmuTime time = time_;
 	// This is the (fixed) delay from
@@ -707,7 +708,7 @@ void VDP::writeIO(word port, byte value, EmuTime::param time_)
 	case 2: // Palette data write
 		if (paletteDataStored) {
 			unsigned index = controlRegs[16];
-			word grb = ((value << 8) | dataLatch) & 0x777;
+			uint16_t grb = ((value << 8) | dataLatch) & 0x777;
 			setPalette(index, grb, time);
 			controlRegs[16] = (index + 1) & 0x0F;
 			paletteDataStored = false;
@@ -720,7 +721,7 @@ void VDP::writeIO(word port, byte value, EmuTime::param time_)
 		dataLatch = value;
 		// TODO: What happens if reg 17 is written indirectly?
 		//fprintf(stderr, "VDP indirect register write: %02X\n", value);
-		byte regNr = controlRegs[17];
+		uint8_t regNr = controlRegs[17];
 		changeRegister(regNr & 0x3F, value, time);
 		if ((regNr & 0x80) == 0) {
 			// Auto-increment.
@@ -747,18 +748,18 @@ void VDP::getExtraDeviceInfo(TclObject& result) const
 	result.addDictKeyValues("version", getVersionString());
 }
 
-byte VDP::peekRegister(unsigned address) const
+uint8_t VDP::peekRegister(unsigned address, EmuTime time) const
 {
 	if (address < 0x20) {
 		return controlRegs[address];
 	} else if (address < 0x2F) {
-		return cmdEngine->peekCmdReg(narrow<byte>(address - 0x20));
+		return cmdEngine->peekCmdReg(narrow<uint8_t>(address - 0x20), time);
 	} else {
 		return 0xFF;
 	}
 }
 
-void VDP::setPalette(unsigned index, word grb, EmuTime::param time)
+void VDP::setPalette(unsigned index, uint16_t grb, EmuTime time)
 {
 	if (palette[index] != grb) {
 		renderer->updatePalette(index, grb, time);
@@ -766,24 +767,24 @@ void VDP::setPalette(unsigned index, word grb, EmuTime::param time)
 	}
 }
 
-void VDP::vramWrite(byte value, EmuTime::param time)
+void VDP::vramWrite(uint8_t value, EmuTime time)
 {
 	scheduleCpuVramAccess(false, value, time);
 }
 
-byte VDP::vramRead(EmuTime::param time)
+uint8_t VDP::vramRead(EmuTime time)
 {
 	// Return the result from a previous read. In case
 	// allowTooFastAccess==true, the call to scheduleCpuVramAccess()
 	// already overwrites that variable, so make a local copy first.
-	byte result = cpuVramData;
+	uint8_t result = cpuVramData;
 
-	byte dummy = 0;
+	uint8_t dummy = 0;
 	scheduleCpuVramAccess(true, dummy, time); // schedule next read
 	return result;
 }
 
-void VDP::scheduleCpuVramAccess(bool isRead, byte write, EmuTime::param time)
+void VDP::scheduleCpuVramAccess(bool isRead, uint8_t write, EmuTime time)
 {
 	// Tested on real V9938: 'cpuVramData' is shared between read and write.
 	// E.g. OUT (#98),A followed by IN A,(#98) returns the just written value.
@@ -845,7 +846,7 @@ void VDP::scheduleCpuVramAccess(bool isRead, byte write, EmuTime::param time)
 	}
 }
 
-void VDP::executeCpuVramAccess(EmuTime::param time)
+void VDP::executeCpuVramAccess(EmuTime time)
 {
 	int addr = (controlRegs[14] << 14) | vramPointer;
 	if (displayMode.isPlanar()) {
@@ -886,20 +887,20 @@ void VDP::executeCpuVramAccess(EmuTime::param time)
 	}
 }
 
-EmuTime VDP::getAccessSlot(EmuTime::param time, VDPAccessSlots::Delta delta) const
+EmuTime VDP::getAccessSlot(EmuTime time, VDPAccessSlots::Delta delta) const
 {
 	return VDPAccessSlots::getAccessSlot(
 		getFrameStartTime(), time, delta, *this);
 }
 
 VDPAccessSlots::Calculator VDP::getAccessSlotCalculator(
-	EmuTime::param time, EmuTime::param limit) const
+	EmuTime time, EmuTime limit) const
 {
 	return VDPAccessSlots::getCalculator(
 		getFrameStartTime(), time, limit, *this);
 }
 
-byte VDP::peekStatusReg(byte reg, EmuTime::param time) const
+uint8_t VDP::peekStatusReg(uint8_t reg, EmuTime time) const
 {
 	switch (reg) {
 	case 0:
@@ -936,30 +937,30 @@ byte VDP::peekStatusReg(byte reg, EmuTime::param time) const
 		return statusReg2
 			| (getHR(ticksThisFrame) ? 0x20 : 0x00)
 			| (vr ? 0x40 : 0x00)
-			| cmdEngine->getStatus(time);
+			| cmdEngine->peekStatus2(time);
 	}
 	case 3:
-		return byte(spriteChecker->getCollisionX(time));
+		return uint8_t(spriteChecker->getCollisionX(time));
 	case 4:
-		return byte(spriteChecker->getCollisionX(time) >> 8) | 0xFE;
+		return uint8_t(spriteChecker->getCollisionX(time) >> 8) | 0xFE;
 	case 5:
-		return byte(spriteChecker->getCollisionY(time));
+		return uint8_t(spriteChecker->getCollisionY(time));
 	case 6:
-		return byte(spriteChecker->getCollisionY(time) >> 8) | 0xFC;
+		return uint8_t(spriteChecker->getCollisionY(time) >> 8) | 0xFC;
 	case 7:
 		return cmdEngine->readColor(time);
 	case 8:
-		return byte(cmdEngine->getBorderX(time));
+		return uint8_t(cmdEngine->getBorderX(time));
 	case 9:
-		return byte(cmdEngine->getBorderX(time) >> 8) | 0xFE;
+		return uint8_t(cmdEngine->getBorderX(time) >> 8) | 0xFE;
 	default: // non-existent status register
 		return 0xFF;
 	}
 }
 
-byte VDP::readStatusReg(byte reg, EmuTime::param time)
+uint8_t VDP::readStatusReg(uint8_t reg, EmuTime time)
 {
-	byte ret = peekStatusReg(reg, time);
+	uint8_t ret = peekStatusReg(reg, time);
 	switch (reg) {
 	case 0:
 		spriteChecker->resetStatus();
@@ -977,12 +978,21 @@ byte VDP::readStatusReg(byte reg, EmuTime::param time)
 	case 7:
 		cmdEngine->resetColor();
 		break;
+	case 9:
+		cmdEngine->resetBD();
+		break;
 	}
 	return ret;
 }
 
-byte VDP::readIO(word port, EmuTime::param time)
+uint8_t VDP::readIO(uint16_t port, EmuTime time_)
 {
+	// See comment in writeIO().
+	EmuTime time = time_;
+	if (fixedVDPIOdelayCycles > 0) {
+		time = cpu.waitCyclesZ80(time, fixedVDPIOdelayCycles);
+	}
+
 	assert(isInsideFrame(time));
 
 	registerDataStored = false; // Abort any port #1 writes in progress.
@@ -1001,13 +1011,13 @@ byte VDP::readIO(word port, EmuTime::param time)
 	}
 }
 
-byte VDP::peekIO(word /*port*/, EmuTime::param /*time*/) const
+uint8_t VDP::peekIO(uint16_t /*port*/, EmuTime /*time*/) const
 {
 	// TODO not implemented
 	return 0xFF;
 }
 
-void VDP::changeRegister(byte reg, byte val, EmuTime::param time)
+void VDP::changeRegister(uint8_t reg, uint8_t val, EmuTime time)
 {
 	if (reg >= 32) {
 		// MXC belongs to CPU interface;
@@ -1025,7 +1035,7 @@ void VDP::changeRegister(byte reg, byte val, EmuTime::param time)
 	// Make sure only bits that actually exist are written.
 	val &= controlValueMasks[reg];
 	// Determine the difference between new and old value.
-	byte change = val ^ controlRegs[reg];
+	uint8_t change = val ^ controlRegs[reg];
 
 	// Register 13 is special because writing it resets blinking state,
 	// even if the value in the register doesn't change.
@@ -1247,7 +1257,7 @@ void VDP::changeRegister(byte reg, byte val, EmuTime::param time)
 	}
 }
 
-void VDP::syncAtNextLine(SyncBase& type, EmuTime::param time) const
+void VDP::syncAtNextLine(SyncBase& type, EmuTime time) const
 {
 	// The processing of a new line starts in the middle of the left erase,
 	// ~144 cycles after the sync signal. Adjust affects it. See issue #1310.
@@ -1258,7 +1268,7 @@ void VDP::syncAtNextLine(SyncBase& type, EmuTime::param time) const
 	type.setSyncPoint(nextTime);
 }
 
-void VDP::updateNameBase(EmuTime::param time)
+void VDP::updateNameBase(EmuTime time)
 {
 	unsigned base = (controlRegs[2] << 10) | ~(~0u << 10);
 	// TODO:
@@ -1286,7 +1296,7 @@ void VDP::updateNameBase(EmuTime::param time)
 	vram->nameTable.setMask(base, indexMask, time);
 }
 
-void VDP::updateColorBase(EmuTime::param time)
+void VDP::updateColorBase(EmuTime time)
 {
 	unsigned base = (controlRegs[10] << 14) | (controlRegs[3] << 6) | ~(~0u << 6);
 	renderer->updateColorBase(base, time);
@@ -1310,7 +1320,7 @@ void VDP::updateColorBase(EmuTime::param time)
 	}
 }
 
-void VDP::updatePatternBase(EmuTime::param time)
+void VDP::updatePatternBase(EmuTime time)
 {
 	unsigned base = (controlRegs[4] << 11) | ~(~0u << 11);
 	renderer->updatePatternBase(base, time);
@@ -1344,7 +1354,7 @@ void VDP::updatePatternBase(EmuTime::param time)
 	}
 }
 
-void VDP::updateSpriteAttributeBase(EmuTime::param time)
+void VDP::updateSpriteAttributeBase(EmuTime time)
 {
 	int mode = displayMode.getSpriteMode(isMSX1VDP());
 	if (mode == 0) {
@@ -1360,7 +1370,7 @@ void VDP::updateSpriteAttributeBase(EmuTime::param time)
 	vram->spriteAttribTable.setMask(baseMask, indexMask, time);
 }
 
-void VDP::updateSpritePatternBase(EmuTime::param time)
+void VDP::updateSpritePatternBase(EmuTime time)
 {
 	if (displayMode.getSpriteMode(isMSX1VDP()) == 0) {
 		vram->spritePatternTable.disable(time);
@@ -1375,7 +1385,7 @@ void VDP::updateSpritePatternBase(EmuTime::param time)
 	vram->spritePatternTable.setMask(baseMask, indexMask, time);
 }
 
-void VDP::updateDisplayMode(DisplayMode newMode, bool cmdBit, EmuTime::param time)
+void VDP::updateDisplayMode(DisplayMode newMode, bool cmdBit, EmuTime time)
 {
 	// Synchronize subsystems.
 	vram->updateDisplayMode(newMode, cmdBit, time);
@@ -1543,7 +1553,7 @@ static constexpr std::array<std::array<float, 3>, 16> TMS9XXXA_ANALOG_OUTPUT = {
 std::array<std::array<uint8_t, 3>, 16> VDP::getMSX1Palette() const
 {
 	assert(isMSX1VDP());
-	if (MSXDevice::getDeviceConfig().findChild("3bitrgboutput") != nullptr) {
+	if (MSXDevice::getDeviceConfig().findChild("rgboutput3bit") != nullptr) {
 		return THREE_BIT_RGB_PALETTE;
 	}
 	if ((version & VM_TOSHIBA_PALETTE) != 0) {
@@ -1588,6 +1598,16 @@ std::array<std::array<uint8_t, 3>, 16> VDP::getMSX1Palette() const
 	return tmsPalette;
 }
 
+const RawFrame* VDP::getWorkingFrame(EmuTime time)
+{
+	return renderer->getWorkingFrame(time);
+}
+
+const RawFrame* VDP::getLastFrame() const
+{
+	return renderer->getLastFrame();
+}
+
 // RegDebug
 
 VDP::RegDebug::RegDebug(const VDP& vdp_)
@@ -1596,13 +1616,13 @@ VDP::RegDebug::RegDebug(const VDP& vdp_)
 {
 }
 
-byte VDP::RegDebug::read(unsigned address)
+uint8_t VDP::RegDebug::read(unsigned address, EmuTime time)
 {
 	const auto& vdp = OUTER(VDP, vdpRegDebug);
-	return vdp.peekRegister(address);
+	return vdp.peekRegister(address, time);
 }
 
-void VDP::RegDebug::write(unsigned address, byte value, EmuTime::param time)
+void VDP::RegDebug::write(unsigned address, uint8_t value, EmuTime time)
 {
 	auto& vdp = OUTER(VDP, vdpRegDebug);
 	// Ignore writes to registers >= 8 on MSX1. An alternative is to only
@@ -1610,7 +1630,7 @@ void VDP::RegDebug::write(unsigned address, byte value, EmuTime::param time)
 	// compatibility with some existing scripts. E.g. script that queries
 	// PAL vs NTSC in a VDP agnostic way.
 	if ((address >= 8) && vdp.isMSX1VDP()) return;
-	vdp.changeRegister(narrow<byte>(address), value, time);
+	vdp.changeRegister(narrow<uint8_t>(address), value, time);
 }
 
 
@@ -1622,10 +1642,10 @@ VDP::StatusRegDebug::StatusRegDebug(const VDP& vdp_)
 {
 }
 
-byte VDP::StatusRegDebug::read(unsigned address, EmuTime::param time)
+uint8_t VDP::StatusRegDebug::read(unsigned address, EmuTime time)
 {
 	const auto& vdp = OUTER(VDP, vdpStatusRegDebug);
-	return vdp.peekStatusReg(narrow<byte>(address), time);
+	return vdp.peekStatusReg(narrow<uint8_t>(address), time);
 }
 
 
@@ -1637,15 +1657,15 @@ VDP::PaletteDebug::PaletteDebug(const VDP& vdp_)
 {
 }
 
-byte VDP::PaletteDebug::read(unsigned address)
+uint8_t VDP::PaletteDebug::read(unsigned address)
 {
 	const auto& vdp = OUTER(VDP, vdpPaletteDebug);
-	word grb = vdp.getPalette(address / 2);
-	return (address & 1) ? narrow_cast<byte>(grb >> 8)
-	                     : narrow_cast<byte>(grb & 0xff);
+	uint16_t grb = vdp.getPalette(address / 2);
+	return (address & 1) ? narrow_cast<uint8_t>(grb >> 8)
+	                     : narrow_cast<uint8_t>(grb & 0xff);
 }
 
-void VDP::PaletteDebug::write(unsigned address, byte value, EmuTime::param time)
+void VDP::PaletteDebug::write(unsigned address, uint8_t value, EmuTime time)
 {
 	auto& vdp = OUTER(VDP, vdpPaletteDebug);
 	// Ignore writes on MSX1. An alternative could be to not expose the
@@ -1654,10 +1674,10 @@ void VDP::PaletteDebug::write(unsigned address, byte value, EmuTime::param time)
 	if (vdp.isMSX1VDP()) return;
 
 	unsigned index = address / 2;
-	word grb = vdp.getPalette(index);
+	uint16_t grb = vdp.getPalette(index);
 	grb = (address & 1)
-	    ? word((grb & 0x0077) | ((value & 0x07) << 8))
-	    : word((grb & 0x0700) | ((value & 0x77) << 0));
+	    ? uint16_t((grb & 0x0077) | ((value & 0x07) << 8))
+	    : uint16_t((grb & 0x0700) | ((value & 0x77) << 0));
 	vdp.setPalette(index, grb, time);
 }
 
@@ -1671,17 +1691,17 @@ VDP::VRAMPointerDebug::VRAMPointerDebug(const VDP& vdp_)
 {
 }
 
-byte VDP::VRAMPointerDebug::read(unsigned address)
+uint8_t VDP::VRAMPointerDebug::read(unsigned address)
 {
 	const auto& vdp = OUTER(VDP, vramPointerDebug);
 	if (address & 1) {
-		return narrow_cast<byte>(vdp.vramPointer >> 8);  // TODO add read/write mode?
+		return narrow_cast<uint8_t>(vdp.vramPointer >> 8);  // TODO add read/write mode?
 	} else {
-		return narrow_cast<byte>(vdp.vramPointer & 0xFF);
+		return narrow_cast<uint8_t>(vdp.vramPointer & 0xFF);
 	}
 }
 
-void VDP::VRAMPointerDebug::write(unsigned address, byte value, EmuTime::param /*time*/)
+void VDP::VRAMPointerDebug::write(unsigned address, uint8_t value, EmuTime /*time*/)
 {
 	auto& vdp = OUTER(VDP, vramPointerDebug);
 	int& ptr = vdp.vramPointer;
@@ -1700,10 +1720,10 @@ VDP::RegisterLatchStatusDebug::RegisterLatchStatusDebug(const VDP &vdp_)
 {
 }
 
-byte VDP::RegisterLatchStatusDebug::read(unsigned /*address*/)
+uint8_t VDP::RegisterLatchStatusDebug::read(unsigned /*address*/)
 {
 	const auto& vdp = OUTER(VDP, registerLatchStatusDebug);
-	return byte(vdp.registerDataStored);
+	return uint8_t(vdp.registerDataStored);
 }
 
 // class VramAccessStatusDebug
@@ -1715,10 +1735,10 @@ VDP::VramAccessStatusDebug::VramAccessStatusDebug(const VDP &vdp_)
 {
 }
 
-byte VDP::VramAccessStatusDebug::read(unsigned /*address*/)
+uint8_t VDP::VramAccessStatusDebug::read(unsigned /*address*/)
 {
 	const auto& vdp = OUTER(VDP, vramAccessStatusDebug);
-	return byte(vdp.writeAccess);
+	return uint8_t(vdp.writeAccess);
 }
 
 // class PaletteLatchStatusDebug
@@ -1729,10 +1749,10 @@ VDP::PaletteLatchStatusDebug::PaletteLatchStatusDebug(const VDP &vdp_)
 {
 }
 
-byte VDP::PaletteLatchStatusDebug::read(unsigned /*address*/)
+uint8_t VDP::PaletteLatchStatusDebug::read(unsigned /*address*/)
 {
 	const auto& vdp = OUTER(VDP, paletteLatchStatusDebug);
-	return byte(vdp.paletteDataStored);
+	return uint8_t(vdp.paletteDataStored);
 }
 
 // class DataLatchDebug
@@ -1743,7 +1763,7 @@ VDP::DataLatchDebug::DataLatchDebug(const VDP &vdp_)
 {
 }
 
-byte VDP::DataLatchDebug::read(unsigned /*address*/)
+uint8_t VDP::DataLatchDebug::read(unsigned /*address*/)
 {
 	const auto& vdp = OUTER(VDP, dataLatchDebug);
 	return vdp.dataLatch;
@@ -1779,7 +1799,7 @@ VDP::FrameCountInfo::FrameCountInfo(VDP& vdp_)
 {
 }
 
-int VDP::FrameCountInfo::calc(const EmuTime& /*time*/) const
+int VDP::FrameCountInfo::calc(EmuTime /*time*/) const
 {
 	return vdp.frameCount;
 }
@@ -1795,7 +1815,7 @@ VDP::CycleInFrameInfo::CycleInFrameInfo(VDP& vdp_)
 {
 }
 
-int VDP::CycleInFrameInfo::calc(const EmuTime& time) const
+int VDP::CycleInFrameInfo::calc(EmuTime time) const
 {
 	return vdp.getTicksThisFrame(time);
 }
@@ -1813,7 +1833,7 @@ VDP::LineInFrameInfo::LineInFrameInfo(VDP& vdp_)
 {
 }
 
-int VDP::LineInFrameInfo::calc(const EmuTime& time) const
+int VDP::LineInFrameInfo::calc(EmuTime time) const
 {
 	return vdp.getTicksThisFrame(time) / VDP::TICKS_PER_LINE;
 }
@@ -1831,7 +1851,7 @@ VDP::CycleInLineInfo::CycleInLineInfo(VDP& vdp_)
 {
 }
 
-int VDP::CycleInLineInfo::calc(const EmuTime& time) const
+int VDP::CycleInLineInfo::calc(EmuTime time) const
 {
 	return vdp.getTicksThisFrame(time) % VDP::TICKS_PER_LINE;
 }
@@ -1848,7 +1868,7 @@ VDP::MsxYPosInfo::MsxYPosInfo(VDP& vdp_)
 {
 }
 
-int VDP::MsxYPosInfo::calc(const EmuTime& time) const
+int VDP::MsxYPosInfo::calc(EmuTime time) const
 {
 	return vdp.getMSXPos(time).y;
 }
@@ -1866,7 +1886,7 @@ VDP::MsxX256PosInfo::MsxX256PosInfo(VDP& vdp_)
 {
 }
 
-int VDP::MsxX256PosInfo::calc(const EmuTime& time) const
+int VDP::MsxX256PosInfo::calc(EmuTime time) const
 {
 	return vdp.getMSXPos(time).x / 2;
 }
@@ -1884,7 +1904,7 @@ VDP::MsxX512PosInfo::MsxX512PosInfo(VDP& vdp_)
 {
 }
 
-int VDP::MsxX512PosInfo::calc(const EmuTime& time) const
+int VDP::MsxX512PosInfo::calc(EmuTime time) const
 {
 	return vdp.getMSXPos(time).x;
 }
@@ -1926,7 +1946,7 @@ void VDP::serialize(Archive& ar, unsigned serVersion)
 	//    std::unique_ptr<Renderer> renderer;
 	//    VdpVersion version;
 	//    int controlRegMask;
-	//    byte controlValueMasks[32];
+	//    uint8_t controlValueMasks[32];
 	//    bool warningPrinted;
 
 	ar.serialize("irqVertical",          irqVertical,
@@ -1960,7 +1980,7 @@ void VDP::serialize(Archive& ar, unsigned serVersion)
 	}
 	ar.serialize("cpuExtendedVram", cpuExtendedVram,
 	             "displayEnabled",  displayEnabled);
-	byte mode = displayMode.getByte();
+	uint8_t mode = displayMode.getByte();
 	ar.serialize("displayMode", mode);
 	displayMode.setByte(mode);
 
@@ -1968,7 +1988,7 @@ void VDP::serialize(Archive& ar, unsigned serVersion)
 	             "spriteChecker", *spriteChecker, // must come after displayMode
 	             "vram",          *vram); // must come after controlRegs and after spriteChecker
 	if constexpr (Archive::IS_LOADER) {
-		pendingCpuAccess = syncCpuVramAccess.pendingSyncPoint();
+		pendingCpuAccess = syncCpuVramAccess.isPending().has_value();
 		update(tooFastAccess);
 	}
 

@@ -4,6 +4,7 @@
 #include "ImGuiPartInterface.hh"
 #include "ImGuiUtils.hh"
 #include "Shortcuts.hh"
+#include "freetype_utils.hh"
 
 #include "EmuTime.hh"
 #include "EventListener.hh"
@@ -14,9 +15,10 @@
 #include "TclObject.hh"
 
 #include "Observer.hh"
-#include "strCat.hh"
 #include "StringReplacer.hh"
+#include "strCat.hh"
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -28,9 +30,7 @@ struct ImGuiTextBuffer;
 namespace openmsx {
 
 class CliComm;
-class ImGuiBitmapViewer;
 class ImGuiBreakPoints;
-class ImGuiCharacter;
 class ImGuiCheatFinder;
 class ImGuiConnector;
 class ImGuiConsole;
@@ -41,16 +41,18 @@ class ImGuiKeyboard;
 class ImGuiMachine;
 class ImGuiMedia;
 class ImGuiMessages;
+class ImGuiMsxMusicViewer;
 class ImGuiOpenFile;
 class ImGuiOsdIcons;
 class ImGuiPalette;
+class ImGuiRasterViewer;
 class ImGuiReverseBar;
 class ImGuiSCCViewer;
 class ImGuiSettings;
 class ImGuiSoundChip;
-class ImGuiSpriteViewer;
 class ImGuiSymbols;
 class ImGuiTools;
+class ImGuiTraceViewer;
 class ImGuiTrainer;
 class ImGuiVdpRegs;
 class ImGuiWatchExpr;
@@ -94,9 +96,18 @@ public:
 	void storeWindowPosition(gl::ivec2 pos) { windowPos = pos; }
 	[[nodiscard]] gl::ivec2 retrieveWindowPosition() const { return windowPos; }
 
+	void configStatusBarVisibilityItems();
+
+	std::string getFontDisplayName(const std::span<const uint8_t>& fontData, long faceIndex,
+	                               std::string_view fontFile)
+	{
+		return openmsx::getFontDisplayName(freeTypeLibrary, fontData, faceIndex, fontFile);
+	}
+
 private:
 	void initializeImGui();
-	[[nodiscard]] ImFont* addFont(zstring_view filename, int fontSize);
+	[[nodiscard]] std::tuple<ImFont*, std::string> addFont(
+		zstring_view filename, int fontSize, int faceIndex);
 	void loadFont();
 	void reloadFont();
 	void drawStatusBar(MSXMotherBoard* motherBoard);
@@ -129,23 +140,27 @@ private:
 	bool removeParts = false;
 
 public:
+	FreeTypeLibrary freeTypeLibrary;
 	FilenameSetting fontPropFilename;
 	FilenameSetting fontMonoFilename;
+	IntegerSetting fontPropIndex;
+	IntegerSetting fontMonoIndex;
 	IntegerSetting fontPropSize;
 	IntegerSetting fontMonoSize;
 	ImFont* fontProp = nullptr;
 	ImFont* fontMono = nullptr;
+	std::string fontPropName; // calculated via getFontDisplayName()
+	std::string fontMonoName;
 
 	std::unique_ptr<ImGuiMachine> machine;
 	std::unique_ptr<ImGuiDebugger> debugger;
 	std::unique_ptr<ImGuiBreakPoints> breakPoints;
 	std::unique_ptr<ImGuiSymbols> symbols;
 	std::unique_ptr<ImGuiWatchExpr> watchExpr;
-	std::unique_ptr<ImGuiBitmapViewer> bitmap;
-	std::unique_ptr<ImGuiCharacter> character;
-	std::unique_ptr<ImGuiSpriteViewer> sprite;
+	std::unique_ptr<ImGuiTraceViewer> traceViewer;
 	std::unique_ptr<ImGuiVdpRegs> vdpRegs;
 	std::unique_ptr<ImGuiPalette> palette;
+	std::unique_ptr<ImGuiRasterViewer> rasterViewer;
 	std::unique_ptr<ImGuiReverseBar> reverseBar;
 	std::unique_ptr<ImGuiHelp> help;
 	std::unique_ptr<ImGuiOsdIcons> osdIcons;
@@ -155,6 +170,7 @@ public:
 	std::unique_ptr<ImGuiTools> tools;
 	std::unique_ptr<ImGuiTrainer> trainer;
 	std::unique_ptr<ImGuiSCCViewer> sccViewer;
+	std::unique_ptr<ImGuiMsxMusicViewer> msxMusicViewer;
 	std::unique_ptr<ImGuiWaveViewer> waveViewer;
 	std::unique_ptr<ImGuiCheatFinder> cheatFinder;
 	std::unique_ptr<ImGuiDiskManipulator> diskManipulator;
@@ -167,10 +183,18 @@ public:
 	bool menuFade = true;
 	bool needReloadFont = false;
 	bool statusBarVisible = false;
+	bool statusBarItemVisibilityFps = true;
+	bool statusBarItemVisibilityScreenModeInfo = true;
+	bool statusBarItemVisibilityTime = true;
+	bool statusBarItemVisibilityActualSpeed = true;
+	bool statusBarItemVisibilityMachine = true;
+	bool statusBarItemVisibilityRunningSoftware = true;
+
 	std::string loadIniFile;
 
 private:
 	std::vector<std::function<void()>> delayedActionQueue;
+	std::vector<std::function<void()>> delayedActionQueue2;
 	float menuAlpha = 1.0f;
 
 	std::string droppedFile;
@@ -196,7 +220,13 @@ private:
 		PersistentElement{"mainMenuBarUndocked", &ImGuiManager::mainMenuBarUndocked},
 		PersistentElement{"mainMenuBarFade",     &ImGuiManager::menuFade},
 		PersistentElement{"windowPos",           &ImGuiManager::windowPos},
-		PersistentElement{"statusBarVisible",    &ImGuiManager::statusBarVisible}
+		PersistentElement{"statusBarVisible",    &ImGuiManager::statusBarVisible},
+		PersistentElement{"statusBarItemvisibility.fps",                 &ImGuiManager::statusBarItemVisibilityFps},
+		PersistentElement{"statusBarItemVisibility.screenModeInfo",      &ImGuiManager::statusBarItemVisibilityScreenModeInfo},
+		PersistentElement{"statusBarItemVisibility.time",                &ImGuiManager::statusBarItemVisibilityTime},
+		PersistentElement{"statusBarItemVisibility.actualSpeed",         &ImGuiManager::statusBarItemVisibilityActualSpeed},
+		PersistentElement{"statusBarItemVisibility.machine",             &ImGuiManager::statusBarItemVisibilityMachine},
+		PersistentElement{"statusBarItemVisibility.runningSoftware",     &ImGuiManager::statusBarItemVisibilityRunningSoftware},
 	};
 };
 
@@ -254,7 +284,7 @@ std::vector<InfoType> parseAllConfigFiles(ImGuiManager& manager, std::string_vie
 		if (display.empty()) display = config;
 	}
 
-	ranges::sort(result, StringOp::caseless{}, &InfoType::displayName);
+	std::ranges::sort(result, StringOp::caseless{}, &InfoType::displayName);
 
 	// make 'displayName' unique again
 	auto sameDisplayName = [](InfoType& x, InfoType& y) {
@@ -266,7 +296,7 @@ std::vector<InfoType> parseAllConfigFiles(ImGuiManager& manager, std::string_vie
 		for (auto it = first; it != last; ++it) {
 			strAppend(it->displayName, " (", it->configName, ')');
 		}
-		ranges::sort(first, last, StringOp::caseless{}, &InfoType::displayName);
+		std::ranges::sort(first, last, StringOp::caseless{}, &InfoType::displayName);
 	});
 
 	return result;

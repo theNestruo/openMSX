@@ -20,20 +20,21 @@
  */
 
 #include "SCSIHD.hh"
-#include "FileOperations.hh"
-#include "MSXException.hh"
-#include "LedStatus.hh"
-#include "MSXMotherBoard.hh"
+
 #include "DeviceConfig.hh"
+#include "FileOperations.hh"
+#include "LedStatus.hh"
+#include "MSXException.hh"
+#include "MSXMotherBoard.hh"
+#include "serialize.hh"
+
 #include "endian.hh"
 #include "narrow.hh"
 #include "one_of.hh"
-#include "serialize.hh"
 #include "xrange.hh"
+
 #include <algorithm>
 #include <cstring>
-
-using std::string;
 
 namespace openmsx {
 
@@ -76,8 +77,6 @@ SCSIHD::SCSIHD(const DeviceConfig& targetConfig,
 	, buffer(buf)
 	, mode(mode_)
 	, scsiId(narrow_cast<uint8_t>(targetConfig.getAttributeValueAsInt("id", 0)))
-	, message(0)
-	, lun(0) // move to reset() ?
 {
 	reset();
 }
@@ -115,7 +114,7 @@ unsigned SCSIHD::inquiry()
 
 	buffer[0] = SCSI::DT_DirectAccess;
 	buffer[1] = 0; // removable
-	ranges::copy(subspan(inqData, 2), &buffer[2]);
+	std::ranges::copy(subspan(inqData, 2), &buffer[2]);
 
 	if (!(mode & BIT_SCSI2)) {
 		buffer[2] = 1;
@@ -145,7 +144,7 @@ unsigned SCSIHD::inquiry()
 		std::string imageName(FileOperations::getFilename(
 		                       getImageName().getOriginal()));
 		imageName.resize(20, ' ');
-		ranges::copy(imageName, &buffer[36]);
+		std::ranges::copy(imageName, &buffer[36]);
 	}
 	return length;
 }
@@ -364,7 +363,7 @@ unsigned SCSIHD::executeCmd(std::span<const uint8_t, 12> cdb_, SCSI::Phase& phas
 {
 	using enum SCSI::Phase;
 
-	ranges::copy(cdb_, cdb);
+	copy_to_range(cdb_, cdb);
 	message = 0;
 	phase = STATUS;
 	blocks = 0;

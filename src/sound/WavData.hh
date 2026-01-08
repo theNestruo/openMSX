@@ -2,8 +2,8 @@
 #define WAVDATA_HH
 
 #include "File.hh"
-#include "MemBuffer.hh"
 #include "MSXException.hh"
+#include "MemBuffer.hh"
 
 #include "endian.hh"
 #include "one_of.hh"
@@ -37,9 +37,9 @@ public:
 	explicit WavData(File file, Filter filter = {});
 
 	[[nodiscard]] unsigned getFreq() const { return freq; }
-	[[nodiscard]] unsigned getSize() const { return length; }
-	[[nodiscard]] int16_t getSample(unsigned pos) const {
-		return (pos < length) ? buffer[pos] : int16_t(0);
+	[[nodiscard]] size_t getSize() const { return buffer.size(); }
+	[[nodiscard]] int16_t getSample(size_t pos) const {
+		return (pos < buffer.size()) ? buffer[pos] : int16_t(0);
 	}
 
 private:
@@ -49,7 +49,6 @@ private:
 private:
 	MemBuffer<int16_t> buffer;
 	unsigned freq = 0;
-	unsigned length = 0;
 };
 
 ////
@@ -67,7 +66,7 @@ template<typename Filter>
 inline WavData::WavData(File file, Filter filter)
 {
 	// Read and check header
-	auto raw = file.mmap();
+	auto raw = file.mmap<const uint8_t>();
 	struct WavHeader {
 		std::array<char, 4> riffID;
 		Endian::L32 riffSize;
@@ -113,7 +112,7 @@ inline WavData::WavData(File file, Filter filter)
 	}
 
 	// Read and convert sample data
-	length = dataHeader->chunkSize / ((bits / 8) * channels);
+	size_t length = dataHeader->chunkSize / ((bits / 8) * channels);
 	buffer.resize(length);
 	filter.setFreq(freq);
 	auto convertLoop = [&](const auto* in, auto convertFunc) {
@@ -123,10 +122,10 @@ inline WavData::WavData(File file, Filter filter)
 		}
 	};
 	if (bits == 8) {
-		convertLoop(read<uint8_t>(raw, pos, size_t(length) * channels),
+		convertLoop(read<uint8_t>(raw, pos, length * channels),
 		            [](uint8_t u8) { return int16_t((int16_t(u8) - 0x80) << 8); });
 	} else {
-		convertLoop(read<Endian::L16>(raw, pos, size_t(length) * channels),
+		convertLoop(read<Endian::L16>(raw, pos, length * channels),
 		            [](Endian::L16 s16) { return int16_t(s16); });
 	}
 }

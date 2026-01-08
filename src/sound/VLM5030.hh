@@ -3,6 +3,7 @@
 
 #include "ResampledSoundDevice.hh"
 
+#include "DeviceConfig.hh"
 #include "EmuTime.hh"
 #include "Rom.hh"
 
@@ -18,7 +19,7 @@ class VLM5030 final : public ResampledSoundDevice
 {
 public:
 	VLM5030(const std::string& name, static_string_view desc,
-	        std::string_view romFilename, const DeviceConfig& config);
+	        std::string_view romFilename, DeviceConfig& config);
 	~VLM5030();
 	void reset();
 
@@ -26,10 +27,10 @@ public:
 	void writeData(uint8_t data);
 
 	/** set RST / VCU / ST pins */
-	void writeControl(uint8_t data, EmuTime::param time);
+	void writeControl(uint8_t data, EmuTime time);
 
 	/** get BSY pin level */
-	[[nodiscard]] bool getBSY(EmuTime::param time) const;
+	[[nodiscard]] bool getBSY(EmuTime time) const;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -58,6 +59,7 @@ private:
 	[[nodiscard]] int parseFrame();
 
 private:
+	DeviceConfig config2;
 	Rom rom;
 	unsigned address_mask;
 

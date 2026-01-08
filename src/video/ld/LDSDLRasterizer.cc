@@ -1,8 +1,8 @@
 #include "LDSDLRasterizer.hh"
-#include "RawFrame.hh"
-#include "PostProcessor.hh"
+
 #include "PixelOperations.hh"
-#include <cstdint>
+#include "PostProcessor.hh"
+#include "RawFrame.hh"
 
 namespace openmsx {
 
@@ -20,7 +20,7 @@ PostProcessor* LDSDLRasterizer::getPostProcessor() const
 	return postProcessor.get();
 }
 
-void LDSDLRasterizer::frameStart(EmuTime::param time)
+void LDSDLRasterizer::frameStart(EmuTime time)
 {
 	workFrame = postProcessor->rotateFrames(std::move(workFrame), time);
 }

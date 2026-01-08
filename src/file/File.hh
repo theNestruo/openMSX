@@ -1,6 +1,9 @@
 #ifndef FILE_HH
 #define FILE_HH
 
+#include "FileBase.hh"
+#include "MappedFile.hh"
+
 #include <bit>
 #include <cstdint>
 #include <ctime>
@@ -8,21 +11,19 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace openmsx {
 
 class Filename;
-class FileBase;
 
 class File
 {
 public:
-	enum class OpenMode {
+	enum class OpenMode : uint8_t {
 		NORMAL,
 		TRUNCATE,
 		CREATE,
-		LOAD_PERSISTENT,
-		SAVE_PERSISTENT,
 		PRE_CACHE,
 	};
 
@@ -92,14 +93,25 @@ public:
 	}
 
 	/** Map file in memory.
-	 * @result Pointer/size to/of memory block.
-	 * @throws FileException
+	 *
+	 * This returns a RAII object of type MappedFile<T>. And that makes the
+	 * data available as a std::span<T>.
+	 *
+	 * T can be 'const' or 'non-const', prefer 'const' when possible.
+	 * For a 'non-const T', changes to the buffer are not propagated back to
+	 * the file (IOW it's a private, non-shared mapping).
+	 *
+	 * Optionally the requested buffer can have some 'extra' elements at the
+	 * end. Initially the memory holding those extra elements is filled with
+	 * zeros. This can be useful if e.g. you want to append a zero-
+	 * terminator after the file. Often this implementation can do that
+	 * without extra cost (so no need to allocate a buffer, read the file
+	 * and add some zeros).
 	 */
-	[[nodiscard]] std::span<const uint8_t> mmap();
-
-	/** Unmap file from memory.
-	 */
-	void munmap();
+	template<typename T>
+	[[nodiscard]] MappedFile<T> mmap(size_t extra = 0) {
+		return MappedFile<T>(file->mmap(extra * sizeof(T), std::is_const_v<T>));
+	}
 
 	/** Returns the size of this file
 	 * @result The size of this file
@@ -131,6 +143,9 @@ public:
 	void flush();
 
 	/** Returns the URL of this file object.
+	 * Note: this returns a reference which may get invalidated by other
+	 * calls. For example: decompressing the internal buffer inside a
+	 * CompressedFileAdapter.
 	 * @throws FileException
 	 */
 	[[nodiscard]] const std::string& getURL() const;

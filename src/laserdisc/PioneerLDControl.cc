@@ -1,9 +1,10 @@
 #include "PioneerLDControl.hh"
+
 #include "CacheLine.hh"
-#include "serialize.hh"
-#include "MSXPPI.hh"
 #include "MSXException.hh"
+#include "MSXPPI.hh"
 #include "VDP.hh"
+#include "serialize.hh"
 
 namespace openmsx {
 
@@ -29,7 +30,7 @@ namespace openmsx {
  * ends up in the PSG (regardless of muting); if the motor relay is ON
  * then normal tape input is used.
  */
-PioneerLDControl::PioneerLDControl(const DeviceConfig& config)
+PioneerLDControl::PioneerLDControl(DeviceConfig& config)
 	: MSXDevice(config)
 	, rom(getName() + " ROM", "rom", config)
 	, irq(getMotherBoard(), "PioneerLDControl.IRQdisplayoff")
@@ -45,7 +46,7 @@ void PioneerLDControl::init()
 	MSXDevice::init();
 
 	const auto& refs = getReferences();
-	ppi = refs.size() >= 1 ? dynamic_cast<MSXPPI*>(refs[0]) : nullptr;
+	ppi = !refs.empty() ? dynamic_cast<MSXPPI*>(refs[0]) : nullptr;
 	if (!ppi) {
 		throw MSXException("Invalid PioneerLDControl configuration: "
 		                   "need reference to PPI device.");
@@ -60,7 +61,7 @@ void PioneerLDControl::init()
 
 PioneerLDControl::~PioneerLDControl() = default;
 
-void PioneerLDControl::reset(EmuTime::param time)
+void PioneerLDControl::reset(EmuTime time)
 {
 	muteL = muteR = true;
 	superimposing = false;
@@ -70,7 +71,7 @@ void PioneerLDControl::reset(EmuTime::param time)
 	if (laserdisc) laserdisc->setMuting(muteL, muteR, time);
 }
 
-byte PioneerLDControl::readMem(word address, EmuTime::param time)
+byte PioneerLDControl::readMem(uint16_t address, EmuTime time)
 {
 	byte val = PioneerLDControl::peekMem(address, time);
 	if (address == 0x7fff) {
@@ -80,7 +81,7 @@ byte PioneerLDControl::readMem(word address, EmuTime::param time)
 	return val;
 }
 
-byte PioneerLDControl::peekMem(word address, EmuTime::param time) const
+byte PioneerLDControl::peekMem(uint16_t address, EmuTime time) const
 {
 	byte val = 0xff;
 
@@ -104,7 +105,7 @@ byte PioneerLDControl::peekMem(word address, EmuTime::param time) const
 	return val;
 }
 
-const byte* PioneerLDControl::getReadCacheLine(word address) const
+const byte* PioneerLDControl::getReadCacheLine(uint16_t address) const
 {
 	if ((address & CacheLine::HIGH) == (0x7FFE & CacheLine::HIGH)) {
 		return nullptr;
@@ -115,7 +116,7 @@ const byte* PioneerLDControl::getReadCacheLine(word address) const
 	}
 }
 
-void PioneerLDControl::writeMem(word address, byte value, EmuTime::param time)
+void PioneerLDControl::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if (address == 0x7fff) {
 		// superimpose
@@ -136,7 +137,7 @@ void PioneerLDControl::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* PioneerLDControl::getWriteCacheLine(word address)
+byte* PioneerLDControl::getWriteCacheLine(uint16_t address)
 {
 	if ((address & CacheLine::HIGH) == (0x7FFE & CacheLine::HIGH)) {
 		return nullptr;

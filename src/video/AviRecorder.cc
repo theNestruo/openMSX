@@ -1,30 +1,35 @@
 #include "AviRecorder.hh"
+
 #include "AviWriter.hh"
-#include "Mixer.hh"
-#include "WavWriter.hh"
-#include "Reactor.hh"
-#include "MSXMotherBoard.hh"
-#include "FileContext.hh"
+#include "PostProcessor.hh"
+
+#include "CliComm.hh"
 #include "CommandException.hh"
 #include "Display.hh"
-#include "PostProcessor.hh"
-#include "Math.hh"
-#include "MSXMixer.hh"
-#include "Filename.hh"
-#include "CliComm.hh"
+#include "FileContext.hh"
 #include "FileOperations.hh"
+#include "Filename.hh"
+#include "MSXMixer.hh"
+#include "MSXMotherBoard.hh"
+#include "Mixer.hh"
+#include "Reactor.hh"
 #include "TclArgParser.hh"
 #include "TclObject.hh"
+#include "WavWriter.hh"
+
+#include "Math.hh"
 #include "enumerate.hh"
 #include "narrow.hh"
 #include "outer.hh"
-#include "vla.hh"
-#include "xrange.hh"
+#include "small_buffer.hh"
+
 #include <array>
 #include <cassert>
 #include <memory>
 
 namespace openmsx {
+
+using namespace std::literals;
 
 AviRecorder::AviRecorder(Reactor& reactor_)
 	: reactor(reactor_)
@@ -136,16 +141,16 @@ void AviRecorder::addWave(std::span<const StereoFloat> data)
 		if (wavWriter) {
 			wavWriter->write(data);
 		} else {
-			VLA(int16_t, buf, 2 * num);
+			small_buffer<int16_t, 2 * 4096> buf(uninitialized_tag{}, 2 * size_t(num));
 			for (auto [i, s] : enumerate(data)) {
 				buf[2 * i + 0] = float2int16(s.left);
 				buf[2 * i + 1] = float2int16(s.right);
 			}
 			assert(aviWriter);
-			append(audioBuf, buf);
+			append(audioBuf, std::span{buf});
 		}
 	} else {
-		VLA(int16_t, buf, num);
+		small_buffer<int16_t, 4096> buf(uninitialized_tag{}, num);
 		size_t i = 0;
 		for (/**/; !warnedStereo && i < num; ++i) {
 			if (data[i].left != data[i].right) {
@@ -167,12 +172,12 @@ void AviRecorder::addWave(std::span<const StereoFloat> data)
 			wavWriter->write(buf);
 		} else {
 			assert(aviWriter);
-			append(audioBuf, buf);
+			append(audioBuf, std::span{buf});
 		}
 	}
 }
 
-void AviRecorder::addImage(const FrameSource* frame, EmuTime::param time)
+void AviRecorder::addImage(const FrameSource* frame, EmuTime time)
 {
 	assert(!wavWriter);
 	if (duration != EmuDuration::infinity()) {
@@ -293,7 +298,7 @@ bool AviRecorder::isRecording() const
 
 void AviRecorder::status(std::span<const TclObject> /*tokens*/, TclObject& result) const
 {
-	result.addDictKeyValue("status", isRecording() ? "recording" : "idle");
+	result.addDictKeyValue("status", isRecording() ? "recording"sv : "idle"sv);
 }
 
 // class AviRecorder::Cmd

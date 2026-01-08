@@ -1,62 +1,65 @@
 #include "PrinterPortSimpl.hh"
+
 #include "DeviceConfig.hh"
 #include "XMLElement.hh"
 #include "serialize.hh"
-#include <memory>
 
 namespace openmsx {
 
-static constexpr static_string_view DESCRIPTION =
+static constexpr zstring_view DESCRIPTION =
 	"Play samples via your printer port.";
 
-PrinterPortSimpl::PrinterPortSimpl(const HardwareConfig& hwConf_)
+PrinterPortSimpl::PrinterPortSimpl(HardwareConfig& hwConf_)
 	: hwConf(hwConf_)
 {
 }
 
-bool PrinterPortSimpl::getStatus(EmuTime::param /*time*/)
+bool PrinterPortSimpl::getStatus(EmuTime /*time*/)
 {
 	return true; // TODO check
 }
 
-void PrinterPortSimpl::setStrobe(bool /*strobe*/, EmuTime::param /*time*/)
+void PrinterPortSimpl::setStrobe(bool /*strobe*/, EmuTime /*time*/)
 {
 	// ignore strobe // TODO check
 }
 
-void PrinterPortSimpl::writeData(uint8_t data, EmuTime::param time)
+void PrinterPortSimpl::writeData(uint8_t data, EmuTime time)
 {
+	assert(dac);
 	dac->writeDAC(data, time);
 }
 
 void PrinterPortSimpl::createDAC()
 {
-	static const XMLElement* xml = [] {
+	static XMLElement* xml = [] {
 		auto& doc = XMLDocument::getStaticDocument();
 		auto* result = doc.allocateElement("simpl");
 		result->setFirstChild(doc.allocateElement("sound"))
 		      ->setFirstChild(doc.allocateElement("volume", "12000"));
 		return result;
 	}();
-	dac.emplace("simpl", DESCRIPTION, DeviceConfig(hwConf, *xml));
+	dac.emplace("simpl",
+	            static_string_view{static_string_view::lifetime_ok_tag{}, DESCRIPTION},
+	            DeviceConfig(hwConf, *xml));
 }
 
-void PrinterPortSimpl::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
+void PrinterPortSimpl::plugHelper(Connector& /*connector*/, EmuTime /*time*/)
 {
 	createDAC();
 }
 
-void PrinterPortSimpl::unplugHelper(EmuTime::param /*time*/)
+void PrinterPortSimpl::unplugHelper(EmuTime /*time*/)
 {
 	dac.reset();
 }
 
-std::string_view PrinterPortSimpl::getName() const
+zstring_view PrinterPortSimpl::getName() const
 {
 	return "simpl";
 }
 
-std::string_view PrinterPortSimpl::getDescription() const
+zstring_view PrinterPortSimpl::getDescription() const
 {
 	return DESCRIPTION;
 }

@@ -1,9 +1,10 @@
 #include "Connector.hh"
+
+#include "CliComm.hh"
 #include "PlugException.hh"
 #include "Pluggable.hh"
 #include "PluggingController.hh"
 #include "serialize.hh"
-#include "CliComm.hh"
 
 namespace openmsx {
 
@@ -22,13 +23,13 @@ Connector::~Connector()
 	pluggingController.unregisterConnector(*this);
 }
 
-void Connector::plug(Pluggable& device, EmuTime::param time)
+void Connector::plug(Pluggable& device, EmuTime time)
 {
 	device.plug(*this, time);
 	plugged = &device; // not executed if plug fails
 }
 
-void Connector::unplug(EmuTime::param time)
+void Connector::unplug(EmuTime time)
 {
 	plugged->unplug(time);
 	plugged = dummy.get();

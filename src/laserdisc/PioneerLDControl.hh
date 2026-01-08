@@ -2,10 +2,12 @@
 #define PIONEERLDCONTROL_HH
 
 #include "LaserdiscPlayer.hh"
-#include "MSXDevice.hh"
+
 #include "Clock.hh"
 #include "IRQHelper.hh"
+#include "MSXDevice.hh"
 #include "Rom.hh"
+
 #include <optional>
 
 namespace openmsx {
@@ -16,15 +18,15 @@ class VDP;
 class PioneerLDControl final : public MSXDevice
 {
 public:
-	explicit PioneerLDControl(const DeviceConfig& config);
+	explicit PioneerLDControl(DeviceConfig& config);
 	~PioneerLDControl() override;
 
-	void reset(EmuTime::param time) override;
-	[[nodiscard]] byte readMem(word address, EmuTime::param time) override;
-	[[nodiscard]] byte peekMem(word address, EmuTime::param time) const override;
-	void writeMem(word address, byte value, EmuTime::param time) override;
-	[[nodiscard]] const byte* getReadCacheLine(word address) const override;
-	[[nodiscard]] byte* getWriteCacheLine(word address) override;
+	void reset(EmuTime time) override;
+	[[nodiscard]] byte readMem(uint16_t address, EmuTime time) override;
+	[[nodiscard]] byte peekMem(uint16_t address, EmuTime time) const override;
+	void writeMem(uint16_t address, byte value, EmuTime time) override;
+	[[nodiscard]] const byte* getReadCacheLine(uint16_t address) const override;
+	[[nodiscard]] byte* getWriteCacheLine(uint16_t address) override;
 	void init() override;
 
 	void videoIn(bool enabled);

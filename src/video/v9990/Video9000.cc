@@ -1,14 +1,16 @@
 #include "Video9000.hh"
-#include "VDP.hh"
-#include "V9990.hh"
-#include "Reactor.hh"
+
 #include "Display.hh"
 #include "PostProcessor.hh"
-#include "EventDistributor.hh"
-#include "Event.hh"
-#include "MSXMotherBoard.hh"
-#include "VideoSourceSetting.hh"
+#include "V9990.hh"
+#include "VDP.hh"
+
 #include "CommandException.hh"
+#include "Event.hh"
+#include "EventDistributor.hh"
+#include "MSXMotherBoard.hh"
+#include "Reactor.hh"
+#include "VideoSourceSetting.hh"
 #include "serialize.hh"
 
 namespace openmsx {
@@ -49,12 +51,12 @@ Video9000::~Video9000()
 	getReactor().getDisplay().detach(*this);
 }
 
-void Video9000::reset(EmuTime::param time)
+void Video9000::reset(EmuTime time)
 {
 	Video9000::writeIO(0x6f, 0x10, time);
 }
 
-void Video9000::writeIO(word /*port*/, byte newValue, EmuTime::param /*time*/)
+void Video9000::writeIO(uint16_t /*port*/, uint8_t newValue, EmuTime /*time*/)
 {
 	if (newValue == value) return;
 	value = newValue;
@@ -116,7 +118,7 @@ void Video9000::paint(OutputSurface& output)
 	activeLayer->paint(output);
 }
 
-void Video9000::takeRawScreenShot(unsigned height, const std::string& filename)
+void Video9000::takeRawScreenShot(std::optional<unsigned> height, const std::string& filename)
 {
 	auto* layer = dynamic_cast<VideoLayer*>(activeLayer);
 	if (!layer) {

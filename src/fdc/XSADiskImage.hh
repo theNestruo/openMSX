@@ -9,6 +9,7 @@
 #define XSADISKIMAGE_HH
 
 #include "SectorBasedDisk.hh"
+
 #include "MemBuffer.hh"
 
 namespace openmsx {

@@ -1,11 +1,14 @@
 #include "VideoLayer.hh"
+
 #include "Display.hh"
-#include "Reactor.hh"
-#include "GlobalSettings.hh"
+
 #include "BooleanSetting.hh"
+#include "Event.hh"
+#include "GlobalSettings.hh"
 #include "MSXEventDistributor.hh"
 #include "MSXMotherBoard.hh"
-#include "Event.hh"
+#include "Reactor.hh"
+
 #include "one_of.hh"
 
 namespace openmsx {
@@ -71,7 +74,7 @@ void VideoLayer::calcCoverage()
 }
 
 void VideoLayer::signalMSXEvent(const Event& event,
-                                EmuTime::param /*time*/) noexcept
+                                EmuTime /*time*/) noexcept
 {
 	if (getType(event) == one_of(EventType::MACHINE_ACTIVATED,
 		                     EventType::MACHINE_DEACTIVATED)) {

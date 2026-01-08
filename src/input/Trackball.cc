@@ -1,11 +1,15 @@
 #include "Trackball.hh"
-#include "MSXEventDistributor.hh"
-#include "StateChangeDistributor.hh"
+
 #include "Event.hh"
+#include "MSXEventDistributor.hh"
 #include "StateChange.hh"
-#include "narrow.hh"
+#include "StateChangeDistributor.hh"
+
 #include "serialize.hh"
 #include "serialize_meta.hh"
+
+#include "narrow.hh"
+
 #include <algorithm>
 
 // * Implementation based on information we received from 'n_n'.
@@ -23,7 +27,7 @@ class TrackballState final : public StateChange
 {
 public:
 	TrackballState() = default; // for serialize
-	TrackballState(EmuTime::param time_, int deltaX_, int deltaY_,
+	TrackballState(EmuTime time_, int deltaX_, int deltaY_,
 	                                     uint8_t press_, uint8_t release_)
 		: StateChange(time_)
 		, deltaX(deltaX_), deltaY(deltaY_)
@@ -64,17 +68,17 @@ Trackball::~Trackball()
 
 
 // Pluggable
-std::string_view Trackball::getName() const
+zstring_view Trackball::getName() const
 {
 	return "trackball";
 }
 
-std::string_view Trackball::getDescription() const
+zstring_view Trackball::getDescription() const
 {
 	return "MSX Trackball";
 }
 
-void Trackball::plugHelper(Connector& /*connector*/, EmuTime::param time)
+void Trackball::plugHelper(Connector& /*connector*/, EmuTime time)
 {
 	eventDistributor.registerEventListener(*this);
 	stateChangeDistributor.registerListener(*this);
@@ -85,14 +89,14 @@ void Trackball::plugHelper(Connector& /*connector*/, EmuTime::param time)
 	currentDeltaY = 0;
 }
 
-void Trackball::unplugHelper(EmuTime::param /*time*/)
+void Trackball::unplugHelper(EmuTime /*time*/)
 {
 	stateChangeDistributor.unregisterListener(*this);
 	eventDistributor.unregisterEventListener(*this);
 }
 
 // JoystickDevice
-uint8_t Trackball::read(EmuTime::param time)
+uint8_t Trackball::read(EmuTime time)
 {
 	// From the Sony GB-7 Service manual:
 	//  http://cdn.preterhuman.net/texts/computing/msx/sonygb7sm.pdf
@@ -118,7 +122,7 @@ uint8_t Trackball::read(EmuTime::param time)
 	return (status & ~0x0F) | ((delta + 8) & 0x0F);
 }
 
-void Trackball::write(uint8_t value, EmuTime::param time)
+void Trackball::write(uint8_t value, EmuTime time)
 {
 	syncCurrentWithTarget(time);
 	uint8_t diff = lastValue ^ value;
@@ -135,7 +139,7 @@ void Trackball::write(uint8_t value, EmuTime::param time)
 	}
 }
 
-void Trackball::syncCurrentWithTarget(EmuTime::param time)
+void Trackball::syncCurrentWithTarget(EmuTime time)
 {
 	// In the past we only had 'targetDeltaXY' (was named 'deltaXY' then).
 	// 'currentDeltaXY' was introduced to (slightly) smooth-out the
@@ -196,7 +200,7 @@ void Trackball::syncCurrentWithTarget(EmuTime::param time)
 
 // MSXEventListener
 void Trackball::signalMSXEvent(const Event& event,
-                               EmuTime::param time) noexcept
+                               EmuTime time) noexcept
 {
 	visit(overloaded{
 		[&](const MouseMotionEvent& e) {
@@ -238,7 +242,7 @@ void Trackball::signalMSXEvent(const Event& event,
 }
 
 void Trackball::createTrackballStateChange(
-	EmuTime::param time, int deltaX, int deltaY, uint8_t press, uint8_t release)
+	EmuTime time, int deltaX, int deltaY, uint8_t press, uint8_t release)
 {
 	stateChangeDistributor.distributeNew<TrackballState>(
 		time, deltaX, deltaY, press, release);
@@ -255,7 +259,7 @@ void Trackball::signalStateChange(const StateChange& event)
 	status = (status & ~ts->getPress()) | ts->getRelease();
 }
 
-void Trackball::stopReplay(EmuTime::param time) noexcept
+void Trackball::stopReplay(EmuTime time) noexcept
 {
 	syncCurrentWithTarget(time);
 	// TODO Get actual mouse button(s) state. Is it worth the trouble?

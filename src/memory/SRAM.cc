@@ -7,10 +7,11 @@
 #include "FileNotFoundException.hh"
 #include "MSXCliComm.hh"
 #include "Reactor.hh"
-#include "openmsx.hh"
-#include "serialize.hh"
 
-#include "vla.hh"
+#include "serialize.hh"
+#include "small_buffer.hh"
+
+#include <algorithm>
 
 namespace openmsx {
 
@@ -61,7 +62,7 @@ SRAM::~SRAM()
 	}
 }
 
-void SRAM::write(size_t addr, byte value)
+void SRAM::write(size_t addr, uint8_t value)
 {
 	if (schedulable && !schedulable->isPendingRT()) {
 		schedulable->scheduleRT(5000000); // sync to disk after 5s
@@ -70,13 +71,13 @@ void SRAM::write(size_t addr, byte value)
 	ram.write(addr, value);
 }
 
-void SRAM::memset(size_t addr, byte c, size_t aSize)
+void SRAM::memset(size_t addr, uint8_t c, size_t aSize)
 {
 	if (schedulable && !schedulable->isPendingRT()) {
 		schedulable->scheduleRT(5000000); // sync to disk after 5s
 	}
 	assert((addr + aSize) <= size());
-	ranges::fill(ram.getWriteBackdoor().subspan(addr, aSize), c);
+	std::ranges::fill(ram.getWriteBackdoor().subspan(addr, aSize), c);
 }
 
 void SRAM::load(bool* loaded)
@@ -86,13 +87,12 @@ void SRAM::load(bool* loaded)
 	const auto& filename = config.getChildData("sramname");
 	try {
 		bool headerOk = true;
-		File file(config.getFileContext().resolveCreate(filename),
-			  File::OpenMode::LOAD_PERSISTENT);
+		File file(config.getFileContext().resolveCreate(filename));
 		if (header) {
 			size_t length = strlen(header);
-			VLA(char, buf, length);
-			file.read(buf);
-			headerOk = ranges::equal(buf, std::span{header, length});
+			small_buffer<char, 64> buf(uninitialized_tag{}, length);
+			file.read(std::span{buf});
+			headerOk = std::ranges::equal(buf, std::span{header, length});
 		}
 		if (headerOk) {
 			file.read(ram.getWriteBackdoor());
@@ -116,13 +116,12 @@ void SRAM::save() const
 	const auto& filename = config.getChildData("sramname");
 	try {
 		File file(config.getFileContext().resolveCreate(filename),
-			  File::OpenMode::SAVE_PERSISTENT);
+			  File::OpenMode::TRUNCATE);
 		if (header) {
 			auto length = strlen(header);
 			file.write(std::span{header, length});
 		}
-		//file.write(std::span{ram}); // TODO error with clang-15/libc++
-		file.write(std::span{ram.begin(), ram.end()});
+		file.write(std::span{ram});
 	} catch (FileException& e) {
 		config.getCliComm().printWarning(
 			"Couldn't save SRAM ", filename,

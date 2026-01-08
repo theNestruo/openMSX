@@ -1,6 +1,8 @@
 #include "GZFileAdapter.hh"
-#include "ZlibInflate.hh"
+
 #include "FileException.hh"
+#include "MappedFile.hh"
+#include "ZlibInflate.hh"
 
 namespace openmsx {
 
@@ -54,11 +56,12 @@ GZFileAdapter::GZFileAdapter(std::unique_ptr<FileBase> file_)
 
 void GZFileAdapter::decompress(FileBase& f, Decompressed& d)
 {
-	ZlibInflate zlib(f.mmap());
+	auto mmap = MappedFile<const uint8_t>(f.mmap(0, true));
+	ZlibInflate zlib(mmap);
 	if (!skipHeader(zlib, d.originalName)) {
 		throw FileException("Not a gzip header");
 	}
-	d.size = zlib.inflate(d.buf);
+	d.buf = zlib.inflate();
 }
 
 } // namespace openmsx

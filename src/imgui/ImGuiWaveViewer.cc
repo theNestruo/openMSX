@@ -1,13 +1,15 @@
 #include "ImGuiWaveViewer.hh"
 
+#include "ImGuiPlot.hh"
+
 #include "MSXMixer.hh"
 #include "MSXMotherBoard.hh"
 #include "SoundDevice.hh"
 
 #include "FFTReal.hh"
-#include "hammingWindow.hh"
 #include "fast_log2.hh"
 #include "halfband.hh"
+#include "hammingWindow.hh"
 #include "narrow.hh"
 #include "ranges.hh"
 #include "view.hh"
@@ -24,113 +26,28 @@
 
 namespace openmsx {
 
-// Simplified/optimized version of ImGui::PlotLines()
-static void plotLines(std::span<const float> values, float scale_min, float scale_max, gl::vec2 outer_size)
-{
-	const auto& style = ImGui::GetStyle();
-
-	gl::vec2 pos = ImGui::GetCursorScreenPos();
-	auto outer_tl = pos;              // top-left
-	auto outer_br = pos + outer_size; // bottom-right
-	auto inner_tl = outer_tl + gl::vec2(style.FramePadding);
-	auto inner_br = outer_br - gl::vec2(style.FramePadding);
-
-	ImGui::RenderFrame(outer_tl, outer_br, ImGui::GetColorU32(ImGuiCol_FrameBg),
-	                   true, style.FrameRounding);
-
-	int num_values = narrow<int>(values.size());
-	if (num_values < 2) return;
-	int num_items = num_values - 1;
-
-	int inner_width = std::max(1, static_cast<int>(inner_br.x - inner_tl.x));
-	int res_w = std::min(inner_width, num_items);
-
-	float t_step = 1.0f / (float)res_w;
-	float scale_range = scale_max - scale_min;
-	float inv_scale = (scale_range != 0.0f) ? (1.0f / scale_range) : 0.0f;
-
-	auto color = ImGui::GetColorU32(ImGuiCol_PlotLines);
-
-	auto valueToY = [&](float v) {
-		return 1.0f - std::clamp((v - scale_min) * inv_scale, 0.0f, 1.0f);
-	};
-	float t = 0.0f;
-	auto tp0 = gl::vec2(t, valueToY(values[0]));
-	auto pos0 = ImLerp(inner_tl, inner_br, tp0);
-
-	auto* drawList = ImGui::GetWindowDrawList();
-	for (int n = 0; n < res_w; n++) {
-		int idx = static_cast<int>(t * num_items + 0.5f);
-		assert(0 <= idx && idx < num_values);
-		float v = values[(idx + 1) % num_values];
-
-		t += t_step;
-		auto tp1 = gl::vec2(t, valueToY(v));
-		auto pos1 = ImLerp(inner_tl, inner_br, tp1);
-		drawList->AddLine(pos0, pos1, color);
-		pos0 = pos1;
-	}
-}
-
-// Simplified/optimized version of ImGui::PlotHistogram()
-static void plotHistogram(std::span<const float> values, float scale_min, float scale_max, gl::vec2 outer_size)
-{
-	const auto& style = ImGui::GetStyle();
-
-	gl::vec2 pos = ImGui::GetCursorScreenPos();
-	auto outer_tl = pos;              // top-left
-	auto outer_br = pos + outer_size; // bottom-right
-	auto inner_tl = outer_tl + gl::vec2(style.FramePadding);
-	auto inner_br = outer_br - gl::vec2(style.FramePadding);
-
-	ImGui::RenderFrame(outer_tl, outer_br, ImGui::GetColorU32(ImGuiCol_FrameBg),
-	                   true, style.FrameRounding);
-	if (values.empty()) return;
-
-	int num_values = narrow<int>(values.size());
-	int inner_width = std::max(1, static_cast<int>(inner_br.x - inner_tl.x));
-	int res_w = std::min(inner_width, num_values);
-
-	float t_step = 1.0f / static_cast<float>(res_w);
-	float scale_range = scale_max - scale_min;
-	float inv_scale = (scale_range != 0.0f) ? (1.0f / scale_range) : 0.0f;
-
-	auto valueToY = [&](float v) {
-		return 1.0f - std::clamp((v - scale_min) * inv_scale, 0.0f, 1.0f);
-	};
-	float zero_line = (scale_min * scale_max < 0.0f)
-	                ? (1 + scale_min * inv_scale)
-	                : (scale_min < 0.0f ? 0.0f : 1.0f);
-
-	auto color = ImGui::GetColorU32(ImGuiCol_PlotHistogram);
-
-	float t0 = 0.0f;
-	auto* drawList = ImGui::GetWindowDrawList();
-	drawList->PrimReserve(6 * res_w, 4 * res_w);
-
-	for (int n = 0; n < res_w; n++) {
-		int idx = static_cast<int>(t0 * num_values + 0.5f);
-		assert(0 <= idx && idx < num_values);
-		float y0 = valueToY(values[idx]);
-		float t1 = t0 + t_step;
-
-		auto pos0 = ImLerp(inner_tl, inner_br, gl::vec2(t0, y0));
-		auto pos1 = ImLerp(inner_tl, inner_br, gl::vec2(t1, zero_line));
-		drawList->PrimRect(pos0, pos1, color);
-
-		t0 = t1;
-	}
-}
-
+#define SHOW_CHIP_KEY "showChip"
 
 void ImGuiWaveViewer::save(ImGuiTextBuffer& buf)
 {
 	savePersistent(buf, *this, persistentElements);
+	for (const auto& chip: openChips) {
+		buf.appendf(SHOW_CHIP_KEY"=%s\n", chip.c_str());
+	}
+}
+
+void ImGuiWaveViewer::loadStart()
+{
+	openChips.clear();
 }
 
 void ImGuiWaveViewer::loadLine(std::string_view name, zstring_view value)
 {
-	loadOnePersistent(name, value, *this, persistentElements);
+	if (loadOnePersistent(name, value, *this, persistentElements)) {
+		// already handled
+	} else if (name == SHOW_CHIP_KEY) {
+		openChips.emplace(value);
+	}
 }
 
 static void paintVUMeter(std::span<const float>& buf, float factor, bool muted)
@@ -232,11 +149,11 @@ static ReduceResult reduce(std::span<const float> buf, std::span<float> work, si
 	if (buf.size() <= fftLen) {
 		extended = allocate(fftLen);
 		auto buf2 = extended.subspan(0, buf.size());
-		ranges::copy(buf, buf2);
+		copy_to_range(buf, buf2);
 		buf = buf2;
 	} else {
 		assert(buf.size() >= HALF_BAND_EXTRA);
-		extended = allocate(std::max((buf.size() - HALF_BAND_EXTRA) / 2, size_t(fftLen)));
+		extended = allocate(std::max((buf.size() - HALF_BAND_EXTRA) / 2, fftLen));
 		do {
 			static_assert(HALF_BAND_EXTRA & 1);
 			if ((buf.size() & 1) == 0) {
@@ -253,23 +170,12 @@ static ReduceResult reduce(std::span<const float> buf, std::span<float> work, si
 		} while (buf.size() > fftLen);
 		extended = extended.subspan(0, fftLen);
 	}
-	ranges::fill(extended.subspan(buf.size()), 0.0f);
+	std::ranges::fill(extended.subspan(buf.size()), 0.0f);
 	auto result = extended.subspan(0, buf.size());
-	return {result, extended, normalize, sampleRate};
-}
-
-static std::string freq2note(float freq)
-{
-	static constexpr auto a4_freq = 440.0f;
-	static constexpr std::array<std::string_view, 12> names = {
-		"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
-	};
-
-	auto n = int(std::lround(12.0f * fast_log2(freq / a4_freq))) + 9 + 4 * 12;
-	if (n < 0) return ""; // these are below 20Hz, so inaudible
-	auto note = n % 12;
-	auto octave = n / 12;
-	return strCat(names[note], octave);
+	return {.result = result,
+		.extendedResult = extended,
+		.normalize = normalize,
+		.reducedSampleRate = sampleRate};
 }
 
 static void paintSpectrum(std::span<const float> buf, float factor, const SoundDevice& device)
@@ -315,7 +221,7 @@ static void paintSpectrum(std::span<const float> buf, float factor, const SoundD
 		assert(zeroPadded.size() == fftLen);
 
 		// remove DC and apply window-function
-		auto window = hammingWindow(signal.size());
+		auto window = hammingWindow(narrow<unsigned>(signal.size()));
 		auto avg = std::reduce(signal.begin(), signal.end()) / float(signal.size());
 		for (auto [s, w] : view::zip_equal(signal, window)) {
 			s = (s - avg) * w;
@@ -356,7 +262,7 @@ static void paintSpectrum(std::span<const float> buf, float factor, const SoundD
 	// actually plot the result
 	plotHistogram(magnitude, 0.0f, range, size);
 
-	simpleToolTip([&]() -> std::string {
+	simpleToolTip([&] -> std::string {
 		auto scrnPosX = ImGui::GetCursorScreenPos().x + style.FramePadding.x;
 		auto mouseX = (ImGui::GetIO().MousePos.x - scrnPosX) / graphWidth;
 		if ((mouseX <= 0.0f) || (mouseX >= 1.0f)) return {};
@@ -380,14 +286,14 @@ static void paintSpectrum(std::span<const float> buf, float factor, const SoundD
 
 		// format with "Hz" or "kHz" suffix and 3 significant digits
 		auto freq = std::lround(sampleRate * 0.5f * mouseX);
-		auto note = freq2note(freq);
+		auto note = freq2note(float(freq));
 		if (freq < 1000) {
 			return strCat(freq, "Hz  ", note);
 		} else {
 			auto k = freq / 1000;
 			auto t = (freq % 1000) / 10;
-			char t1 = (t / 10) + '0';
-			char t2 = (t % 10) + '0';
+			char t1 = char(t / 10) + '0';
+			char t2 = char(t % 10) + '0';
 			return strCat(k, '.', t1, t2, "kHz  ", note);
 		}
 	});
@@ -452,7 +358,13 @@ void ImGuiWaveViewer::paint(MSXMotherBoard* motherBoard)
 		for (const auto& info: motherBoard->getMSXMixer().getDeviceInfos()) {
 			auto& device = *info.device;
 			const auto& name = device.getName();
-			if (!ImGui::CollapsingHeader(name.c_str())) continue;
+			auto it = openChips.find(name);
+			bool wasOpen = it != openChips.end();
+			bool nowOpen = ImGui::CollapsingHeader(name.c_str(), wasOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None);
+			if (wasOpen != nowOpen) {
+			    if (nowOpen) openChips.insert(name); else openChips.erase(it);
+			}
+			if (!nowOpen) continue;
 			HelpMarker("Right-click column header to (un)hide columns.\n"
 			           "Drag to reorder or resize columns.");
 
@@ -465,7 +377,8 @@ void ImGuiWaveViewer::paint(MSXMotherBoard* motherBoard)
 			            ImGuiTableFlags_SizingStretchProp;
 			im::Table("##table", 5, flags, [&]{ // note: use the same id for all tables
 				ImGui::TableSetupScrollFreeze(0, 1); // Make top row always visible
-				ImGui::TableSetupColumn("channel", ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("ch.", ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed);
+				// TODO: make this work here, or add an alternative: simpleToolTip("channel number");
 				ImGui::TableSetupColumn("mute", ImGuiTableColumnFlags_DefaultHide | ImGuiTableColumnFlags_NoResize | ImGuiTableColumnFlags_WidthFixed);
 				ImGui::TableSetupColumn("VU-meter", 0, 1.0f);
 				ImGui::TableSetupColumn("Waveform", 0, 2.0f);

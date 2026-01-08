@@ -27,10 +27,10 @@ void ImGuiVdpRegs::loadLine(std::string_view name, zstring_view value)
 	loadOnePersistent(name, value, *this, persistentElements);
 }
 
-static const char* modeName(uint32_t v)
+static zstring_view modeName(uint32_t v)
 {
 	// NOTE: bits M1 and M2 are swapped!!
-	static constexpr std::array<const char*, 32> modeNames = {
+	static constexpr std::array<zstring_view, 32> modeNames = {
 		"Graphic 1 (screen 1)", // 0
 		"Multicolor (screen 3)", // 2
 		"Text 1 (screen 0, width 40)", // 1
@@ -78,7 +78,7 @@ static const char* modeName(uint32_t v)
 using Bits = std::array<const char*, 8>;
 struct RegisterDescription {
 	Bits bits;
-	const char* name;
+	std::string_view name;
 };
 using RD = RegisterDescription;
 static constexpr auto registerDescriptions = std::array{
@@ -201,7 +201,7 @@ static constexpr auto regFunctions = std::array{
 	R{{S{1, 0x40}}, "screen display enable/disable",
 	  [](uint32_t v) { return TemporaryString(v ? "enabled" : "disabled"); }},
 	R{{S{0, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
-	R{{S{1, 0x18}, {0, 0x0E}}, "display mode",
+	R{{S{1, 0x18}, S{0, 0x0E}}, "display mode",
 	  [](uint32_t v) { return TemporaryString(modeName(v)); }},
 	R{{S{9, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{9, 0x02}}, "select PAL or NTSC",
@@ -215,26 +215,26 @@ static constexpr auto regFunctions = std::array{
 	  [](uint32_t v) { return TemporaryString(v ? "interlaced" : "non-interlaced"); }},
 	R{{S{9, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{9, 0x04}}, "alternate odd/even pages enable/disable",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "do not", " alternate odd/even pages\n"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "do not"sv, " alternate odd/even pages\n"); }},
 
 	R{{S{1, 0}}, "", [](uint32_t) { return TemporaryString("sprites: "); }},
 	R{{S{8, 0x02}}, "sprite enable/disable",
 	  [](uint32_t v) { return TemporaryString(v ? "disabled" : "enabled"); }},
 	R{{S{8, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{1, 0x02}}, "sprite size, 8x8 or 16x16",
-	  [](uint32_t v) { return tmpStrCat("size=", v ? "16x16" : "8x8"); }},
+	  [](uint32_t v) { return tmpStrCat("size=", v ? "16x16"sv : "8x8"sv); }},
 	R{{S{1, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{1, 0x01}}, "sprite magnification enable/disable",
 	  [](uint32_t v) { return TemporaryString(v ? "magnified\n" : "not-magnified\n"); }},
 
 	R{{S{8, 0x20}}, "color 0 transparent or not",
-	  [](uint32_t v) { return tmpStrCat("color 0 is ", v ? "a regular color\n" : "transparent\n"); }},
+	  [](uint32_t v) { return tmpStrCat("color 0 is ", v ? "a regular color\n"sv : "transparent\n"sv); }},
 
 	R{{S{1, 0x20}}, "V-Blank interrupt enable/disable",
-	  [](uint32_t v) { return tmpStrCat("V-Blank-IRQ: ", v ? "enabled" : "disabled"); }},
+	  [](uint32_t v) { return tmpStrCat("V-Blank-IRQ: ", v ? "enabled"sv : "disabled"sv); }},
 	R{{S{1, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{0, 0x10}}, "line interrupt enable/disable",
-	  [](uint32_t v) { return tmpStrCat("line-IRQ: ", v ? "enabled" : "disabled", '\n'); }},
+	  [](uint32_t v) { return tmpStrCat("line-IRQ: ", v ? "enabled"sv : "disabled"sv, '\n'); }},
 
 	R{{S{0, 0x40}}, "digitize", &noExplanation},
 	R{{S{0, 0x20}}, "light pen interrupt enable", &noExplanation},
@@ -326,7 +326,7 @@ static constexpr auto regFunctions = std::array{
 	  [](uint32_t v) { return tmpStrCat("selected indirect register: ", v); }},
 	R{{S{17, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{17, 0x80}}, "auto-increment",
-	  [](uint32_t v) { return tmpStrCat(v ? "no " : "", "auto-increment\n"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? "no "sv : ""sv, "auto-increment\n"); }},
 	R{{S{14, 0}}, "", &spacing},
 
 	// V9958 registers
@@ -339,11 +339,11 @@ static constexpr auto regFunctions = std::array{
 	  [](uint32_t v) { return tmpStrCat(v + 1, "-page"); }},
 	R{{S{25, 0}}, "", [](uint32_t) { return TemporaryString(", "); }},
 	R{{S{25, 0x02}}, "mask 8 left dots",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "not-", "masked\n"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "not-"sv, "masked\n"); }},
 	R{{S{25, 0x18}}, "YJK/YAE mode",
-	  [](uint32_t v) { return tmpStrCat((v & 1) ? ((v & 2) ? "YJK+YAE" : "YJK") : "RGB", "-mode\n"); }},
+	  [](uint32_t v) { return tmpStrCat((v & 1) ? ((v & 2) ? "YJK+YAE"sv : "YJK"sv) : "RGB"sv, "-mode\n"); }},
 	R{{S{25, 0x40}}, "expand command mode",
-	  [](uint32_t v) { return tmpStrCat("commands ", (v ? "work in all " : "only work in bitmap-"), "modes\n"); }},
+	  [](uint32_t v) { return tmpStrCat("commands ", (v ? "work in all "sv : "only work in bitmap-"sv), "modes\n"); }},
 	R{{S{25, 0x20}}, "output select between CPUCLK and /VDS", &noExplanation},
 	R{{S{25, 0x04}}, "enable/disable WAIT (not used on MSX)", &noExplanation},
 	R{{S{25, 0}}, "", &spacing},
@@ -398,12 +398,12 @@ static constexpr auto regFunctions = std::array{
 	R{{S{64, 0}}, "", [](uint32_t) { return TemporaryString("\n"); }},
 
 	R{{S{64, 0x40}}, "5th/9th sprite detected",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "no ", "5th/9th sprite per line"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "no "sv, "5th/9th sprite per line"); }},
 	R{{S{64, 0x1F}}, "5th/9th sprite number",
 	  [](uint32_t v) { return tmpStrCat(" (sprite number=", v, ")\n"); }},
 
 	R{{S{64, 0x20}}, "sprite collision",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "no ", "sprite collision"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "no "sv, "sprite collision"); }},
 	R{{S{67, 0}}, "", [](uint32_t) { return TemporaryString(" (at coordinate "); }},
 	R{{S{67, 0xFF}, S{68, 0x01}}, "x-coordinate",
 	  [](uint32_t v) { return tmpStrCat("x=", v); }},
@@ -414,17 +414,17 @@ static constexpr auto regFunctions = std::array{
 
 	R{{S{66, 0}}, "", [](uint32_t) { return TemporaryString("command: "); }},
 	R{{S{66, 0x01}}, "command executing",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "not ", "running"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "not "sv, "running"); }},
 	R{{S{66, 0}}, "", [](uint32_t) { return TemporaryString(" "); }},
 	R{{S{66, 0x80}}, "transfer ready flag",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "not ", "ready to transfer\n"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "not "sv, "ready to transfer\n"); }},
 
 	R{{S{66, 0}}, "", [](uint32_t) { return TemporaryString("scan position: "); }},
 	R{{S{66, 0x20}}, "horizontal border",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "not ", "in horizontal border"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "not "sv, "in horizontal border"); }},
 	R{{S{66, 0}}, "", [](uint32_t) { return TemporaryString(" "); }},
 	R{{S{66, 0x40}}, "vertical border",
-	  [](uint32_t v) { return tmpStrCat(v ? "" : "not ", "in vertical border\n"); }},
+	  [](uint32_t v) { return tmpStrCat(v ? ""sv : "not "sv, "in vertical border\n"); }},
 
 	R{{S{65, 0x80}}, "light pen (not used on MSX)", &noExplanation},
 	R{{S{65, 0x40}}, "light pen switch (not used on MSX)", &noExplanation},
@@ -450,7 +450,7 @@ static int lookupFunction(uint8_t reg, uint8_t mask)
 }
 
 void ImGuiVdpRegs::drawSection(std::span<const uint8_t> showRegisters, std::span<const uint8_t> regValues,
-                               VDP& vdp, EmuTime::param time)
+                               VDP& vdp, EmuTime time)
 {
 	ImGui::SameLine();
 	HelpMarker("Click to toggle bits, or edit the hex-field.\n"
@@ -464,7 +464,7 @@ void ImGuiVdpRegs::drawSection(std::span<const uint8_t> showRegisters, std::span
 		//   developers until something better gets implemented.
 		auto mouse_pos = ImGui::GetMousePos();
 		const auto* table = ImGui::GetCurrentTable();
-		auto isCellHovered = [&]() {
+		auto isCellHovered = [&] {
 			return ImGui::TableGetCellBgRect(table, table->CurrentColumn).Contains(mouse_pos);
 		};
 
@@ -474,7 +474,7 @@ void ImGuiVdpRegs::drawSection(std::span<const uint8_t> showRegisters, std::span
 			//       64..73  status register
 			const auto& rd = registerDescriptions[reg];
 			if (ImGui::TableNextColumn()) {
-				auto name = tmpStrCat(reg < 64 ? "R#" : "S#", reg < 64 ? reg : reg - 64);
+				auto name = tmpStrCat(reg < 64 ? "R#"sv : "S#"sv, reg < 64 ? reg : reg - 64);
 				ImGui::AlignTextToFramePadding();
 				ImGui::TextUnformatted(static_cast<std::string_view>(name));
 				simpleToolTip(rd.name);
@@ -581,7 +581,7 @@ void ImGuiVdpRegs::paint(MSXMotherBoard* motherBoard)
 
 		g_vdp = vdp;
 		for (auto reg : xrange(64)) {
-			registerValues[reg] = vdp->peekRegister(reg);
+			registerValues[reg] = vdp->peekRegister(reg, time);
 		}
 		for (auto reg : xrange(uint8_t(10))) {
 			registerValues[reg + 64] = vdp->peekStatusReg(reg, time);
@@ -615,11 +615,16 @@ void ImGuiVdpRegs::paint(MSXMotherBoard* motherBoard)
 					static constexpr auto displayRegs = std::to_array<uint8_t>({18, 19, 23});
 					drawSection(displayRegs, registerValues, *vdp, time);
 				});
-				im::TreeNode("Access registers", &openAccess, [&]{
+			}
+			im::TreeNode("Access registers", &openAccess, [&]{
+				if (tms99x8) {
+					ImGui::StrCat("VRAM access address: 0x",
+					              hex_string<4>(vdp->getVramPointer()), '\n');
+				} else {
 					static constexpr auto accessRegs = std::to_array<uint8_t>({14, 15, 16, 17});
 					drawSection(accessRegs, registerValues, *vdp, time);
-				});
-			}
+				}
+			});
 			if (v9958) {
 				im::TreeNode("V9958 registers", &openV9958, [&]{
 					static constexpr auto v9958Regs = std::to_array<uint8_t>({25, 26, 27});

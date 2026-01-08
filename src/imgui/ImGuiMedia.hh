@@ -22,6 +22,7 @@
 
 namespace openmsx {
 
+class CassettePlayer;
 class HardwareConfig;
 class RomInfo;
 
@@ -54,9 +55,16 @@ public:
 	std::vector<ExtensionInfo>& getAllExtensions();
 	void resetExtensionInfo();
 	ExtensionInfo* findExtensionInfo(std::string_view config);
+	void extensionTooltip(ExtensionInfo& info);
 	[[nodiscard]] const std::string& getTestResult(ExtensionInfo& info);
 
 	void addRecent(const TclObject& cmd);
+
+	static void printRomInfo(ImGuiManager& manager, const TclObject& mediaTopic, std::string_view filename, RomType romType);
+
+	void paintLaserDiscMenuContent(std::string_view mediaSlotName, std::string_view slotDisplayName, const TclObject& currentImage);
+	void paintCDROMMenuContent(std::string_view mediaSlotName, std::string_view slotDisplayName, const TclObject& currentImage);
+	void paintHardDiskMenuContent(std::string_view mediaSlotName, std::string_view slotDisplayName, const TclObject& currentImage, const MSXMotherBoard& motherBoard);
 
 public:
 	enum class SelectDiskType : int {
@@ -92,6 +100,9 @@ public:
 		array_with_enum_index<SelectCartridgeType, ItemGroup> groups;
 		SelectCartridgeType select = SelectCartridgeType::IMAGE;
 		bool show = false;
+		bool filterOpen = false;
+		std::string filterType;
+		std::string filterString;
 	};
 	struct DiskMediaInfo {
 		DiskMediaInfo() {
@@ -108,12 +119,16 @@ public:
 	};
 
 public:
-	bool resetOnInsertRom = true;
+	bool resetOnCartChanges = true;
+
+	bool showExtensionSelector(int cartNum, std::optional<std::string> itemToShowAsSelected = std::nullopt);
 
 	static void printDatabase(const RomInfo& romInfo, const char* buf);
-	static bool selectMapperType(const char* label, RomType& item);
+	static bool selectMapperType(const char* label, RomType& romType);
 
 	static std::string diskFilter();
+
+	void showMediaWindow(std::string_view mediaName);
 
 private:
 	bool selectRecent(ItemGroup& group, function_ref<std::string(const std::string&)> displayFunc, float width) const;
@@ -121,20 +136,24 @@ private:
 	                 function_ref<std::string()> createFilter, zstring_view current,
 	                 function_ref<std::string(const std::string&)> displayFunc = std::identity{},
 	                 const std::function<void()>& createNewCallback = {});
-	bool selectDirectory(ItemGroup& info, const std::string& title, zstring_view current,
+	bool selectDirectory(ItemGroup& group, const std::string& title, zstring_view current,
 	                     const std::function<void()>& createNewCallback);
 	bool selectPatches(MediaItem& item, int& patchIndex);
-	bool insertMediaButton(std::string_view mediaName, ItemGroup& group, bool* showWindow);
+	bool insertMediaButton(std::string_view mediaName, const ItemGroup& group, bool* showWindow);
 	TclObject showDiskInfo(std::string_view mediaName, DiskMediaInfo& info);
 	TclObject showCartridgeInfo(std::string_view mediaName, CartridgeMediaInfo& info, int slot);
 	void diskMenu(int i);
-	void cartridgeMenu(int i);
-	void cassetteMenu(const TclObject& cmdResult);
-	void insertMedia(std::string_view mediaName, const MediaItem& item);
+	void cartridgeMenu(int cartNum);
+	void cassetteMenu(CassettePlayer& cassettePlayer);
+	void insertMedia(std::string_view mediaName, const MediaItem& item, bool delayed = true);
+	void paintCurrent(const TclObject& current, std::string_view type);
+	void paintRecent(std::string_view mediaName, ItemGroup& group,
+		function_ref<std::string(const std::string&)> displayFunc = std::identity{},
+		const std::function<void(const std::string&)>& toolTip = {},
+		std::function<void()>* actionToSet = nullptr);
 
 	void printExtensionInfo(ExtensionInfo& info);
-	void extensionTooltip(ExtensionInfo& info);
-	bool drawExtensionFilter();
+	bool drawExtensionFilter(std::string& filterType, std::string& filterString, bool& theFilterOpen, int id = 0);
 
 private:
 	std::array<DiskMediaInfo, RealDrive::MAX_DRIVES> diskMediaInfo;
@@ -145,14 +164,18 @@ private:
 	std::array<ItemGroup, IDECDROM::MAX_CD> cdMediaInfo;
 	ItemGroup laserdiscMediaInfo;
 
-	std::string filterType;
-	std::string filterString;
-	bool filterOpen = false;
+	// for the generic extension selector (slot independent)
+	std::string genericFilterType;
+	std::string genericFilterString;
+	bool genericFilterOpen = false;
+	bool hideNonWorking = false;
+	std::function<void(void)> switchHdAction;
 
 	std::vector<ExtensionInfo> extensionInfo;
 
 	static constexpr auto persistentElements = std::tuple{
-		PersistentElement{"resetOnInsertRom", &ImGuiMedia::resetOnInsertRom},
+		PersistentElement{"resetOnCartChanges", &ImGuiMedia::resetOnCartChanges},
+		PersistentElement{"hideNonWorkingExtensions", &ImGuiMedia::hideNonWorking},
 		// most media stuff is handled elsewhere
 	};
 };

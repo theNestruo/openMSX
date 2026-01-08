@@ -1,10 +1,13 @@
 #include "HDCommand.hh"
+
 #include "HD.hh"
+
+#include "BooleanSetting.hh"
+#include "CommandException.hh"
 #include "FileContext.hh"
 #include "FileException.hh"
-#include "CommandException.hh"
-#include "BooleanSetting.hh"
 #include "TclObject.hh"
+
 #include <array>
 
 namespace openmsx {
@@ -23,7 +26,7 @@ HDCommand::HDCommand(CommandController& commandController_,
 }
 
 void HDCommand::execute(std::span<const TclObject> tokens, TclObject& result,
-                        EmuTime::param /*time*/)
+                        EmuTime /*time*/)
 {
 	if (tokens.size() == 1) {
 		result.addListElement(tmpStrCat(hd.getName(), ':'),

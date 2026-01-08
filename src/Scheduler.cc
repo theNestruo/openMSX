@@ -1,10 +1,13 @@
 #include "Scheduler.hh"
+
+#include "MSXCPU.hh"
 #include "Schedulable.hh"
 #include "Thread.hh"
-#include "MSXCPU.hh"
-#include "ranges.hh"
+
 #include "serialize.hh"
 #include "stl.hh"
+
+#include <algorithm>
 #include <cassert>
 #include <iterator> // for back_inserter
 
@@ -29,7 +32,7 @@ Scheduler::~Scheduler()
 	assert(queue.empty());
 }
 
-void Scheduler::setSyncPoint(EmuTime::param time, Schedulable& device)
+void Scheduler::setSyncPoint(EmuTime time, Schedulable& device)
 {
 	assert(Thread::isMainThread());
 	assert(time >= scheduleTime);
@@ -51,7 +54,7 @@ void Scheduler::setSyncPoint(EmuTime::param time, Schedulable& device)
 Scheduler::SyncPoints Scheduler::getSyncPoints(const Schedulable& device) const
 {
 	SyncPoints result;
-	ranges::copy_if(queue, back_inserter(result), EqualSchedulable(device));
+	std::ranges::copy_if(queue, back_inserter(result), EqualSchedulable(device));
 	return result;
 }
 
@@ -67,25 +70,23 @@ void Scheduler::removeSyncPoints(const Schedulable& device)
 	queue.remove_all(EqualSchedulable(device));
 }
 
-bool Scheduler::pendingSyncPoint(const Schedulable& device,
-                                 EmuTime& result) const
+std::optional<EmuTime> Scheduler::isPending(const Schedulable& device) const
 {
 	assert(Thread::isMainThread());
-	if (auto it = ranges::find(queue, &device, &SynchronizationPoint::getDevice);
+	if (auto it = std::ranges::find(queue, &device, &SynchronizationPoint::getDevice);
 	    it != std::end(queue)) {
-		result = it->getTime();
-		return true;
+		return it->getTime();
 	}
-	return false;
+	return {};
 }
 
-EmuTime::param Scheduler::getCurrentTime() const
+EmuTime Scheduler::getCurrentTime() const
 {
 	assert(Thread::isMainThread());
 	return scheduleTime;
 }
 
-void Scheduler::scheduleHelper(EmuTime::param limit, EmuTime next)
+void Scheduler::scheduleHelper(EmuTime limit, EmuTime next)
 {
 	assert(!scheduleInProgress);
 	scheduleInProgress = true;

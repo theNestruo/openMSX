@@ -2,10 +2,11 @@
 #define RECORDEDCOMMAND_HH
 
 #include "Command.hh"
-#include "StateChangeListener.hh"
-#include "StateChange.hh"
-#include "TclObject.hh"
 #include "EmuTime.hh"
+#include "StateChange.hh"
+#include "StateChangeListener.hh"
+#include "TclObject.hh"
+
 #include "dynarray.hh"
 
 namespace openmsx {
@@ -22,7 +23,7 @@ class MSXCommandEvent final : public StateChange
 {
 public:
 	MSXCommandEvent() = default; // for serialize
-	MSXCommandEvent(EmuTime::param time, std::span<const TclObject> tokens);
+	MSXCommandEvent(EmuTime time, std::span<const TclObject> tokens);
 	[[nodiscard]] const auto& getTokens() const { return tokens; }
 
 	template<typename Archive>
@@ -50,7 +51,7 @@ public:
 	  */
 	virtual void execute(
 		std::span<const TclObject> tokens, TclObject& result,
-		EmuTime::param time) = 0;
+		EmuTime time) = 0;
 
 	/** It's possible that in some cases the command doesn't need to be
 	  * recorded after all (e.g. a query subcommand). In that case you can
@@ -72,7 +73,7 @@ private:
 
 	// StateChangeListener
 	void signalStateChange(const StateChange& event) override;
-	void stopReplay(EmuTime::param time) noexcept override;
+	void stopReplay(EmuTime time) noexcept override;
 
 private:
 	StateChangeDistributor& stateChangeDistributor;

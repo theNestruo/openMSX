@@ -1,8 +1,11 @@
 #include "NinjaTap.hh"
+
 #include "JoystickPort.hh"
+
 #include "enumerate.hh"
-#include "ranges.hh"
 #include "serialize.hh"
+
+#include <algorithm>
 
 // See this (long) MRC thread for a detailed discussion on NinjaTap, including
 // an electric schema.
@@ -13,26 +16,26 @@ namespace openmsx {
 NinjaTap::NinjaTap(PluggingController& pluggingController_, std::string name_)
 	: JoyTap(pluggingController_, std::move(name_))
 {
-	ranges::fill(buf, 0xFF);
+	std::ranges::fill(buf, 0xFF);
 }
 
-std::string_view NinjaTap::getDescription() const
+zstring_view NinjaTap::getDescription() const
 {
 	return "MSX Ninja Tap device";
 }
 
 
-void NinjaTap::plugHelper(Connector& /*connector*/, EmuTime::param time)
+void NinjaTap::plugHelper(Connector& /*connector*/, EmuTime time)
 {
 	createPorts("Ninja Tap port", time);
 }
 
-uint8_t NinjaTap::read(EmuTime::param /*time*/)
+uint8_t NinjaTap::read(EmuTime /*time*/)
 {
 	return status;
 }
 
-void NinjaTap::write(uint8_t value, EmuTime::param time)
+void NinjaTap::write(uint8_t value, EmuTime time)
 {
 	// bit 0 -> pin 6
 	// bit 1 -> pin 7

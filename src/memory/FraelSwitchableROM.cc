@@ -1,4 +1,5 @@
 #include "FraelSwitchableROM.hh"
+
 #include "serialize.hh"
 
 /*
@@ -18,7 +19,7 @@
 
 namespace openmsx {
 
-FraelSwitchableROM::FraelSwitchableROM(const DeviceConfig& config)
+FraelSwitchableROM::FraelSwitchableROM(DeviceConfig& config)
 	: MSXDevice(config)
 	, basicBiosRom(getName() + " BASIC/BIOS", "rom", config, "basicbios")
 	, firmwareRom (getName() + " firmware"  , "rom", config, "firmware" )
@@ -26,7 +27,7 @@ FraelSwitchableROM::FraelSwitchableROM(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void FraelSwitchableROM::writeIO(word /*port*/, byte value, EmuTime::param /*time*/)
+void FraelSwitchableROM::writeIO(uint16_t /*port*/, byte value, EmuTime /*time*/)
 {
 	bool newValue = value & 0x80;
 	if (newValue != firmwareSelected) {
@@ -35,18 +36,18 @@ void FraelSwitchableROM::writeIO(word /*port*/, byte value, EmuTime::param /*tim
 	}
 }
 
-void FraelSwitchableROM::reset(EmuTime::param /*time*/)
+void FraelSwitchableROM::reset(EmuTime /*time*/)
 {
 	firmwareSelected = false;
 	invalidateDeviceRCache();
 }
 
-byte FraelSwitchableROM::readMem(word address, EmuTime::param /*time*/)
+byte FraelSwitchableROM::readMem(uint16_t address, EmuTime /*time*/)
 {
 	return *getReadCacheLine(address);
 }
 
-const byte* FraelSwitchableROM::getReadCacheLine(word start) const
+const byte* FraelSwitchableROM::getReadCacheLine(uint16_t start) const
 {
 	return firmwareSelected ? &firmwareRom[start & (firmwareRom.size() - 1)] :
 		&basicBiosRom[start & (basicBiosRom.size() - 1)];

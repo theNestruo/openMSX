@@ -1,4 +1,5 @@
 #include "MSXMemoryMapper.hh"
+
 #include "serialize.hh"
 
 namespace openmsx {
@@ -8,7 +9,7 @@ MSXMemoryMapper::MSXMemoryMapper(const DeviceConfig& config)
 {
 }
 
-void MSXMemoryMapper::writeIO(word port, byte value, EmuTime::param time)
+void MSXMemoryMapper::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	MSXMemoryMapperBase::writeIOImpl(port, value, time);
 	byte page = port & 3;

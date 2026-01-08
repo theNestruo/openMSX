@@ -1,13 +1,16 @@
 #ifndef INTERPRETER_HH
 #define INTERPRETER_HH
 
-#include "TclParser.hh"
 #include "TclObject.hh"
+#include "TclParser.hh"
+
 #include "zstring_view.hh"
-#include <tcl.h>
+
+#include "tcl.hh"
+
 #include <span>
-#include <string_view>
 #include <string>
+#include <string_view>
 
 namespace openmsx {
 
@@ -53,8 +56,9 @@ public:
 	void deleteNamespace(const std::string& name);
 
 	[[nodiscard]] TclParser parse(std::string_view command);
-	[[nodiscard]] bool validCommand(std::string_view command);
 	[[nodiscard]] bool validExpression(std::string_view expression);
+	[[nodiscard]] std::string parseCommandError(std::string_view command);
+	[[nodiscard]] std::string parseExpressionError(std::string_view expression);
 
 	void poll() const;
 

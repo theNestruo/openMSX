@@ -28,6 +28,7 @@
 #include "serialize.hh"
 #include "xrange.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 
@@ -91,13 +92,13 @@ static constexpr uint8_t CMD_Reset_ACK_REQ = 0xC0;
 static constexpr uint8_t CMD_Set_ACK_REQ   = 0xE0;
 static constexpr uint8_t CMD_MASK          = 0xE0;
 
-MB89352::MB89352(const DeviceConfig& config)
+MB89352::MB89352(DeviceConfig& config)
 {
 	// TODO: devBusy = false;
 
 	// ALMOST COPY PASTED FROM WD33C93:
 
-	for (const auto* t : config.getXML()->getChildren("target")) {
+	for (auto* t : config.getXML()->getChildren("target")) {
 		unsigned id = t->getAttributeValueAsInt("id", 0);
 		if (id >= MAX_DEV) {
 			throw MSXException(
@@ -126,7 +127,7 @@ MB89352::MB89352(const DeviceConfig& config)
 	reset(false);
 
 	// avoid UMR on savestate
-	ranges::fill(buffer, 0);
+	std::ranges::fill(buffer, 0);
 }
 
 void MB89352::disconnect()
@@ -155,7 +156,7 @@ void MB89352::softReset()
 		regs[i] = 0;
 	}
 	regs[15] = 0xFF;               // un mapped
-	ranges::fill(cdb, 0);
+	std::ranges::fill(cdb, 0);
 
 	cdbIdx = 0;
 	bufIdx = 0;
@@ -497,7 +498,7 @@ void MB89352::writeRegister(uint8_t reg, uint8_t value)
 				break;
 			}
 			bool err = false;
-			int x = regs[REG_BDID] & regs[REG_TEMPWR];
+			unsigned x = regs[REG_BDID] & regs[REG_TEMPWR];
 			if (phase == BUS_FREE && x && x != regs[REG_TEMPWR]) {
 				x = regs[REG_TEMPWR] & ~regs[REG_BDID];
 				assert(x != 0); // because of the check 2 lines above
@@ -730,7 +731,7 @@ uint8_t MB89352::peekRegister(uint8_t reg) const
 
 
 // TODO duplicated in WD33C93.cc
-static constexpr std::initializer_list<enum_string<SCSI::Phase>> phaseInfo = {
+static constexpr auto phaseInfo = std::to_array<enum_string<SCSI::Phase>>({
 	{ "UNDEFINED",   SCSI::Phase::UNDEFINED   },
 	{ "BUS_FREE",    SCSI::Phase::BUS_FREE    },
 	{ "ARBITRATION", SCSI::Phase::ARBITRATION },
@@ -742,8 +743,8 @@ static constexpr std::initializer_list<enum_string<SCSI::Phase>> phaseInfo = {
 	{ "DATA_OUT",    SCSI::Phase::DATA_OUT    },
 	{ "STATUS",      SCSI::Phase::STATUS      },
 	{ "MSG_OUT",     SCSI::Phase::MSG_OUT     },
-	{ "MSG_IN",      SCSI::Phase::MSG_IN      }
-};
+	{ "MSG_IN",      SCSI::Phase::MSG_IN      },
+});
 SERIALIZE_ENUM(SCSI::Phase, phaseInfo);
 
 template<typename Archive>

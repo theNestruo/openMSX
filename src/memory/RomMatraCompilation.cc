@@ -1,6 +1,8 @@
 #include "RomMatraCompilation.hh"
-#include "one_of.hh"
+
 #include "serialize.hh"
+
+#include "one_of.hh"
 #include "xrange.hh"
 
 // This is basically a generic 8kB mapper (Konami like, but without fixed page
@@ -21,7 +23,7 @@ RomMatraCompilation::RomMatraCompilation(const DeviceConfig& config, Rom&& rom_)
 	reset(EmuTime::dummy());
 }
 
-void RomMatraCompilation::reset(EmuTime::param /*time*/)
+void RomMatraCompilation::reset(EmuTime /*time*/)
 {
 	setUnmapped(0);
 	setUnmapped(1);
@@ -34,7 +36,7 @@ void RomMatraCompilation::reset(EmuTime::param /*time*/)
 	blockOffset = 2;
 }
 
-void RomMatraCompilation::writeMem(word address, byte value, EmuTime::param /*time*/)
+void RomMatraCompilation::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	if (address == 0xBA00) {
 		// write of block offset
@@ -51,7 +53,7 @@ void RomMatraCompilation::writeMem(word address, byte value, EmuTime::param /*ti
 	}
 }
 
-byte* RomMatraCompilation::getWriteCacheLine(word address)
+byte* RomMatraCompilation::getWriteCacheLine(uint16_t address)
 {
 	if ((0x5000 <= address) && (address < 0xC000)) {
 		return nullptr;

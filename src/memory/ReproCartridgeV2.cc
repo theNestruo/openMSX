@@ -54,8 +54,7 @@ differences:
 
 namespace openmsx {
 
-ReproCartridgeV2::ReproCartridgeV2(
-		const DeviceConfig& config, Rom&& rom_)
+ReproCartridgeV2::ReproCartridgeV2(DeviceConfig& config, Rom&& rom_)
 	: MSXRom(config, std::move(rom_))
 	, flash(rom, AmdFlashChip::M29W640GB, {}, config)
 	, scc("ReproCartV2 SCC", config, getCurrentTime(), SCC::Mode::Compatible)
@@ -64,6 +63,11 @@ ReproCartridgeV2::ReproCartridgeV2(
 	, psg0xA0("ReproCartV2 PSG@0xA0", DummyAY8910Periphery::instance(), config,
 	      getCurrentTime())
 {
+	// adjust PSG volume, see details in https://github.com/openMSX/openMSX/issues/1934
+	// note: this is a theoretical value. The actual relative volume should be measured!
+	psg0x10.setSoftwareVolume(21000.0f/9000.0f, getCurrentTime());
+	psg0xA0.setSoftwareVolume(21000.0f/9000.0f, getCurrentTime());
+
 	powerUp(getCurrentTime());
 	auto& cpuInterface = getCPUInterface();
 	for (auto port : {0x10, 0x11, 0x31, 0x33, 0xA0, 0xA1}) {
@@ -79,13 +83,13 @@ ReproCartridgeV2::~ReproCartridgeV2()
 	}
 }
 
-void ReproCartridgeV2::powerUp(EmuTime::param time)
+void ReproCartridgeV2::powerUp(EmuTime time)
 {
 	scc.powerUp(time);
 	reset(time);
 }
 
-void ReproCartridgeV2::reset(EmuTime::param time)
+void ReproCartridgeV2::reset(EmuTime time)
 {
 	flashRomWriteEnabled = false;
 	mainBankReg = 0;
@@ -115,7 +119,7 @@ unsigned ReproCartridgeV2::getFlashAddr(unsigned addr) const
 }
 
 // Note: implementation (mostly) copied from KUC
-bool ReproCartridgeV2::isSCCAccess(word addr) const
+bool ReproCartridgeV2::isSCCAccess(uint16_t addr) const
 {
 	if ((mapperTypeReg != 0) || (sccMode & 0x10)) return false;
 
@@ -136,7 +140,7 @@ bool ReproCartridgeV2::isSCCAccess(word addr) const
 	}
 }
 
-byte ReproCartridgeV2::readMem(word addr, EmuTime::param time)
+byte ReproCartridgeV2::readMem(uint16_t addr, EmuTime time)
 {
 	if (isSCCAccess(addr)) {
 		return scc.readMem(narrow_cast<uint8_t>(addr & 0xFF), time);
@@ -144,11 +148,11 @@ byte ReproCartridgeV2::readMem(word addr, EmuTime::param time)
 
 	unsigned flashAddr = getFlashAddr(addr);
 	return (flashAddr != unsigned(-1))
-		? flash.read(flashAddr)
+		? flash.read(flashAddr, time)
 		: 0xFF; // unmapped read
 }
 
-byte ReproCartridgeV2::peekMem(word addr, EmuTime::param time) const
+byte ReproCartridgeV2::peekMem(uint16_t addr, EmuTime time) const
 {
 	if (isSCCAccess(addr)) {
 		return scc.peekMem(narrow_cast<uint8_t>(addr & 0xFF), time);
@@ -156,11 +160,11 @@ byte ReproCartridgeV2::peekMem(word addr, EmuTime::param time) const
 
 	unsigned flashAddr = getFlashAddr(addr);
 	return (flashAddr != unsigned(-1))
-		? flash.peek(flashAddr)
+		? flash.peek(flashAddr, time)
 		: 0xFF; // unmapped read
 }
 
-const byte* ReproCartridgeV2::getReadCacheLine(word addr) const
+const byte* ReproCartridgeV2::getReadCacheLine(uint16_t addr) const
 {
 	if (isSCCAccess(addr)) return nullptr;
 
@@ -170,7 +174,7 @@ const byte* ReproCartridgeV2::getReadCacheLine(word addr) const
 		: unmappedRead.data();
 }
 
-void ReproCartridgeV2::writeMem(word addr, byte value, EmuTime::param time)
+void ReproCartridgeV2::writeMem(uint16_t addr, byte value, EmuTime time)
 {
 	unsigned page8kB = (addr >> 13) - 2;
 	if (page8kB >= 4) return; // outside [0x4000, 0xBFFF]
@@ -266,19 +270,19 @@ void ReproCartridgeV2::writeMem(word addr, byte value, EmuTime::param time)
 		}
 	} else {
 		if (flashAddr != unsigned(-1)) {
-			flash.write(flashAddr, value);
+			flash.write(flashAddr, value, time);
 		}
 	}
 }
 
-byte* ReproCartridgeV2::getWriteCacheLine(word addr)
+byte* ReproCartridgeV2::getWriteCacheLine(uint16_t addr)
 {
 	return ((0x4000 <= addr) && (addr < 0xC000))
 	       ? nullptr        // [0x4000,0xBFFF] isn't cacheable
 	       : unmappedWrite.data();
 }
 
-void ReproCartridgeV2::writeIO(word port, byte value, EmuTime::param time)
+void ReproCartridgeV2::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	switch (port & 0xFF)
 	{
@@ -305,7 +309,7 @@ void ReproCartridgeV2::writeIO(word port, byte value, EmuTime::param time)
 	}
 }
 
-void ReproCartridgeV2::setVolume(EmuTime::param time, byte value)
+void ReproCartridgeV2::setVolume(EmuTime time, byte value)
 {
 	// store (mostly for the save/loadstate feature)
 	volumeReg = value;

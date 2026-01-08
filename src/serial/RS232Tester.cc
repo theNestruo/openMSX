@@ -1,12 +1,16 @@
 #include "RS232Tester.hh"
+
 #include "RS232Connector.hh"
-#include "PlugException.hh"
+
 #include "EventDistributor.hh"
-#include "Scheduler.hh"
 #include "FileOperations.hh"
+#include "PlugException.hh"
+#include "Scheduler.hh"
+#include "serialize.hh"
+
 #include "checked_cast.hh"
 #include "narrow.hh"
-#include "serialize.hh"
+
 #include <array>
 
 namespace openmsx {
@@ -33,7 +37,7 @@ RS232Tester::~RS232Tester()
 }
 
 // Pluggable
-void RS232Tester::plugHelper(Connector& connector_, EmuTime::param /*time*/)
+void RS232Tester::plugHelper(Connector& connector_, EmuTime /*time*/)
 {
 	// output
 	auto outName = rs232OutputFilenameSetting.getString();
@@ -58,27 +62,28 @@ void RS232Tester::plugHelper(Connector& connector_, EmuTime::param /*time*/)
 
 	setConnector(&connector_); // base class will do this in a moment,
 	                           // but thread already needs it
-	poller.reset();
+	poller.emplace();
 	thread = std::thread([this]() { run(); });
 }
 
-void RS232Tester::unplugHelper(EmuTime::param /*time*/)
+void RS232Tester::unplugHelper(EmuTime /*time*/)
 {
 	// output
 	outFile.close();
 
 	// input
-	poller.abort();
+	poller->abort();
 	thread.join();
+	poller.reset();
 	inFile.reset();
 }
 
-std::string_view RS232Tester::getName() const
+zstring_view RS232Tester::getName() const
 {
 	return "rs232-tester";
 }
 
-std::string_view RS232Tester::getDescription() const
+zstring_view RS232Tester::getDescription() const
 {
 	return	"RS232 tester pluggable. Reads all data from file specified "
 		"with the 'rs-232-inputfilename' setting. Writes all data "
@@ -91,13 +96,13 @@ void RS232Tester::run()
 	if (!inFile) return;
 	while (!feof(inFile.get())) {
 #ifndef _WIN32
-		if (poller.poll(fileno(inFile.get()))) {
+		if (poller->poll(fileno(inFile.get()))) {
 			break;
 		}
 #endif
 		std::array<uint8_t, 1> buf;
 		size_t num = fread(buf.data(), sizeof(uint8_t), buf.size(), inFile.get());
-		if (poller.aborted()) {
+		if (poller->aborted()) {
 			break;
 		}
 		if (num != 1) {
@@ -113,18 +118,18 @@ void RS232Tester::run()
 // Control lines
 // Needed to set these lines in the correct state for a plugged device
 
-std::optional<bool> RS232Tester::getDSR(EmuTime::param /*time*/) const
+std::optional<bool> RS232Tester::getDSR(EmuTime /*time*/) const
 {
 	return true;
 }
 
-std::optional<bool> RS232Tester::getCTS(EmuTime::param /*time*/) const
+std::optional<bool> RS232Tester::getCTS(EmuTime /*time*/) const
 {
 	return true;
 }
 
 // input
-void RS232Tester::signal(EmuTime::param time)
+void RS232Tester::signal(EmuTime time)
 {
 	auto* conn = checked_cast<RS232Connector*>(getConnector());
 	if (!conn->acceptsData()) {
@@ -153,7 +158,7 @@ bool RS232Tester::signalEvent(const Event& /*event*/)
 
 
 // output
-void RS232Tester::recvByte(uint8_t value, EmuTime::param /*time*/)
+void RS232Tester::recvByte(uint8_t value, EmuTime /*time*/)
 {
 	if (outFile.is_open()) {
 		outFile.put(narrow_cast<char>(value));

@@ -1,5 +1,7 @@
 #include "Schedulable.hh"
+
 #include "Scheduler.hh"
+
 #include <iostream>
 
 namespace openmsx {
@@ -20,7 +22,7 @@ void Schedulable::schedulerDeleted()
 	          << "\" failed to unregister.\n";
 }
 
-void Schedulable::setSyncPoint(EmuTime::param timestamp)
+void Schedulable::setSyncPoint(EmuTime timestamp)
 {
 	scheduler.setSyncPoint(timestamp, *this);
 }
@@ -35,18 +37,12 @@ void Schedulable::removeSyncPoints()
 	scheduler.removeSyncPoints(*this);
 }
 
-bool Schedulable::pendingSyncPoint() const
+std::optional<EmuTime> Schedulable::isPending() const
 {
-	auto dummy = EmuTime::dummy();
-	return scheduler.pendingSyncPoint(*this, dummy);
+	return scheduler.isPending(*this);
 }
 
-bool Schedulable::pendingSyncPoint(EmuTime& result) const
-{
-	return scheduler.pendingSyncPoint(*this, result);
-}
-
-EmuTime::param Schedulable::getCurrentTime() const
+EmuTime Schedulable::getCurrentTime() const
 {
 	return scheduler.getCurrentTime();
 }

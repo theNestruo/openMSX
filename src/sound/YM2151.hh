@@ -34,16 +34,16 @@
 #ifndef YM2151_HH
 #define YM2151_HH
 
-#include "ResampledSoundDevice.hh"
 #include "EmuTimer.hh"
+#include "ResampledSoundDevice.hh"
 
 #include "EmuTime.hh"
 #include "IRQHelper.hh"
 
 #include <array>
 #include <cstdint>
-#include <string>
 #include <memory>
+#include <string>
 
 namespace openmsx {
 
@@ -58,11 +58,11 @@ public:
 	};
 
 	YM2151(const std::string& name, static_string_view desc,
-	       const DeviceConfig& config, EmuTime::param time, Variant variant);
+	       const DeviceConfig& config, EmuTime time, Variant variant);
 	~YM2151();
 
-	void reset(EmuTime::param time);
-	void writeReg(uint8_t r, uint8_t v, EmuTime::param time);
+	void reset(EmuTime time);
+	void writeReg(uint8_t r, uint8_t v, EmuTime time);
 	[[nodiscard]] uint8_t readStatus() const;
 
 	template<typename Archive>

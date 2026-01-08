@@ -1,10 +1,11 @@
 #include "MSXBunsetsu.hh"
+
 #include "CacheLine.hh"
 #include "serialize.hh"
 
 namespace openmsx {
 
-MSXBunsetsu::MSXBunsetsu(const DeviceConfig& config)
+MSXBunsetsu::MSXBunsetsu(DeviceConfig& config)
 	: MSXDevice(config)
 	, bunsetsuRom(getName() + "_1", "rom", config, "bunsetsu")
 	, jisyoRom   (getName() + "_2", "rom", config, "jisyo")
@@ -12,12 +13,12 @@ MSXBunsetsu::MSXBunsetsu(const DeviceConfig& config)
 	reset(EmuTime::dummy());
 }
 
-void MSXBunsetsu::reset(EmuTime::param /*time*/)
+void MSXBunsetsu::reset(EmuTime /*time*/)
 {
 	jisyoAddress = 0;
 }
 
-byte MSXBunsetsu::readMem(word address, EmuTime::param /*time*/)
+byte MSXBunsetsu::readMem(uint16_t address, EmuTime /*time*/)
 {
 	if (address == 0xBFFF) {
 		byte result = jisyoRom[jisyoAddress];
@@ -30,7 +31,7 @@ byte MSXBunsetsu::readMem(word address, EmuTime::param /*time*/)
 	}
 }
 
-void MSXBunsetsu::writeMem(word address, byte value, EmuTime::param /*time*/)
+void MSXBunsetsu::writeMem(uint16_t address, byte value, EmuTime /*time*/)
 {
 	switch (address) {
 	case 0xBFFC:
@@ -46,7 +47,7 @@ void MSXBunsetsu::writeMem(word address, byte value, EmuTime::param /*time*/)
 	}
 }
 
-const byte* MSXBunsetsu::getReadCacheLine(word start) const
+const byte* MSXBunsetsu::getReadCacheLine(uint16_t start) const
 {
 	if ((start & CacheLine::HIGH) == (0xBFFF & CacheLine::HIGH)) {
 		return nullptr;
@@ -55,7 +56,7 @@ const byte* MSXBunsetsu::getReadCacheLine(word start) const
 	}
 }
 
-byte* MSXBunsetsu::getWriteCacheLine(word start)
+byte* MSXBunsetsu::getWriteCacheLine(uint16_t start)
 {
 	if ((start & CacheLine::HIGH) == (0xBFFF & CacheLine::HIGH)) {
 		return nullptr;

@@ -16,34 +16,32 @@ RomArc::RomArc(const DeviceConfig& config, Rom&& rom_)
 
 	reset(EmuTime::dummy());
 
-	getCPUInterface().register_IO_Out(0x7f, this);
-	getCPUInterface().register_IO_In (0x7f, this);
+	getCPUInterface().register_IO_InOut(0x7f, this);
 }
 
 RomArc::~RomArc()
 {
-	getCPUInterface().unregister_IO_Out(0x7f, this);
-	getCPUInterface().unregister_IO_In (0x7f, this);
+	getCPUInterface().unregister_IO_InOut(0x7f, this);
 }
 
-void RomArc::reset(EmuTime::param /*time*/)
+void RomArc::reset(EmuTime /*time*/)
 {
 	offset = 0x00;
 }
 
-void RomArc::writeIO(word /*port*/, byte value, EmuTime::param /*time*/)
+void RomArc::writeIO(uint16_t /*port*/, byte value, EmuTime /*time*/)
 {
 	if (value == 0x35) {
 		++offset;
 	}
 }
 
-byte RomArc::readIO(word port, EmuTime::param time)
+byte RomArc::readIO(uint16_t port, EmuTime time)
 {
 	return RomArc::peekIO(port, time);
 }
 
-byte RomArc::peekIO(word /*port*/, EmuTime::param /*time*/) const
+byte RomArc::peekIO(uint16_t /*port*/, EmuTime /*time*/) const
 {
 	return ((offset & 0x03) == 0x03) ? 0xda : 0xff;
 }

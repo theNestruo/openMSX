@@ -1,5 +1,7 @@
 #include "MSXVictorHC9xSystemControl.hh"
+
 #include "serialize.hh"
+
 #include <cassert>
 
 // This implementation is documented in the HC-95 service manual:
@@ -23,19 +25,19 @@ MSXVictorHC9xSystemControl::MSXVictorHC9xSystemControl(const DeviceConfig& confi
 {
 }
 
-byte MSXVictorHC9xSystemControl::readMem(word address, EmuTime::param time)
+byte MSXVictorHC9xSystemControl::readMem(uint16_t address, EmuTime time)
 {
 	return peekMem(address, time);
 }
 
-byte MSXVictorHC9xSystemControl::peekMem(word address, EmuTime::param /*time*/) const
+byte MSXVictorHC9xSystemControl::peekMem(uint16_t address, EmuTime /*time*/) const
 {
 	(void)address; // avoid warning for non-assert compiles
 	assert (address == 0x7FFD);
 	return systemControlRegister;
 }
 
-void MSXVictorHC9xSystemControl::writeMem(word address, byte value, EmuTime::param /*time*/) {
+void MSXVictorHC9xSystemControl::writeMem(uint16_t address, byte value, EmuTime /*time*/) {
 	(void)address; // avoid warning for non-assert compiles
 	assert (address == 0x7FFD);
 	systemControlRegister = (value & 0x3F) | 0x80;

@@ -1,4 +1,5 @@
 #include "MSXFmPac.hh"
+
 #include "CacheLine.hh"
 #include "serialize.hh"
 
@@ -6,7 +7,7 @@ namespace openmsx {
 
 static constexpr const char* const PAC_Header = "PAC2 BACKUP DATA";
 
-MSXFmPac::MSXFmPac(const DeviceConfig& config)
+MSXFmPac::MSXFmPac(DeviceConfig& config)
 	: MSXMusicBase(config)
 	, sram(getName() + " SRAM", 0x1FFE, config, PAC_Header)
 	, romBlockDebug(*this, std::span{&bank, 1}, 0x4000, 0x4000, 14)
@@ -14,7 +15,7 @@ MSXFmPac::MSXFmPac(const DeviceConfig& config)
 	reset(getCurrentTime());
 }
 
-void MSXFmPac::reset(EmuTime::param time)
+void MSXFmPac::reset(EmuTime time)
 {
 	MSXMusicBase::reset(time);
 	enable = 0;
@@ -24,14 +25,14 @@ void MSXFmPac::reset(EmuTime::param time)
 	                   // as it's not the magic combination
 }
 
-void MSXFmPac::writeIO(word port, byte value, EmuTime::param time)
+void MSXFmPac::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	if (enable & 1) {
 		MSXMusicBase::writeIO(port, value, time);
 	}
 }
 
-byte MSXFmPac::readMem(word address, EmuTime::param /*time*/)
+byte MSXFmPac::readMem(uint16_t address, EmuTime /*time*/)
 {
 	address &= 0x3FFF;
 	switch (address) {
@@ -56,7 +57,7 @@ byte MSXFmPac::readMem(word address, EmuTime::param /*time*/)
 	}
 }
 
-const byte* MSXFmPac::getReadCacheLine(word address) const
+const byte* MSXFmPac::getReadCacheLine(uint16_t address) const
 {
 	address &= 0x3FFF;
 	if (address == (0x3FF6 & CacheLine::HIGH)) {
@@ -75,7 +76,7 @@ const byte* MSXFmPac::getReadCacheLine(word address) const
 	}
 }
 
-void MSXFmPac::writeMem(word address, byte value, EmuTime::param time)
+void MSXFmPac::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	// 'enable' has no effect for memory mapped access
 	//   (thanks to BiFiMSX for investigating this)
@@ -118,7 +119,7 @@ void MSXFmPac::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* MSXFmPac::getWriteCacheLine(word address)
+byte* MSXFmPac::getWriteCacheLine(uint16_t address)
 {
 	address &= 0x3FFF;
 	if (address == (0x1FFE & CacheLine::HIGH)) {

@@ -1,7 +1,7 @@
 #ifndef MIDIOUTCOREMIDI_HH
 #define MIDIOUTCOREMIDI_HH
 
-#if defined(__APPLE__)
+#ifdef __APPLE__
 
 #include "MidiOutDevice.hh"
 #include <CoreMIDI/MIDIServices.h>
@@ -21,7 +21,7 @@ protected:
 
 private:
 	void recvMessage(
-			const std::vector<uint8_t>& message, EmuTime::param time) override;
+			const std::vector<uint8_t>& message, EmuTime time) override;
 };
 
 /** Sends MIDI events to an existing CoreMIDI destination.
@@ -37,10 +37,10 @@ public:
 	explicit MidiOutCoreMIDI(MIDIEndpointRef endpoint);
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// MidiOutMessageBuffer
 	OSStatus sendPacketList(MIDIPacketList *myPacketList) override;
@@ -67,10 +67,10 @@ public:
 	explicit MidiOutCoreMIDIVirtual();
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// MidiOutMessageBuffer
 	OSStatus sendPacketList(MIDIPacketList *myPacketList) override;

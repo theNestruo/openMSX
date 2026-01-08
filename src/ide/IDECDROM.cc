@@ -56,13 +56,13 @@ IDECDROM::IDECDROM(const DeviceConfig& config)
 	transferOffset = 0;
 	readSectorData = false;
 
-	getMotherBoard().registerMediaInfo(name, *this);
+	getMotherBoard().registerMediaProvider(name, *this);
 	getMotherBoard().getMSXCliComm().update(CliComm::UpdateType::HARDWARE, name, "add");
 }
 
 IDECDROM::~IDECDROM()
 {
-	getMotherBoard().unregisterMediaInfo(*this);
+	getMotherBoard().unregisterMediaProvider(*this);
 	getMotherBoard().getMSXCliComm().update(CliComm::UpdateType::HARDWARE, name, "remove");
 
 	unsigned id = name[2] - 'a';
@@ -73,6 +73,18 @@ IDECDROM::~IDECDROM()
 void IDECDROM::getMediaInfo(TclObject& result)
 {
 	result.addDictKeyValue("target", file.is_open() ? file.getURL() : std::string_view{});
+}
+
+void IDECDROM::setMedia(const TclObject& info, EmuTime /*time*/)
+{
+	auto target = info.getOptionalDictValue(TclObject("target"));
+	if (!target) return;
+
+	if (auto trgt = target->getString(); trgt.empty()) {
+		eject();
+	} else {
+		insert(std::string(trgt));
+	}
 }
 
 bool IDECDROM::isPacketDevice()
@@ -135,7 +147,7 @@ void IDECDROM::writeBlockComplete(AlignedBuffer& buf, unsigned count)
 	executePacketCommand(buf);
 }
 
-void IDECDROM::executeCommand(byte cmd)
+void IDECDROM::executeCommand(uint8_t cmd)
 {
 	switch (cmd) {
 	case 0xA0: // Packet Command (ATAPI)
@@ -154,7 +166,7 @@ void IDECDROM::executeCommand(byte cmd)
 			setError(0);
 		} else {
 			// na WP MC na MCR ABRT NM obs
-			byte err = 0;
+			uint8_t err = 0;
 			if (file.is_open()) {
 				err |= 0x40; // WP (write protected)
 			} else {
@@ -236,9 +248,9 @@ void IDECDROM::executePacketCommand(AlignedBuffer& packet)
 			buf[i] = 0x00;
 		}
 		buf[ 0] = 0xF0;
-		buf[ 2] = narrow_cast<byte>((senseKey >> 16) & 0xFF); // sense key
-		buf[12] = narrow_cast<byte>((senseKey >>  8) & 0xFF); // ASC
-		buf[13] = narrow_cast<byte>((senseKey >>  0) & 0xFF); // ASQ
+		buf[ 2] = narrow_cast<uint8_t>((senseKey >> 16) & 0xFF); // sense key
+		buf[12] = narrow_cast<uint8_t>((senseKey >>  8) & 0xFF); // ASC
+		buf[13] = narrow_cast<uint8_t>((senseKey >>  0) & 0xFF); // ASQ
 		buf[ 7] = byteCount - 7;
 		senseKey = 0;
 		break;
@@ -335,7 +347,7 @@ CDXCommand::CDXCommand(CommandController& commandController_,
 }
 
 void CDXCommand::execute(std::span<const TclObject> tokens, TclObject& result,
-                         EmuTime::param /*time*/)
+                         EmuTime /*time*/)
 {
 	if (tokens.size() == 1) {
 		const auto& file = cd.file;

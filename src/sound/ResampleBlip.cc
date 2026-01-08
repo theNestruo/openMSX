@@ -1,10 +1,13 @@
 #include "ResampleBlip.hh"
+
 #include "ResampledSoundDevice.hh"
+
 #include "narrow.hh"
 #include "one_of.hh"
-#include "ranges.hh"
-#include "vla.hh"
+#include "small_buffer.hh"
 #include "xrange.hh"
+
+#include <algorithm>
 #include <array>
 #include <cassert>
 
@@ -16,18 +19,18 @@ ResampleBlip<CHANNELS>::ResampleBlip(
 	: ResampleAlgo(input_)
 	, hostClock(hostClock_)
 	, step([&]{ // calculate 'hostClock.getFreq() / getEmuClock().getFreq()', but with less rounding errors
-			uint64_t emuPeriod = input_.getEmuClock().getPeriod().length(); // unknown units
-			uint64_t hostPeriod = hostClock.getPeriod().length(); // unknown units, but same as above
+			uint64_t emuPeriod = input_.getEmuClock().getPeriod().toUint64(); // unknown units
+			uint64_t hostPeriod = hostClock.getPeriod().toUint64(); // unknown units, but same as above
 			return FP::roundRatioDown(narrow<unsigned>(emuPeriod),
 			                          narrow<unsigned>(hostPeriod));
 		}())
 {
-	ranges::fill(lastInput, 0.0f);
+	std::ranges::fill(lastInput, 0.0f);
 }
 
 template<unsigned CHANNELS>
 bool ResampleBlip<CHANNELS>::generateOutputImpl(float* dataOut, size_t hostNum,
-                                                EmuTime::param time)
+                                                EmuTime time)
 {
 	auto& emuClk = getEmuClock();
 	if (unsigned emuNum = emuClk.getTicksTill(time); emuNum > 0) {
@@ -35,7 +38,7 @@ bool ResampleBlip<CHANNELS>::generateOutputImpl(float* dataOut, size_t hostNum,
 		// Clang will produce a link error if the length expression is put
 		// inside the macro.
 		const unsigned len = emuNum * CHANNELS + std::max(3u, CHANNELS);
-		VLA_SSE_ALIGNED(float, buf, len);
+		small_buffer<float, 8192> buf(uninitialized_tag{}, len); // typical ~5194 (PSG, samples=1024) but could be larger
 		EmuTime emu1 = emuClk.getFastAdd(1); // time of 1st emu-sample
 		assert(emu1 > hostClock.getTime());
 		if (input.generateInput(buf.data(), emuNum)) {

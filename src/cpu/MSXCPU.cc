@@ -5,10 +5,10 @@
 #include "R800.hh"
 #include "Z80.hh"
 
-#include "MSXMotherBoard.hh"
 #include "Debugger.hh"
-#include "Scheduler.hh"
 #include "IntegerSetting.hh"
+#include "MSXMotherBoard.hh"
+#include "Scheduler.hh"
 #include "TclObject.hh"
 #include "serialize.hh"
 
@@ -17,6 +17,7 @@
 #include "unreachable.hh"
 #include "xrange.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 
@@ -24,21 +25,16 @@ namespace openmsx {
 
 MSXCPU::MSXCPU(MSXMotherBoard& motherboard_)
 	: motherboard(motherboard_)
-	, traceSetting(
-		motherboard.getCommandController(), "cputrace",
-		"CPU tracing on/off", false, Setting::Save::NO)
 	, diHaltCallback(
 		motherboard.getCommandController(), "di_halt_callback",
 		"Tcl proc called when the CPU executed a DI/HALT sequence",
 		"default_di_halt_callback",
 		Setting::Save::YES) // user must be able to override
 	, z80(std::make_unique<CPUCore<Z80TYPE>>(
-		motherboard, "z80", traceSetting,
-		diHaltCallback, EmuTime::zero()))
+		motherboard, "z80", diHaltCallback, EmuTime::zero()))
 	, r800(motherboard.isTurboR()
 		? std::make_unique<CPUCore<R800TYPE>>(
-			motherboard, "r800", traceSetting,
-			diHaltCallback, EmuTime::zero())
+			motherboard, "r800", diHaltCallback, EmuTime::zero())
 		: nullptr)
 	, timeInfo(motherboard.getMachineInfoCommand())
 	, z80FreqInfo(motherboard.getMachineInfoCommand(), "z80_freq", *z80)
@@ -50,7 +46,6 @@ MSXCPU::MSXCPU(MSXMotherBoard& motherboard_)
 {
 	motherboard.getDebugger().setCPU(this);
 	motherboard.getScheduler().setCPU(this);
-	traceSetting.attach(*this);
 
 	z80->freqLocked.attach(*this);
 	z80->freqValue.attach(*this);
@@ -63,7 +58,6 @@ MSXCPU::MSXCPU(MSXMotherBoard& motherboard_)
 
 MSXCPU::~MSXCPU()
 {
-	traceSetting.detach(*this);
 	z80->freqLocked.detach(*this);
 	z80->freqValue.detach(*this);
 	if (r800) {
@@ -81,14 +75,12 @@ void MSXCPU::setInterface(MSXCPUInterface* interface_)
 	if (r800) r800->setInterface(interface);
 }
 
-void MSXCPU::doReset(EmuTime::param time)
+void MSXCPU::doReset(EmuTime time)
 {
 	          z80 ->doReset(time);
 	if (r800) r800->doReset(time);
 
 	invalidateAllSlotsRWCache(0x0000, 0x10000);
-
-	reference = time;
 }
 
 void MSXCPU::setActiveCPU(Type cpu)
@@ -120,8 +112,8 @@ void MSXCPU::execute(bool fastForward)
 		auto rCache = r800->getCacheLines();
 		auto from = z80Active ? rCache : zCache;
 		auto to   = z80Active ? zCache : rCache;
-		ranges::copy(from.read,  to.read);
-		ranges::copy(from.write, to.write);
+		copy_to_range(from.read,  to.read);
+		copy_to_range(from.write, to.write);
 	}
 	z80Active ? z80 ->execute(fastForward)
 	          : r800->execute(fastForward);
@@ -138,13 +130,13 @@ void MSXCPU::exitCPULoopAsync()
 	          : r800->exitCPULoopAsync();
 }
 
-EmuTime::param MSXCPU::getCurrentTime() const
+EmuTime MSXCPU::getCurrentTime() const
 {
 	return z80Active ? z80 ->getCurrentTime()
 	                 : r800->getCurrentTime();
 }
 
-void MSXCPU::setNextSyncPoint(EmuTime::param time)
+void MSXCPU::setNextSyncPoint(EmuTime time)
 {
 	z80Active ? z80 ->setNextSyncPoint(time)
 	          : r800->setNextSyncPoint(time);
@@ -152,22 +144,29 @@ void MSXCPU::setNextSyncPoint(EmuTime::param time)
 
 void MSXCPU::invalidateMemCacheSlot()
 {
-	ranges::fill(slots, 0);
+	if (interface) {
+		for (auto i : xrange(4)) {
+			slots[i] = 4 * interface->getPrimarySlot(i)
+			             + interface->getSecondarySlot(i);
+		}
+	} else {
+		std::ranges::fill(slots, 0);
+	}
 
 	// nullptr: means not a valid entry and not yet attempted to fill this entry
 	for (auto i : xrange(16)) {
-		ranges::fill(slotReadLines[i], nullptr);
-		ranges::fill(slotWriteLines[i], nullptr);
+		std::ranges::fill(slotReadLines[i], nullptr);
+		std::ranges::fill(slotWriteLines[i], nullptr);
 	}
 }
 
-void MSXCPU::updateVisiblePage(byte page, byte primarySlot, byte secondarySlot)
+void MSXCPU::updateVisiblePage(uint8_t page, uint8_t primarySlot, uint8_t secondarySlot)
 {
 	assert(primarySlot < 4);
 	assert(secondarySlot < 4);
 
-	byte from = slots[page];
-	byte to = narrow<byte>(4 * primarySlot + secondarySlot);
+	auto from = slots[page];
+	auto to = narrow<uint8_t>(4 * primarySlot + secondarySlot);
 	slots[page] = to;
 
 	auto [cpuReadLines, cpuWriteLines] = z80Active ? z80->getCacheLines() : r800->getCacheLines();
@@ -182,26 +181,26 @@ void MSXCPU::updateVisiblePage(byte page, byte primarySlot, byte secondarySlot)
 	if (r800) r800->updateVisiblePage(page, primarySlot, secondarySlot);
 }
 
-void MSXCPU::invalidateAllSlotsRWCache(word start, unsigned size)
+void MSXCPU::invalidateAllSlotsRWCache(uint16_t start, unsigned size)
 {
 	if (interface) interface->tick(CacheLineCounters::InvalidateAllSlots);
 	auto [cpuReadLines, cpuWriteLines] = z80Active ? z80->getCacheLines() : r800->getCacheLines();
 
 	unsigned first = start / CacheLine::SIZE;
 	unsigned num = (size + CacheLine::SIZE - 1) / CacheLine::SIZE;
-	ranges::fill(subspan(cpuReadLines,  first, num), nullptr); // nullptr: means not a valid entry and not
-	ranges::fill(subspan(cpuWriteLines, first, num), nullptr); //   yet attempted to fill this entry
+	std::ranges::fill(subspan(cpuReadLines,  first, num), nullptr); // nullptr: means not a valid entry and not
+	std::ranges::fill(subspan(cpuWriteLines, first, num), nullptr); //   yet attempted to fill this entry
 
 	for (auto i : xrange(16)) {
-		ranges::fill(subspan(slotReadLines [i], first, num), nullptr);
-		ranges::fill(subspan(slotWriteLines[i], first, num), nullptr);
+		std::ranges::fill(subspan(slotReadLines [i], first, num), nullptr);
+		std::ranges::fill(subspan(slotWriteLines[i], first, num), nullptr);
 	}
 }
 
 template<bool READ, bool WRITE, bool SUB_START>
-void MSXCPU::setRWCache(unsigned start, unsigned size, const byte* rData, byte* wData, int ps, int ss,
-                        std::span<const byte, 256> disallowRead,
-                        std::span<const byte, 256> disallowWrite)
+void MSXCPU::setRWCache(unsigned start, unsigned size, const uint8_t* rData, uint8_t* wData, int ps, int ss,
+                        std::span<const uint8_t, 256> disallowRead,
+                        std::span<const uint8_t, 256> disallowWrite)
 {
 	if constexpr (!SUB_START) {
 		assert(rData == nullptr);
@@ -212,7 +211,7 @@ void MSXCPU::setRWCache(unsigned start, unsigned size, const byte* rData, byte* 
 	assert((start & CacheLine::LOW) == 0);
 	assert((size  & CacheLine::LOW) == 0);
 
-	int slot = 4 * ps + ss;
+	unsigned slot = 4 * ps + ss;
 	unsigned page = start >> 14;
 	assert(((start + size - 1) >> 14) == page); // all in same page
 	if constexpr (SUB_START && READ)  rData -= start;
@@ -223,15 +222,15 @@ void MSXCPU::setRWCache(unsigned start, unsigned size, const byte* rData, byte* 
 		if (slot == slots[page]) {
 			return z80Active ? z80->getCacheLines() : r800->getCacheLines();
 		} else {
-			return CacheLines{slotReadLines [slot],
-			                  slotWriteLines[slot]};
+			return CacheLines{.read  = slotReadLines [slot],
+			                  .write = slotWriteLines[slot]};
 		}
 	}();
 
 	unsigned first = start / CacheLine::SIZE;
 	unsigned num = size / CacheLine::SIZE;
 
-	static auto* const NON_CACHEABLE = std::bit_cast<byte*>(uintptr_t(1));
+	static auto* const NON_CACHEABLE = std::bit_cast<uint8_t*>(uintptr_t(1));
 	for (auto i : xrange(num)) {
 		if constexpr (READ)  readLines [first + i] = disallowRead [first + i] ? NON_CACHEABLE : rData;
 		if constexpr (WRITE) writeLines[first + i] = disallowWrite[first + i] ? NON_CACHEABLE : wData;
@@ -249,43 +248,43 @@ static constexpr void extendForAlignment(unsigned& start, unsigned& size)
 }
 
 void MSXCPU::invalidateRWCache(unsigned start, unsigned size, int ps, int ss,
-                               std::span<const byte, 256> disallowRead,
-                               std::span<const byte, 256> disallowWrite)
+                               std::span<const uint8_t, 256> disallowRead,
+                               std::span<const uint8_t, 256> disallowWrite)
 {
 	// unaligned [start, start+size) is OK for invalidate, then simply invalidate a little more.
 	extendForAlignment(start, size);
 	setRWCache<true, true, false>(start, size, nullptr, nullptr, ps, ss, disallowRead, disallowWrite);
 }
 void MSXCPU::invalidateRCache(unsigned start, unsigned size, int ps, int ss,
-                              std::span<const byte, 256> disallowRead,
-                              std::span<const byte, 256> disallowWrite)
+                              std::span<const uint8_t, 256> disallowRead,
+                              std::span<const uint8_t, 256> disallowWrite)
 {
 	extendForAlignment(start, size);
 	setRWCache<true, false, false>(start, size, nullptr, nullptr, ps, ss, disallowRead, disallowWrite);
 }
 void MSXCPU::invalidateWCache(unsigned start, unsigned size, int ps, int ss,
-                              std::span<const byte, 256> disallowRead,
-                              std::span<const byte, 256> disallowWrite)
+                              std::span<const uint8_t, 256> disallowRead,
+                              std::span<const uint8_t, 256> disallowWrite)
 {
 	extendForAlignment(start, size);
 	setRWCache<false, true, false>(start, size, nullptr, nullptr, ps, ss, disallowRead, disallowWrite);
 }
 
-void MSXCPU::fillRWCache(unsigned start, unsigned size, const byte* rData, byte* wData, int ps, int ss,
-                         std::span<const byte, 256> disallowRead,
-                         std::span<const byte, 256> disallowWrite)
+void MSXCPU::fillRWCache(unsigned start, unsigned size, const uint8_t* rData, uint8_t* wData, int ps, int ss,
+                         std::span<const uint8_t, 256> disallowRead,
+                         std::span<const uint8_t, 256> disallowWrite)
 {
 	setRWCache<true, true, true>(start, size, rData, wData, ps, ss, disallowRead, disallowWrite);
 }
-void MSXCPU::fillRCache(unsigned start, unsigned size, const byte* rData, int ps, int ss,
-                        std::span<const byte, 256> disallowRead,
-                        std::span<const byte, 256> disallowWrite)
+void MSXCPU::fillRCache(unsigned start, unsigned size, const uint8_t* rData, int ps, int ss,
+                        std::span<const uint8_t, 256> disallowRead,
+                        std::span<const uint8_t, 256> disallowWrite)
 {
 	setRWCache<true, false, true>(start, size, rData, nullptr, ps, ss, disallowRead, disallowWrite);
 }
-void MSXCPU::fillWCache(unsigned start, unsigned size, byte* wData, int ps, int ss,
-                        std::span<const byte, 256> disallowRead,
-                        std::span<const byte, 256> disallowWrite)
+void MSXCPU::fillWCache(unsigned start, unsigned size, uint8_t* wData, int ps, int ss,
+                        std::span<const uint8_t, 256> disallowRead,
+                        std::span<const uint8_t, 256> disallowWrite)
 {
 	setRWCache<false, true, true>(start, size, nullptr, wData, ps, ss, disallowRead, disallowWrite);
 }
@@ -322,19 +321,19 @@ void MSXCPU::setZ80Freq(unsigned freq)
 	z80->setFreq(freq);
 }
 
-void MSXCPU::wait(EmuTime::param time)
+void MSXCPU::wait(EmuTime time)
 {
 	z80Active ? z80 ->wait(time)
 	          : r800->wait(time);
 }
 
-EmuTime MSXCPU::waitCyclesZ80(EmuTime::param time, unsigned cycles)
+EmuTime MSXCPU::waitCyclesZ80(EmuTime time, unsigned cycles)
 {
 	return z80Active ? z80 ->waitCycles(time, cycles)
 	                 : time;
 }
 
-EmuTime MSXCPU::waitCyclesR800(EmuTime::param time, unsigned cycles)
+EmuTime MSXCPU::waitCyclesR800(EmuTime time, unsigned cycles)
 {
 	return z80Active ? time
 	                 : r800->waitCycles(time, cycles);
@@ -379,8 +378,7 @@ void MSXCPU::TimeInfoTopic::execute(
 	std::span<const TclObject> /*tokens*/, TclObject& result) const
 {
 	const auto& cpu = OUTER(MSXCPU, timeInfo);
-	EmuDuration dur = cpu.getCurrentTime() - cpu.reference;
-	result = dur.toDouble();
+	result = cpu.getCurrentTime().toDouble();
 }
 
 std::string MSXCPU::TimeInfoTopic::help(std::span<const TclObject> /*tokens*/) const
@@ -437,7 +435,7 @@ MSXCPU::Debuggable::Debuggable(MSXMotherBoard& motherboard_)
 {
 }
 
-byte MSXCPU::Debuggable::read(unsigned address)
+uint8_t MSXCPU::Debuggable::read(unsigned address)
 {
 	auto& cpu = OUTER(MSXCPU, debuggable);
 	const CPURegs& regs = cpu.getRegisters();
@@ -469,14 +467,14 @@ byte MSXCPU::Debuggable::read(unsigned address)
 	case 24: return regs.getI();
 	case 25: return regs.getR();
 	case 26: return regs.getIM();
-	case 27: return byte(1 *  regs.getIFF1() +
-	                     2 *  regs.getIFF2() +
-	                     4 * (regs.getIFF1() && !regs.prevWasEI()));
+	case 27: return uint8_t(1 *  regs.getIFF1() +
+	                        2 *  regs.getIFF2() +
+	                        4 * (regs.getIFF1() && !regs.prevWasEI()));
 	default: UNREACHABLE;
 	}
 }
 
-void MSXCPU::Debuggable::write(unsigned address, byte value)
+void MSXCPU::Debuggable::write(unsigned address, uint8_t value)
 {
 	auto& cpu = OUTER(MSXCPU, debuggable);
 	CPURegs& regs = cpu.getRegisters();
@@ -522,6 +520,7 @@ void MSXCPU::Debuggable::write(unsigned address, byte value)
 
 // version 1: initial version
 // version 2: activeCPU,newCPU -> z80Active,newZ80Active
+// version 3: removed resetTime
 template<typename Archive>
 void MSXCPU::serialize(Archive& ar, unsigned version)
 {
@@ -547,7 +546,6 @@ void MSXCPU::serialize(Archive& ar, unsigned version)
 			newZ80Active = z80Active;
 		}
 	}
-	ar.serialize("resetTime", reference);
 
 	if constexpr (Archive::IS_LOADER) {
 		invalidateMemCacheSlot();

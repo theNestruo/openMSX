@@ -1,11 +1,14 @@
 #include "SamplePlayer.hh"
+
 #include "DeviceConfig.hh"
-#include "MSXCliComm.hh"
 #include "FileContext.hh"
+#include "MSXCliComm.hh"
 #include "MSXException.hh"
-#include "narrow.hh"
 #include "serialize.hh"
+
+#include "narrow.hh"
 #include "xrange.hh"
+
 #include <cassert>
 #include <memory>
 
@@ -82,7 +85,7 @@ void SamplePlayer::setWavParams()
 	if ((currentSampleNum < samples.size()) &&
 	    samples[currentSampleNum].getSize()) {
 		const auto& wav = samples[currentSampleNum];
-		bufferSize = wav.getSize();
+		bufferSize = narrow<unsigned>(wav.getSize());
 
 		unsigned freq = wav.getFreq();
 		if (freq != getInputRate()) {

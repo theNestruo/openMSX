@@ -2,10 +2,13 @@
 #define YM2413_HH
 
 #include "ResampledSoundDevice.hh"
-#include "SimpleDebuggable.hh"
+
 #include "EmuTime.hh"
-#include "openmsx.hh"
+#include "SimpleDebuggable.hh"
+
+#include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 
 namespace openmsx {
@@ -18,9 +21,10 @@ public:
 	YM2413(const std::string& name, const DeviceConfig& config);
 	~YM2413();
 
-	void reset(EmuTime::param time);
-	void writePort(bool port, byte value, EmuTime::param time);
-	void pokeReg(byte reg, byte value, EmuTime::param time);
+	void reset(EmuTime time);
+	void writePort(bool port, uint8_t value, EmuTime time);
+	void pokeReg(uint8_t reg, uint8_t value, EmuTime time);
+	[[nodiscard]] std::span<const uint8_t, 64> peekRegs() const;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);
@@ -36,8 +40,8 @@ private:
 
 	struct Debuggable final : SimpleDebuggable {
 		Debuggable(MSXMotherBoard& motherBoard, const std::string& name);
-		[[nodiscard]] byte read(unsigned address) override;
-		void write(unsigned address, byte value, EmuTime::param time) override;
+		[[nodiscard]] uint8_t read(unsigned address) override;
+		void write(unsigned address, uint8_t value, EmuTime time) override;
 	} debuggable;
 };
 

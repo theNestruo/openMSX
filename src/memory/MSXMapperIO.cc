@@ -1,17 +1,15 @@
 #include "MSXMapperIO.hh"
 
-#include "MSXMotherBoard.hh"
 #include "HardwareConfig.hh"
-#include "XMLElement.hh"
 #include "MSXException.hh"
+#include "MSXMotherBoard.hh"
+#include "XMLElement.hh"
 #include "serialize.hh"
 
 #include "StringOp.hh"
 #include "enumerate.hh"
 #include "outer.hh"
 #include "stl.hh"
-
-#include <algorithm>
 
 namespace openmsx {
 
@@ -57,7 +55,7 @@ void MSXMapperIO::unregisterMapper(MSXMemoryMapperInterface* mapper)
 	mappers.erase(rfind_unguarded(mappers, mapper));
 }
 
-byte MSXMapperIO::readIO(word port, EmuTime::param time)
+byte MSXMapperIO::readIO(uint16_t port, EmuTime time)
 {
 	byte value = [&] {
 		if (mode == Mode::EXTERNAL) {
@@ -73,7 +71,7 @@ byte MSXMapperIO::readIO(word port, EmuTime::param time)
 	return (value & mask) | (baseValue & ~mask);
 }
 
-byte MSXMapperIO::peekIO(word port, EmuTime::param time) const
+byte MSXMapperIO::peekIO(uint16_t port, EmuTime time) const
 {
 	byte value = [&] {
 		if (mode == Mode::EXTERNAL) {
@@ -89,7 +87,7 @@ byte MSXMapperIO::peekIO(word port, EmuTime::param time) const
 	return (value & mask) | (baseValue & ~mask);
 }
 
-void MSXMapperIO::writeIO(word port, byte value, EmuTime::param time)
+void MSXMapperIO::writeIO(uint16_t port, byte value, EmuTime time)
 {
 	registers[port & 3] = value;
 
@@ -118,11 +116,17 @@ byte MSXMapperIO::Debuggable::read(unsigned address)
 	return mapperIO.registers[address & 3];
 }
 
-void MSXMapperIO::Debuggable::write(unsigned address, byte value,
-                                    EmuTime::param time)
+void MSXMapperIO::Debuggable::readBlock(unsigned start, std::span<byte> output)
 {
 	auto& mapperIO = OUTER(MSXMapperIO, debuggable);
-	mapperIO.writeIO(narrow_cast<word>(address), value, time);
+	copy_to_range(std::span{mapperIO.registers}.subspan(start, output.size()), output);
+}
+
+void MSXMapperIO::Debuggable::write(unsigned address, byte value,
+                                    EmuTime time)
+{
+	auto& mapperIO = OUTER(MSXMapperIO, debuggable);
+	mapperIO.writeIO(narrow_cast<uint16_t>(address), value, time);
 }
 
 
@@ -135,7 +139,7 @@ void MSXMapperIO::serialize(Archive& ar, unsigned version)
 		assert(Archive::IS_LOADER);
 		ar.serialize("registers", registers);
 		for (auto [page, reg] : enumerate(registers)) {
-			writeIO(word(page), reg, EmuTime::dummy());
+			writeIO(uint16_t(page), reg, EmuTime::dummy());
 		}
 	}
 	if (ar.versionAtLeast(version, 3)) {

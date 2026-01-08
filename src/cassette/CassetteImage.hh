@@ -3,19 +3,22 @@
 
 #include "EmuTime.hh"
 #include "sha1.hh"
+
 #include <cstdint>
 #include <span>
 #include <string>
 
 namespace openmsx {
 
+class Filename;
+
 class CassetteImage
 {
 public:
-	enum FileType { ASCII, BINARY, BASIC, UNKNOWN };
+	enum class FileType : uint8_t { ASCII, BINARY, BASIC, UNKNOWN };
 
 	virtual ~CassetteImage() = default;
-	[[nodiscard]] virtual int16_t getSampleAt(EmuTime::param time) const = 0;
+	[[nodiscard]] virtual int16_t getSampleAt(EmuTime time) const = 0;
 	[[nodiscard]] virtual EmuTime getEndTime() const = 0;
 	[[nodiscard]] virtual unsigned getFrequency() const = 0;
 	virtual void fillBuffer(unsigned pos, std::span<float*, 1> bufs, unsigned num) const = 0;
@@ -35,11 +38,13 @@ public:
 
 protected:
 	CassetteImage() = default;
-	void setFirstFileType(FileType type) { firstFileType = type; }
+	// Please make sure this method is called from the constructor of each
+	// subclass! (And only from there.)
+	void setFirstFileType(FileType type, const Filename& fileName);
 	void setSha1Sum(const Sha1Sum& sha1sum);
 
 private:
-	FileType firstFileType = UNKNOWN;
+	FileType firstFileType = FileType::UNKNOWN;
 	Sha1Sum sha1sum;
 };
 

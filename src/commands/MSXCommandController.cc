@@ -1,15 +1,20 @@
 #include "MSXCommandController.hh"
+
 #include "GlobalCommandController.hh"
-#include "Reactor.hh"
-#include "MSXEventDistributor.hh"
-#include "MSXMotherBoard.hh"
-#include "SettingsManager.hh"
 #include "Interpreter.hh"
-#include "Setting.hh"
+
 #include "Event.hh"
+#include "MSXEventDistributor.hh"
 #include "MSXException.hh"
+#include "MSXMotherBoard.hh"
+#include "Reactor.hh"
+#include "Setting.hh"
+#include "SettingsManager.hh"
+
 #include "TemporaryString.hh"
 #include "stl.hh"
+
+#include <algorithm>
 #include <iostream>
 #include <memory>
 
@@ -120,7 +125,7 @@ void MSXCommandController::unregisterSetting(Setting& setting)
 
 Setting* MSXCommandController::findSetting(std::string_view name) const
 {
-	auto it = ranges::find(settings, name, &Setting::getBaseName);
+	auto it = std::ranges::find(settings, name, &Setting::getBaseName);
 	return it != settings.end() ? *it : nullptr;
 }
 
@@ -152,7 +157,7 @@ Interpreter& MSXCommandController::getInterpreter()
 }
 
 void MSXCommandController::signalMSXEvent(
-	const Event& event, EmuTime::param /*time*/) noexcept
+	const Event& event, EmuTime /*time*/) noexcept
 {
 	if (getType(event) != EventType::MACHINE_ACTIVATED) return;
 

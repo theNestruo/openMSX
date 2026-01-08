@@ -1,11 +1,14 @@
 #include "CheckedRam.hh"
-#include "MSXCPU.hh"
-#include "MSXMotherBoard.hh"
+
 #include "DeviceConfig.hh"
 #include "GlobalSettings.hh"
+#include "MSXCPU.hh"
+#include "MSXMotherBoard.hh"
 #include "StringSetting.hh"
+
 #include "narrow.hh"
 #include "xrange.hh"
+
 #include <cassert>
 
 namespace openmsx {
@@ -25,7 +28,7 @@ CheckedRam::~CheckedRam()
 	umrCallback.getSetting().detach(*this);
 }
 
-byte CheckedRam::read(size_t addr)
+uint8_t CheckedRam::read(size_t addr)
 {
 	if (size_t line = addr >> CacheLine::BITS;
 	    !completely_initialized_cacheline[line]) [[unlikely]] {
@@ -36,19 +39,19 @@ byte CheckedRam::read(size_t addr)
 	return ram[addr];
 }
 
-const byte* CheckedRam::getReadCacheLine(size_t addr) const
+const uint8_t* CheckedRam::getReadCacheLine(size_t addr) const
 {
 	return (completely_initialized_cacheline[addr >> CacheLine::BITS])
 	     ? &ram[addr] : nullptr;
 }
 
-byte* CheckedRam::getWriteCacheLine(size_t addr)
+uint8_t* CheckedRam::getWriteCacheLine(size_t addr)
 {
 	return (completely_initialized_cacheline[addr >> CacheLine::BITS])
 	     ? &ram[addr] : nullptr;
 }
 
-byte* CheckedRam::getRWCacheLines(size_t addr, size_t size)
+uint8_t* CheckedRam::getRWCacheLines(size_t addr, size_t size)
 {
 	// TODO optimize
 	size_t num = size >> CacheLine::BITS;
@@ -61,7 +64,7 @@ byte* CheckedRam::getRWCacheLines(size_t addr, size_t size)
 	return &ram[addr];
 }
 
-void CheckedRam::write(size_t addr, const byte value)
+void CheckedRam::write(size_t addr, const uint8_t value)
 {
 	if (size_t line = addr >> CacheLine::BITS;
 	    !completely_initialized_cacheline[line]) [[unlikely]] {

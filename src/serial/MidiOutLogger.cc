@@ -1,8 +1,10 @@
 #include "MidiOutLogger.hh"
-#include "PlugException.hh"
+
 #include "FileOperations.hh"
-#include "narrow.hh"
+#include "PlugException.hh"
 #include "serialize.hh"
+
+#include "narrow.hh"
 
 namespace openmsx {
 
@@ -15,7 +17,7 @@ MidiOutLogger::MidiOutLogger(CommandController& commandController)
 }
 
 void MidiOutLogger::plugHelper(Connector& /*connector*/,
-                               EmuTime::param /*time*/)
+                               EmuTime /*time*/)
 {
 	FileOperations::openOfStream(file, logFilenameSetting.getString());
 	if (file.fail()) {
@@ -24,24 +26,24 @@ void MidiOutLogger::plugHelper(Connector& /*connector*/,
 	}
 }
 
-void MidiOutLogger::unplugHelper(EmuTime::param /*time*/)
+void MidiOutLogger::unplugHelper(EmuTime /*time*/)
 {
 	file.close();
 }
 
-std::string_view MidiOutLogger::getName() const
+zstring_view MidiOutLogger::getName() const
 {
 	return "midi-out-logger";
 }
 
-std::string_view MidiOutLogger::getDescription() const
+zstring_view MidiOutLogger::getDescription() const
 {
 	return "Midi output logger. Log all data that is sent to this "
 	       "pluggable to a file. The filename is set with the "
 	       "'midi-out-logfilename' setting.";
 }
 
-void MidiOutLogger::recvByte(byte value, EmuTime::param /*time*/)
+void MidiOutLogger::recvByte(uint8_t value, EmuTime /*time*/)
 {
 	if (file.is_open()) {
 		file.put(narrow_cast<char>(value));

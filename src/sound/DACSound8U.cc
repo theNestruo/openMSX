@@ -1,6 +1,8 @@
 #include "DACSound8U.hh"
+
 #include "DeviceConfig.hh"
 #include "MSXMotherBoard.hh"
+
 #include "narrow.hh"
 
 namespace openmsx {
@@ -14,7 +16,7 @@ DACSound8U::DACSound8U(std::string_view name_, static_string_view desc,
 	setSoftwareVolume(256.0f, config.getMotherBoard().getCurrentTime());
 }
 
-void DACSound8U::writeDAC(uint8_t value, EmuTime::param time)
+void DACSound8U::writeDAC(uint8_t value, EmuTime time)
 {
 	DACSound16S::writeDAC(narrow<int16_t>(narrow<int>(value) - 0x80), time);
 }

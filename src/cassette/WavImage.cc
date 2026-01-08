@@ -1,13 +1,16 @@
 #include "WavImage.hh"
+
 #include "File.hh"
-#include "Filename.hh"
 #include "FilePool.hh"
+#include "Filename.hh"
+
 #include "Math.hh"
 #include "narrow.hh"
-#include "ranges.hh"
 #include "xrange.hh"
-#include <cassert>
+
+#include <algorithm>
 #include <array>
+#include <cassert>
 #include <map>
 
 namespace openmsx {
@@ -94,7 +97,7 @@ const WavImageCache::WavInfo& WavImageCache::get(const Filename& filename, FileP
 void WavImageCache::release(const WavData* wav)
 {
 	// cache contains very few entries, so linear search is ok
-	auto it = ranges::find(cache, wav, [](auto& pr) { return &pr.second.info.wav; });
+	auto it = std::ranges::find(cache, wav, [](auto& pr) { return &pr.second.info.wav; });
 	assert(it != end(cache));
 	auto& entry = it->second;
 	--entry.refCount; // decrease reference count
@@ -104,13 +107,14 @@ void WavImageCache::release(const WavData* wav)
 }
 
 
-// Note: type detection not implemented yet for WAV images
 WavImage::WavImage(const Filename& filename, FilePool& filePool)
 {
 	const auto& entry = WavImageCache::instance().get(filename, filePool);
 	wav = &entry.wav;
 	setSha1Sum(entry.sum);
 	clock.setFreq(wav->getFreq());
+	// Note: type detection not implemented yet for WAV images
+	setFirstFileType(FileType::UNKNOWN, filename);
 }
 
 WavImage::~WavImage()
@@ -118,7 +122,7 @@ WavImage::~WavImage()
 	WavImageCache::instance().release(wav);
 }
 
-int16_t WavImage::getSampleAt(EmuTime::param time) const
+int16_t WavImage::getSampleAt(EmuTime time) const
 {
 	// The WAV file is typically sampled at 44kHz, but the MSX may sample
 	// the signal at arbitrary moments in time. Initially we would simply
@@ -132,7 +136,7 @@ int16_t WavImage::getSampleAt(EmuTime::param time) const
 	// work in openMSX (with sample-and-hold it didn't work).
 	auto [sample, x] = clock.getTicksTillAsIntFloat(time);
 	std::array<float, 4> p = {
-		float(wav->getSample(unsigned(sample) - 1)), // intentional: underflow wraps to UINT_MAX
+		float(wav->getSample(sample - 1)), // intentional: underflow wraps to UINT_MAX
 		float(wav->getSample(sample + 0)),
 		float(wav->getSample(sample + 1)),
 		float(wav->getSample(sample + 2))

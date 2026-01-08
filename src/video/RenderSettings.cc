@@ -10,8 +10,8 @@
 #include "build-info.hh"
 
 #include <algorithm>
-#include <iostream>
 #include <cmath>
+#include <iostream>
 
 using namespace gl;
 
@@ -24,7 +24,6 @@ EnumSetting<RenderSettings::ScaleAlgorithm>::Map RenderSettings::getScalerMap()
 		{"simple",     SIMPLE},
 		{"ScaleNx",    SCALE},
 		{"hq",         HQ},
-		{"hqlite",     HQLITE},
 		{"RGBtriplet", RGBTRIPLET},
 		{"TV",         TV}
 	};
@@ -147,6 +146,9 @@ RenderSettings::RenderSettings(CommandController& commandController)
 		" off -> immediate flip: might be more fluent when host framerate"
 		" (typically 60Hz) differs from MSX framerate (50 or 60Hz).\n",
 		true)
+
+	, fullStretchSetting(commandController,
+		"full_stretch", "Stretch the image to fill the entire screen in fullscreen mode", false)
 
 	// Many android devices are relatively low powered. Therefore use
 	// no stretch (value 320) as default for Android because it gives

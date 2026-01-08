@@ -12,13 +12,13 @@ RomMajutsushi::RomMajutsushi(const DeviceConfig& config, Rom&& rom_)
 {
 }
 
-void RomMajutsushi::reset(EmuTime::param time)
+void RomMajutsushi::reset(EmuTime time)
 {
 	RomKonami::reset(time);
 	dac.reset(time);
 }
 
-void RomMajutsushi::writeMem(word address, byte value, EmuTime::param time)
+void RomMajutsushi::writeMem(uint16_t address, byte value, EmuTime time)
 {
 	if (0x5000 <= address && address < 0x6000) {
 		dac.writeDAC(value, time);
@@ -27,7 +27,7 @@ void RomMajutsushi::writeMem(word address, byte value, EmuTime::param time)
 	}
 }
 
-byte* RomMajutsushi::getWriteCacheLine(word address)
+byte* RomMajutsushi::getWriteCacheLine(uint16_t address)
 {
 	return (0x5000 <= address && address < 0x6000)
 		? nullptr : RomKonami::getWriteCacheLine(address);

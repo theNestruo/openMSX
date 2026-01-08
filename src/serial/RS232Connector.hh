@@ -15,14 +15,14 @@ public:
 	[[nodiscard]] RS232Device& getPluggedRS232Dev() const;
 
 	// Connector
-	[[nodiscard]] std::string_view getDescription() const final;
-	[[nodiscard]] std::string_view getClass() const final;
+	[[nodiscard]] zstring_view getDescription() const final;
+	[[nodiscard]] zstring_view getClass() const final;
 
 	// input (SerialDataInterface)
 	void setDataBits(DataBits bits) override = 0;
 	void setStopBits(StopBits bits) override = 0;
 	void setParityBit(bool enable, Parity parity) override = 0;
-	void recvByte(byte value, EmuTime::param time) override = 0;
+	void recvByte(uint8_t value, EmuTime time) override = 0;
 	[[nodiscard]] virtual bool ready() = 0;
 	[[nodiscard]] virtual bool acceptsData() = 0;
 

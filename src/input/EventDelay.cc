@@ -9,12 +9,12 @@
 
 #include "narrow.hh"
 #include "one_of.hh"
-#include "ranges.hh"
 #include "stl.hh"
 
-#include <cassert>
-
 #include <SDL.h>
+
+#include <algorithm>
+#include <cassert>
 
 namespace openmsx {
 
@@ -60,7 +60,7 @@ bool EventDelay::signalEvent(const Event& event)
 	return false;
 }
 
-void EventDelay::sync(EmuTime::param curEmu)
+void EventDelay::sync(EmuTime curEmu)
 {
 	auto curRealTime = Timer::getTime();
 	auto realDuration = curRealTime - prevReal;
@@ -69,7 +69,7 @@ void EventDelay::sync(EmuTime::param curEmu)
 	prevEmu = curEmu;
 
 	double factor = emuDuration.toDouble() / narrow_cast<double>(realDuration);
-	EmuDuration extraDelay(delaySetting.getDouble());
+	EmuDuration extraDelay = EmuDuration::sec(delaySetting.getDouble());
 
 #if PLATFORM_ANDROID
 	// The virtual keyboard on Android sends a key press and the
@@ -99,7 +99,7 @@ void EventDelay::sync(EmuTime::param curEmu)
 		if (getType(e) == one_of(EventType::KEY_DOWN, EventType::KEY_UP)) {
 			const auto& keyEvent = get_event<KeyEvent>(e);
 			int maskedKeyCode = int(keyEvent.getKeyCode()) & int(Keys::K_MASK);
-			auto it = ranges::find(nonMatchedKeyPresses, maskedKeyCode,
+			auto it = std::ranges::find(nonMatchedKeyPresses, maskedKeyCode,
 			                       [](const auto& p) { return p.first; });
 			if (getType(e) == EventType::KEY_DOWN) {
 				if (it == end(nonMatchedKeyPresses)) {
@@ -135,7 +135,7 @@ void EventDelay::sync(EmuTime::param curEmu)
 		auto sdlOffset = int32_t(sdlNow - eventSdlTime);
 		assert(sdlOffset >= 0);
 		auto offset = 1000 * int64_t(sdlOffset); // ms -> us
-		EmuDuration emuOffset(factor * narrow_cast<double>(offset));
+		EmuDuration emuOffset = EmuDuration::sec(factor * narrow_cast<double>(offset));
 		auto schedTime = (emuOffset < extraDelay)
 		               ? time - emuOffset
 		               : curEmu;
@@ -149,7 +149,7 @@ void EventDelay::sync(EmuTime::param curEmu)
 #endif
 }
 
-void EventDelay::executeUntil(EmuTime::param time)
+void EventDelay::executeUntil(EmuTime time)
 {
 	try {
 		auto event = std::move(scheduledEvents.front());

@@ -17,16 +17,16 @@
 #include <fstream>
 #include <ctime>
 #else
+#include <fcntl.h>
 #include <pwd.h>
 #include <unistd.h>
-#include <fcntl.h>
 #endif
 
 namespace openmsx {
 
 [[nodiscard]] static std::string getUserName()
 {
-#if defined(_WIN32)
+#ifdef _WIN32
 	return "default";
 #else
 	const struct passwd* pw = getpwuid(getuid());

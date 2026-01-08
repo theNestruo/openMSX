@@ -1,4 +1,5 @@
 #include "MusicModuleMIDI.hh"
+
 #include "serialize.hh"
 
 namespace openmsx {
@@ -32,12 +33,12 @@ MusicModuleMIDI::MusicModuleMIDI(const DeviceConfig& config)
 	reset(getCurrentTime());
 }
 
-void MusicModuleMIDI::reset(EmuTime::param time)
+void MusicModuleMIDI::reset(EmuTime time)
 {
 	mc6850.reset(time);
 }
 
-byte MusicModuleMIDI::readIO(word port, EmuTime::param /*time*/)
+uint8_t MusicModuleMIDI::readIO(uint16_t port, EmuTime /*time*/)
 {
 	switch (port & 0x1) {
 	case 0:
@@ -48,7 +49,7 @@ byte MusicModuleMIDI::readIO(word port, EmuTime::param /*time*/)
 	UNREACHABLE;
 }
 
-byte MusicModuleMIDI::peekIO(word port, EmuTime::param /*time*/) const
+uint8_t MusicModuleMIDI::peekIO(uint16_t port, EmuTime /*time*/) const
 {
 	switch (port & 0x1) {
 	case 0:
@@ -59,7 +60,7 @@ byte MusicModuleMIDI::peekIO(word port, EmuTime::param /*time*/) const
 	UNREACHABLE;
 }
 
-void MusicModuleMIDI::writeIO(word port, byte value, EmuTime::param time)
+void MusicModuleMIDI::writeIO(uint16_t port, uint8_t value, EmuTime time)
 {
 	switch (port & 0x01) {
 	case 0:

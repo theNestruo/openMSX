@@ -1,9 +1,13 @@
 #include "GlobalCliComm.hh"
-#include "CliListener.hh"
+
 #include "CliConnection.hh"
+#include "CliListener.hh"
+
 #include "Thread.hh"
+
 #include "ScopedAssign.hh"
 #include "stl.hh"
+
 #include <cassert>
 #include <iostream>
 #include <utility>
@@ -20,6 +24,13 @@ CliListener* GlobalCliComm::addListener(std::unique_ptr<CliListener> listener)
 {
 	// can be called from any thread
 	std::scoped_lock lock(mutex);
+
+	// first cleanup stale SocketConnection objects
+	std::erase_if(listeners, [](auto& l) {
+		auto* s = dynamic_cast<SocketConnection*>(l.get());
+		return s && s->isClosed(); // closed from the client side
+	});
+
 	auto* p = listener.get();
 	listeners.push_back(std::move(listener));
 	if (allowExternalCommands) {

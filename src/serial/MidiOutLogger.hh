@@ -2,7 +2,9 @@
 #define MIDIOUTLOGGER_HH
 
 #include "MidiOutDevice.hh"
+
 #include "FilenameSetting.hh"
+
 #include <fstream>
 
 namespace openmsx {
@@ -15,13 +17,13 @@ public:
 	explicit MidiOutLogger(CommandController& commandController);
 
 	// Pluggable
-	void plugHelper(Connector& connector, EmuTime::param time) override;
-	void unplugHelper(EmuTime::param time) override;
-	[[nodiscard]] std::string_view getName() const override;
-	[[nodiscard]] std::string_view getDescription() const override;
+	void plugHelper(Connector& connector, EmuTime time) override;
+	void unplugHelper(EmuTime time) override;
+	[[nodiscard]] zstring_view getName() const override;
+	[[nodiscard]] zstring_view getDescription() const override;
 
 	// SerialDataInterface (part)
-	void recvByte(byte value, EmuTime::param time) override;
+	void recvByte(uint8_t value, EmuTime time) override;
 
 	template<typename Archive>
 	void serialize(Archive& ar, unsigned version);

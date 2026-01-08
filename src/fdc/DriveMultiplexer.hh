@@ -2,7 +2,10 @@
 #define DRIVEMULTIPLEXER_HH
 
 #include "DiskDrive.hh"
-#include <array>
+
+#include "stl.hh"
+
+#include <cstdint>
 #include <memory>
 #include <span>
 
@@ -15,7 +18,7 @@ namespace openmsx {
 class DriveMultiplexer final : public DiskDrive
 {
 public:
-	enum class Drive {
+	enum class Drive : uint8_t {
 		A, B, C, D, NONE,
 		NUM
 	};
@@ -23,7 +26,7 @@ public:
 	// Multiplexer interface
 	explicit DriveMultiplexer(std::span<std::unique_ptr<DiskDrive>, 4> drv);
 
-	void selectDrive(Drive num, EmuTime::param time);
+	void selectDrive(Drive num, EmuTime time);
 	[[nodiscard]] Drive getSelectedDrive() const { return selected; }
 
 	// DiskDrive interface
@@ -33,15 +36,15 @@ public:
 	[[nodiscard]] bool isTrack00() const override;
 	void setSide(bool side) override;
 	[[nodiscard]] bool getSide() const override;
-	void step(bool direction, EmuTime::param time) override;
-	void setMotor(bool status, EmuTime::param time) override;
+	void step(bool direction, EmuTime time) override;
+	void setMotor(bool status, EmuTime time) override;
 	[[nodiscard]] bool getMotor() const override;
-	[[nodiscard]] bool indexPulse(EmuTime::param time) override;
-	[[nodiscard]] EmuTime getTimeTillIndexPulse(EmuTime::param time, int count) override;
+	[[nodiscard]] bool indexPulse(EmuTime time) override;
+	[[nodiscard]] EmuTime getTimeTillIndexPulse(EmuTime time, int count) override;
 	[[nodiscard]] unsigned getTrackLength() override;
 	void writeTrackByte(int idx, uint8_t val, bool addIdam) override;
 	[[nodiscard]] uint8_t readTrackByte(int idx) override;
-	EmuTime getNextSector(EmuTime::param time, RawTrack::Sector& sector) override;
+	EmuTime getNextSector(EmuTime time, RawTrack::Sector& sector) override;
 	void flushTrack() override;
 	bool diskChanged() override;
 	[[nodiscard]] bool peekDiskChanged() const override;

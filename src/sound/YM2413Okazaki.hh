@@ -2,9 +2,13 @@
 #define YM2413OKAZAKI_HH
 
 #include "YM2413Core.hh"
-#include "FixedPoint.hh"
+
 #include "serialize_meta.hh"
+
+#include "FixedPoint.hh"
+
 #include <array>
+#include <cstdint>
 #include <span>
 
 namespace openmsx {
@@ -61,7 +65,7 @@ public:
 
 class Slot {
 public:
-	enum class EnvelopeState {
+	enum class EnvelopeState : uint8_t {
 		ATTACK, DECAY, SUSHOLD, SUSTAIN, RELEASE, SETTLE, FINISH
 	};
 
@@ -147,7 +151,7 @@ public:
 	void reset() override;
 	void writePort(bool port, uint8_t value, int offset) override;
 	void pokeReg(uint8_t reg, uint8_t data) override;
-	[[nodiscard]] uint8_t peekReg(uint8_t reg) const override;
+	[[nodiscard]] std::span<const uint8_t, 64>peekRegs() const override;
 	void generateChannels(std::span<float*, 9 + 5> bufs, unsigned num) override;
 	[[nodiscard]] float getAmplificationFactor() const override;
 

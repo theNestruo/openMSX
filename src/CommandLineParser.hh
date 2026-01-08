@@ -1,17 +1,20 @@
 #ifndef COMMANDLINEPARSER_HH
 #define COMMANDLINEPARSER_HH
 
+#include "CDImageCLI.hh"
 #include "CLIOption.hh"
-#include "MSXRomCLI.hh"
-#include "CliExtension.hh"
-#include "ReplayCLI.hh"
-#include "SaveStateCLI.hh"
 #include "CassettePlayerCLI.hh"
+#include "CliExtension.hh"
 #include "DiskImageCLI.hh"
 #include "HDImageCLI.hh"
-#include "CDImageCLI.hh"
 #include "InfoTopic.hh"
+#include "MSXRomCLI.hh"
+#include "ReplayCLI.hh"
+#include "SaveStateCLI.hh"
+
 #include "components.hh"
+
+#include <cstdint>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -34,25 +37,25 @@ class Interpreter;
 class CommandLineParser
 {
 public:
-	enum ParseStatus { UNPARSED, RUN, CONTROL, TEST, EXIT };
-	enum ParsePhase {
-		PHASE_BEFORE_INIT,       // --help, --version, -bash
-		PHASE_INIT,              // calls Reactor::init()
-		PHASE_BEFORE_SETTINGS,   // -setting, ...
-		PHASE_LOAD_SETTINGS,     // loads settings.xml
-		PHASE_BEFORE_MACHINE,    // before -machine
-		PHASE_LOAD_MACHINE,      // -machine
-		PHASE_DEFAULT_MACHINE,   // default machine
-		PHASE_LAST,              // all the rest
+	enum class Status : uint8_t { UNPARSED, RUN, CONTROL, TEST, EXIT };
+	enum class Phase : uint8_t {
+		BEFORE_INIT,       // --help, --version, -bash
+		INIT,              // calls Reactor::init()
+		BEFORE_SETTINGS,   // -setting, ...
+		LOAD_SETTINGS,     // loads settings.xml
+		BEFORE_MACHINE,    // before -machine
+		LOAD_MACHINE,      // -machine
+		DEFAULT_MACHINE,   // default machine
+		LAST,              // all the rest
 	};
 
 	explicit CommandLineParser(Reactor& reactor);
-	void registerOption(const char* str, CLIOption& cliOption,
-		ParsePhase phase = PHASE_LAST, unsigned length = 2);
+	void registerOption(std::string_view str, CLIOption& cliOption,
+		Phase phase = Phase::LAST, unsigned length = 2);
 	void registerFileType(std::span<const std::string_view> extensions,
 	                      CLIFileType& cliFileType);
 	void parse(std::span<char*> argv);
-	[[nodiscard]] ParseStatus getParseStatus() const;
+	[[nodiscard]] Status getParseStatus() const;
 
 	[[nodiscard]] const auto& getStartupScripts() const {
 		return scriptOption.scripts;
@@ -67,12 +70,9 @@ public:
 
 private:
 	struct OptionData {
-		OptionData(std::string_view n, CLIOption* o, ParsePhase p, unsigned l)
-			: name(n), option(o), phase(p), length(l) {} // clang-15 workaround
-
 		std::string_view name;
 		CLIOption* option;
-		ParsePhase phase;
+		Phase phase;
 		unsigned length; // length in parameters
 	};
 	struct FileTypeData {
@@ -84,7 +84,7 @@ private:
 	                   std::span<std::string>& cmdLine);
 	[[nodiscard]] CLIFileType* getFileTypeHandlerForFileName(std::string_view filename) const;
 	[[nodiscard]] bool parseOption(const std::string& arg,
-	                 std::span<std::string>& cmdLine, ParsePhase phase);
+	                 std::span<std::string>& cmdLine, Phase phase);
 	void createMachineSetting();
 
 private:
@@ -131,6 +131,11 @@ private:
 		[[nodiscard]] std::string_view optionHelp() const override;
 	} machineOption;
 
+	struct SetupOption final : CLIOption {
+		void parseOption(const std::string& option, std::span<std::string>& cmdLine) override;
+		[[nodiscard]] std::string_view optionHelp() const override;
+	} setupOption;
+
 	struct SettingOption final : CLIOption {
 		void parseOption(const std::string& option, std::span<std::string>& cmdLine) override;
 		[[nodiscard]] std::string_view optionHelp() const override;
@@ -166,7 +171,7 @@ private:
 	DiskImageCLI diskImageCLI;
 	HDImageCLI hdImageCLI;
 	CDImageCLI cdImageCLI;
-	ParseStatus parseStatus = UNPARSED;
+	Status parseStatus = Status::UNPARSED;
 	bool haveConfig = false;
 	bool haveSettings = false;
 };
