@@ -107,7 +107,7 @@ void JoyHandle::checkJoystickConfig(const TclObject& newValue)
 			"UP", "DOWN", "LEFT", "RIGHT", "A", "B", "WHEEL_LEFT", "WHEEL_RIGHT"
 		};
 		std::string_view key  = newValue.getListIndex(interp, i + 0).getString();
-		auto it = ranges::find(keys, key);
+		auto it = std::ranges::find(keys, key);
 		if (it == keys.end()) {
 			throw CommandException(
 				"Invalid key: must be one of ", join(keys, ", "));
@@ -126,7 +126,7 @@ void JoyHandle::checkJoystickConfig(const TclObject& newValue)
 	}
 
 	// only change current bindings when parsing was fully successful
-	ranges::copy(newBindings, bindings);
+	copy_to_range(newBindings, bindings);
 }
 
 // Pluggable
