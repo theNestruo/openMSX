@@ -130,7 +130,7 @@ void JoyHandle::checkJoystickConfig(const TclObject& newValue)
 }
 
 // Pluggable
-std::string_view JoyHandle::getName() const
+zstring_view JoyHandle::getName() const
 {
 	switch (id) {
 		case 1: return "joyhandle1";
@@ -139,7 +139,7 @@ std::string_view JoyHandle::getName() const
 	}
 }
 
-std::string_view JoyHandle::getDescription() const
+zstring_view JoyHandle::getDescription() const
 {
 	return description;
 }
