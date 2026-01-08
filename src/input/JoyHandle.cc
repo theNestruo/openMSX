@@ -23,7 +23,7 @@ class JoyHandleState final : public StateChange
 {
 public:
 	JoyHandleState() = default; // for serialize
-	JoyHandleState(EmuTime::param time_, uint8_t id_,
+	JoyHandleState(EmuTime time_, uint8_t id_,
 	               uint8_t press_, uint8_t release_)
 		: StateChange(time_), id(id_)
 		, press(press_), release(release_) {}
@@ -144,7 +144,7 @@ zstring_view JoyHandle::getDescription() const
 	return description;
 }
 
-void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
+void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime /*time*/)
 {
 	eventDistributor.registerEventListener(*this);
 	stateChangeDistributor.registerListener(*this);
@@ -152,7 +152,7 @@ void JoyHandle::plugHelper(Connector& /*connector*/, EmuTime::param /*time*/)
 	analogValue = 0;
 }
 
-void JoyHandle::unplugHelper(EmuTime::param /*time*/)
+void JoyHandle::unplugHelper(EmuTime /*time*/)
 {
 	stateChangeDistributor.unregisterListener(*this);
 	eventDistributor.unregisterEventListener(*this);
@@ -160,7 +160,7 @@ void JoyHandle::unplugHelper(EmuTime::param /*time*/)
 
 
 // MSXJoystickDevice
-uint8_t JoyHandle::read(EmuTime::param time)
+uint8_t JoyHandle::read(EmuTime time)
 {
 	Clock<2> clock(EmuTime::zero()); // ticks at 2Hz
 	uint8_t cycle = clock.getTicksTill(time) & 1;
@@ -172,14 +172,14 @@ uint8_t JoyHandle::read(EmuTime::param time)
 	return status & ~wheelStatus;
 }
 
-void JoyHandle::write(uint8_t /*value*/, EmuTime::param /*time*/)
+void JoyHandle::write(uint8_t /*value*/, EmuTime /*time*/)
 {
 }
 
 
 // MSXEventListener
 void JoyHandle::signalMSXEvent(const Event& event,
-                               EmuTime::param time) noexcept
+                               EmuTime time) noexcept
 {
 	uint8_t press = 0;
 	uint8_t release = 0;
@@ -260,7 +260,7 @@ void JoyHandle::signalStateChange(const StateChange& event)
 	// TODO receive analogValue from JoyHandleState
 }
 
-void JoyHandle::stopReplay(EmuTime::param time) noexcept
+void JoyHandle::stopReplay(EmuTime time) noexcept
 {
 	uint8_t newStatus = JOY_UP | JOY_DOWN | JOY_LEFT | JOY_RIGHT |
 	                    JOY_BUTTONA | JOY_BUTTONB;
