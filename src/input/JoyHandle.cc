@@ -154,7 +154,12 @@ uint8_t JoyHandle::read(EmuTime time)
 	Clock<2> clock(EmuTime::zero()); // ticks at 2Hz
 	uint8_t cycle = clock.getTicksTill(time) & 1;
 
-	static constexpr int HALF = 20000; // TODO tune?
+	/*
+	 * Modern gamepad already saturate analog values halfway,
+	 * so let's use a minimal upper dead zone (99%) for now
+	static constexpr int HALF = 20000;
+	 */
+	static constexpr int HALF = 24576; // (24K of 32K, about 75%)
 	const uint8_t wheelStatus =
 	    ((analogValue < 0) && ((analogValue < -HALF) || (cycle == 1))) ? JOY_LEFT
 	  : ((analogValue > 0) && ((analogValue >  HALF) || (cycle == 1))) ? JOY_RIGHT
